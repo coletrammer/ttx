@@ -4,10 +4,8 @@ IndentWidth: 4
 ---
 Language: Cpp
 AllowShortFunctionsOnASingleLine: true
-ColumnLimit: 140
+ColumnLimit: 120
 IncludeCategories:
-  - Regex:           '^(<(kernel)/)'
-    Priority:        3
   - Regex:           '<*>'
     Priority:        1
   - Regex:           '"*.h"'
