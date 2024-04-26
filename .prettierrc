@@ -7,6 +7,12 @@
             "options": {
                 "tabWidth": 4
             }
+        },
+        {
+            "files": [".clangd", ".clang-tidy", ".clang-format"],
+            "options": {
+                "parser": "yaml"
+            }
         }
     ]
 }
