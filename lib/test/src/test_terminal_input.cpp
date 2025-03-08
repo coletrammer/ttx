@@ -1,4 +1,4 @@
-#include "dius/test/prelude.h"
+#include "di/test/prelude.h"
 #include "ttx/focus_event.h"
 #include "ttx/key_event.h"
 #include "ttx/modifiers.h"

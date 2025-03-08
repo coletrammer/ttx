@@ -1,5 +1,5 @@
 #include "di/vocab/array/array.h"
-#include "dius/test/prelude.h"
+#include "di/test/prelude.h"
 #include "ttx/focus_event.h"
 #include "ttx/focus_event_io.h"
 #include "ttx/params.h"

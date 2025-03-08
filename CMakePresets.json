@@ -1,0 +1,170 @@
+{
+    "version": 2,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 21,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "cmake-pedantic",
+            "hidden": true,
+            "warnings": {
+                "dev": true,
+                "deprecated": true,
+                "uninitialized": true,
+                "unusedCli": true,
+                "systemVars": false
+            },
+            "errors": {
+                "dev": true,
+                "deprecated": true
+            }
+        },
+        {
+            "name": "dev-mode",
+            "hidden": true,
+            "inherits": "cmake-pedantic",
+            "cacheVariables": {
+                "ttx_DEVELOPER_MODE": "ON",
+                "CMAKE_VERIFY_INTERFACE_HEADER_SETS": "ON"
+            }
+        },
+        {
+            "name": "docs",
+            "hidden": true,
+            "cacheVariables": {
+                "BUILD_DOCS": "On"
+            }
+        },
+        {
+            "name": "clang",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        },
+        {
+            "name": "dus-runtime",
+            "hidden": true,
+            "cacheVariables": {
+                "dius_USE_RUNTIME": "ON"
+            }
+        },
+        {
+            "name": "flags-gcc-clang",
+            "description": "These flags are supported by both GCC and Clang",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_CXX_FLAGS": "-D_GLIBCXX_ASSERTIONS=1 -fdiagnostics-color=always -fstack-protector-strong -fcf-protection=full -fstack-clash-protection -Wall -Wextra -Wpedantic",
+                "CMAKE_EXE_LINKER_FLAGS": "-Wl,--allow-shlib-undefined,--as-needed,-z,noexecstack,-z,relro,-z,now,-z,nodlopen",
+                "CMAKE_SHARED_LINKER_FLAGS": "-Wl,--allow-shlib-undefined,--as-needed,-z,noexecstack,-z,relro,-z,now,-z,nodlopen"
+            }
+        },
+        {
+            "name": "ci-linux",
+            "description": "Includes fortification with the CMake default release flags",
+            "inherits": ["flags-gcc-clang"],
+            "generator": "Ninja",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_CXX_FLAGS_RELEASE": "-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 -O3 -DNDEBUG",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "On",
+                "CMAKE_CXX_COMPILER_LAUNCHER": "ccache"
+            }
+        },
+        {
+            "name": "coverage-linux",
+            "binaryDir": "${sourceDir}/build/coverage",
+            "inherits": "ci-linux",
+            "hidden": true,
+            "cacheVariables": {
+                "ENABLE_COVERAGE": "ON",
+                "CMAKE_BUILD_TYPE": "Coverage",
+                "CMAKE_CXX_FLAGS_COVERAGE": "-Og -g --coverage -fkeep-static-functions",
+                "CMAKE_EXE_LINKER_FLAGS_COVERAGE": "--coverage",
+                "CMAKE_SHARED_LINKER_FLAGS_COVERAGE": "--coverage"
+            }
+        },
+        {
+            "name": "ci-coverage",
+            "inherits": ["coverage-linux", "dev-mode"],
+            "cacheVariables": {
+                "COVERAGE_HTML_COMMAND": ""
+            }
+        },
+        {
+            "name": "ci-sanitize",
+            "binaryDir": "${sourceDir}/build/sanitize",
+            "inherits": ["ci-linux", "dev-mode", "clang"],
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Sanitize",
+                "CMAKE_CXX_FLAGS_SANITIZE": "-U_FORTIFY_SOURCE -O2 -g -fsanitize=address,undefined -fno-omit-frame-pointer -fno-common"
+            }
+        },
+        {
+            "name": "ci-build",
+            "binaryDir": "${sourceDir}/build",
+            "hidden": true
+        },
+        {
+            "name": "ci-ubuntu-gcc",
+            "binaryDir": "${sourceDir}/build",
+            "inherits": ["ci-build", "ci-linux", "docs", "dev-mode"]
+        },
+        {
+            "name": "ci-ubuntu-clang",
+            "binaryDir": "${sourceDir}/build",
+            "inherits": ["ci-build", "ci-linux", "docs", "dev-mode", "clang"]
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "ci-coverage",
+            "configurePreset": "ci-coverage"
+        },
+        {
+            "name": "ci-sanitize",
+            "configurePreset": "ci-sanitize"
+        },
+        {
+            "name": "ci-ubuntu-gcc",
+            "configurePreset": "ci-ubuntu-gcc"
+        },
+        {
+            "name": "ci-ubuntu-clang",
+            "configurePreset": "ci-ubuntu-clang"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "ci-coverage",
+            "configurePreset": "ci-coverage",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "ci-sanitize",
+            "configurePreset": "ci-sanitize",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "ci-ubuntu-gcc",
+            "configurePreset": "ci-ubuntu-gcc",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "ci-ubuntu-clang",
+            "configurePreset": "ci-ubuntu-clang",
+            "output": {
+                "outputOnFailure": true
+            }
+        }
+    ]
+}

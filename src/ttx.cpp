@@ -278,7 +278,7 @@ static auto main(Args& args) -> di::Result<void> {
                                                }
                                            });
                                        }),
-                                       [&log](di::Span<byte const> data) {
+                                       [](di::Span<byte const> data) {
                                            auto base64 = di::Base64View(data);
                                            (void) di::writer_println<di::String::Encoding>(
                                                dius::stdin, "\033]52;;{}\033\\"_sv, base64);

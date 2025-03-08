@@ -1,0 +1,31 @@
+name: Lint
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+      - name: Install nix
+        uses: cachix/install-nix-action@v30
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check formatting and linting
+        run: |
+          nix flake check
+      - name: Check nix build
+        run: |
+          nix build .#dius
+          nix build .#dius-runtime
+      - name: Run clang-tidy
+        run: |
+          nix develop --command just preset=ci-ubuntu-clang check_tidy

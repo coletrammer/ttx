@@ -1,7 +1,7 @@
 #include "di/container/view/range.h"
 #include "di/vocab/array/to_array.h"
 #include "di/vocab/span/as_bytes.h"
-#include "dius/test/prelude.h"
+#include "di/test/prelude.h"
 #include "ttx/utf8_stream_decoder.h"
 
 namespace utf8_stream_decoder {

@@ -1,4 +1,4 @@
-#include "dius/test/prelude.h"
+#include "di/test/prelude.h"
 #include "ttx/params.h"
 
 namespace params {

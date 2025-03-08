@@ -1,0 +1,54 @@
+name: Linux CI
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  linux_build_and_test:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        preset: [ci-coverage, ci-sanitize, ci-ubuntu-clang, ci-ubuntu-dius-runtime]
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+      - name: Install nix
+        uses: cachix/install-nix-action@v30
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Store ccache cache in the GitHub actions cache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ github.job }}-${{ matrix.preset }}
+      - name: Configure build
+        run: |
+          nix develop --command cmake --preset ${{ matrix.preset }} -DCMAKE_COMPILE_WARNING_AS_ERROR=On
+      - name: Run build
+        run: |
+          nix develop --command cmake --build --preset ${{ matrix.preset }}
+      - name: Verify headers
+        run: |
+          nix develop --command cmake --build --preset ${{ matrix.preset }} -t all_verify_interface_header_sets
+        if: matrix.preset == 'ci-ubuntu-clang' || matrix.preset == 'ci-ubuntu-dius-runtime'
+      - name: Run tests
+        run: |
+          nix develop --command ctest --preset ${{ matrix.preset }}
+      - name: Collect code coverage information
+        run: |
+          nix develop --command cmake --build --preset ${{ matrix.preset }} -t coverage
+        if: matrix.preset == 'ci-coverage'
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          flags: ${{ runner.os }}
+          name: ${{ runner.os }}-coverage
+          files: ./build/coverage.info
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+        if: matrix.preset == 'ci-coverage'

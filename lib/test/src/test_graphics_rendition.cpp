@@ -1,6 +1,6 @@
 #include "di/container/view/cartesian_product.h"
 #include "di/container/view/join_with.h"
-#include "dius/test/prelude.h"
+#include "di/test/prelude.h"
 #include "ttx/graphics_rendition.h"
 #include "ttx/params.h"
 

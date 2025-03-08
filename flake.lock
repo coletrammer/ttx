@@ -1,0 +1,99 @@
+{
+  "nodes": {
+    "di": {
+      "inputs": {
+        "flake-parts": [
+          "flake-parts"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1741241504,
+        "narHash": "sha256-2W4ThxtXPbwT+vMH5wB+qAM602abHAQDXUEL1UZkQt0=",
+        "owner": "coletrammer",
+        "repo": "di",
+        "rev": "84d912d0a679cf0b0dd6ea4c4696f4607b357cd7",
+        "type": "github"
+      },
+      "original": {
+        "owner": "coletrammer",
+        "repo": "di",
+        "type": "github"
+      }
+    },
+    "dius": {
+      "inputs": {
+        "di": [
+          "di"
+        ],
+        "flake-parts": [
+          "flake-parts"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1741465832,
+        "narHash": "sha256-uR1XKqWYcJx7hhiXmonZkDG8JiMG2kzJ43JBSZdC8zA=",
+        "owner": "coletrammer",
+        "repo": "dius",
+        "rev": "99e2ec708969ccc06150dcf329ffbb4e8fa111ff",
+        "type": "github"
+      },
+      "original": {
+        "owner": "coletrammer",
+        "repo": "dius",
+        "type": "github"
+      }
+    },
+    "flake-parts": {
+      "inputs": {
+        "nixpkgs-lib": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1740872218,
+        "narHash": "sha256-ZaMw0pdoUKigLpv9HiNDH2Pjnosg7NBYMJlHTIsHEUo=",
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "rev": "3876f6b87db82f33775b1ef5ea343986105db764",
+        "type": "github"
+      },
+      "original": {
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1741037377,
+        "narHash": "sha256-SvtvVKHaUX4Owb+PasySwZsoc5VUeTf1px34BByiOxw=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "02032da4af073d0f6110540c8677f16d4be0117f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixpkgs-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "di": "di",
+        "dius": "dius",
+        "flake-parts": "flake-parts",
+        "nixpkgs": "nixpkgs"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

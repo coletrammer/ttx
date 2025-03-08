@@ -1,0 +1,46 @@
+# Configuration for Doxygen for use with CMake
+# Only options that deviate from the default are included
+# To create a new Doxyfile containing all available options, call `doxygen -g`
+
+# Get Project name and version from CMake
+PROJECT_NAME = "@PROJECT_NAME@"
+PROJECT_NUMBER = "@PROJECT_VERSION@"
+
+# Add sources
+INPUT = "@PROJECT_SOURCE_DIR@/README.md" "@PROJECT_SOURCE_DIR@/include" "@PROJECT_SOURCE_DIR@/docs/pages"
+EXTRACT_ALL = YES
+RECURSIVE = YES
+LAYOUT_FILE = "@PROJECT_SOURCE_DIR@/docs/layout.xml"
+HTML_HEADER = "@PROJECT_SOURCE_DIR@/docs/header.html"
+EXAMPLE_PATH = "@PROJECT_SOURCE_DIR@"
+OUTPUT_DIRECTORY = "@DOXYGEN_OUTPUT_DIRECTORY@"
+
+# Use the README as a main page
+USE_MDFILE_AS_MAINPAGE = "@PROJECT_SOURCE_DIR@/README.md"
+
+# Setup include paths
+FULL_PATH_NAMES = YES
+STRIP_FROM_PATH = "@PROJECT_SOURCE_DIR@/include" "@PROJECT_SOURCE_DIR@"
+STRIP_FROM_INC_PATH = "@PROJECT_SOURCE_DIR@/include"
+
+# Generate HTML only
+GENERATE_XML = NO
+GENERATE_HTML = YES
+GENERATE_LATEX = NO
+
+# Image settings
+DOT_IMAGE_FORMAT = svg
+DOT_TRANSPARENT = YES
+USE_MATHJAX = YES
+COLLABORATION_GRAPH = NO
+INCLUDE_GRAPH = NO
+INCLUDED_BY_GRAPH = NO
+
+# Doxygen awesome CSS settings
+GENERATE_TREEVIEW = YES
+DISABLE_INDEX = NO
+FULL_SIDEBAR = NO
+HTML_EXTRA_STYLESHEET = "@doxygen_awesome_SOURCE_DIR@/doxygen-awesome.css"
+HTML_EXTRA_FILES = "@doxygen_awesome_SOURCE_DIR@/doxygen-awesome-darkmode-toggle.js" "@doxygen_awesome_SOURCE_DIR@/doxygen-awesome-fragment-copy-button.js" "@doxygen_awesome_SOURCE_DIR@/doxygen-awesome-paragraph-link.js"
+HTML_COLORSTYLE = LIGHT
+HTML_COPY_CLIPBOARD = NO
