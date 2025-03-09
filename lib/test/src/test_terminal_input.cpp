@@ -19,11 +19,11 @@ static void keyboard() {
         Event(KeyEvent::key_down(Key::A, ""_s, Modifiers::Shift | Modifiers::Alt)),
         Event(KeyEvent::key_down(Key::Up)),
         Event(KeyEvent::key_down(Key::Up)),
-        Event(KeyEvent::key_down(Key::_2, ""_s, Modifiers::Control | Modifiers::Shift)),
+        Event(KeyEvent::key_down(Key::Space, ""_s, Modifiers::Control)),
         Event(KeyEvent::key_down(Key::A, "a"_s)),
         Event(KeyEvent::key_down(Key::Delete)),
-        Event(KeyEvent::key_down(Key::LeftBracket, ""_s, Modifiers::Control | Modifiers::Alt)),
-        Event(KeyEvent::key_down(Key::LeftBracket, ""_s, Modifiers::Control)),
+        Event(KeyEvent::key_down(Key::Escape, ""_s, Modifiers::Alt)),
+        Event(KeyEvent::key_down(Key::Escape, ""_s)),
     };
 
     auto parser = TerminalInputParser {};
@@ -82,7 +82,7 @@ static void paste() {
         Event(PasteEvent("\033ABC\033[O"_s)),
         Event(FocusEvent::focus_out()),
         Event(KeyEvent::key_down(Key::A, "A"_s, Modifiers::Shift)),
-        Event(KeyEvent::key_down(Key::_2, ""_s, Modifiers::Shift | Modifiers::Control)),
+        Event(KeyEvent::key_down(Key::Space, ""_s, Modifiers::Control)),
     };
 
     auto parser = TerminalInputParser {};
