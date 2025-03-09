@@ -2,6 +2,7 @@
 {
   imports = [
     inputs.flake-parts.flakeModules.partitions
+    ./homemodules.nix
     ./packages.nix
   ];
 

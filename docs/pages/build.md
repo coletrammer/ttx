@@ -7,37 +7,33 @@ This package can be built either directly through [CMake](https://cmake.org/) or
 ### Prerequisites
 
 - Install CMake version 3.21 or later.
-- Install either GCC 14+ or Clang 19+ (only necessary to actual use the header files).
+- Install either GCC 14+ or Clang 19+.
 
 ### Dependencies
 
-- The [di](https://github.com/coletrammer) library.
+- The [dius](https://github.com/coletrammer/dius) library.
+- The [di](https://github.com/coletrammer/di) library (dependency of dius).
 
-The di library will be found using CMake `find_package` unless the source is available
-at the path specified by `dius_di_DIRECTORY`. By default, that CMake variable is set
-`./di`. When using nix, the library's flake is included automatically.
+The dius library will be found using CMake `find_package` unless the source is available
+at the path specified by `ttx_dius_DIRECTORY`. By default, that CMake variable is set
+`./dius`. When using nix, the library's flake is included automatically.
 
-### Consuming via CMake
+The recommended setup for building ttx from source involves the following shell commands.
 
-This project exports a CMake package to be used with the
-[`find_package`](https://cmake.org/cmake/help/latest/command/find_package.html)
-command of CMake:
+```sh
+# Clone all repositories
+git clone https://github.com/coletrammer/di
+git clone https://github.com/coletrammer/dius
+git clone https://github.com/coletrammer/ttx
 
-- Package name: `dius`
-- Target name: `dius::dius`
-
-In general, you can either include `find_package(dius REQUIRED)` somewhere in your CMake build or call
-`add_subdirectory` on the dius source code. When using `find_package`, it probably makes sense to use
-fetch content to download the library during the build. When using `add_subdirectory`, this project
-can be included as a git submodule. Because CMake is CMake, there's several other ways to make
-things work, and this library tries to be as flexible as possible so that both of the above methods
-will succeed.
-
-Afterwards, use the library via `target_link_libraries(target PRIVATE dius::dius)`.
+# Setup dependencies
+ln -s "$(realpath ./di)" ./dius/di
+ln -s "$(realpath ./dius)" ./ttx/dius
+```
 
 ### Manual Build Commands
 
-To manual build the library, use the following commands.
+To manually build ttx and its library, use the following commands.
 
 ```sh
 cmake -S . -B build -D CMAKE_BUILD_TYPE=Release
@@ -46,11 +42,27 @@ cmake --build build
 
 ### Install Commands
 
-Afterwards, `find_package` should succeed by using a system installation of the `di` library.
-
 ```sh
 cmake --install build
 ```
+
+### Consuming the ttx Library via CMake
+
+This project exports a CMake package to be used with the
+[`find_package`](https://cmake.org/cmake/help/latest/command/find_package.html)
+command of CMake:
+
+- Package name: `ttx`
+- Target name: `ttx::ttx`
+
+In general, you can either include `find_package(ttx REQUIRED)` somewhere in your CMake build or call
+`add_subdirectory` on the ttx source code. When using `find_package`, it probably makes sense to use
+fetch content to download the library during the build. When using `add_subdirectory`, this project
+can be included as a git submodule. Because CMake is CMake, there's several other ways to make
+things work, and this library tries to be as flexible as possible so that both of the above methods
+will succeed.
+
+Afterwards, use the library via `target_link_libraries(target PRIVATE ttx::ttx)`.
 
 ### Note to packagers
 
@@ -71,32 +83,29 @@ install rules.
 
 ### Consuming via Flake
 
-To consume the library in your flake, add `dius` as an input:
+This section assumes you are interested in the ttx library. See [./install.md] for instructions on
+installing the ttx application using nix.
+
+To consume the library in your flake, add ttx as an input:
 
 ```nix
-dius = {
-  url = "github.com/coletrammer/dius";
+ttx = {
+  url = "github.com/coletrammer/ttx";
   inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
 
-Then include `inputs.dius.packages.${system}.default` in the `buildInputs` or your derivation. Assuming your
-project is using CMake, `find_package(dius)` will succeed automatically.
+Then include `inputs.ttx.packages.${system}.ttx-lib` in the `buildInputs` of your derivation. Assuming your
+project is using CMake, `find_package(ttx)` will succeed automatically.
 
-This flake provides takes the di library as a flake input, so it can be overridden easily.
+This flake provides takes the di and dius libraries as a flake input, so it can be overridden easily.
 
 ### Manual Build Commands
 
 Alternatively, use the `nix` command to build the library manually.
 
 ```sh
-nix build .
-```
-
-To build the dius runtime variable, use:
-
-```sh
-nix build.#dius-runtime
+nix build .#ttx-lib
 ```
 
 This outputs the result to `./result`.

@@ -23,5 +23,11 @@ endif()
 
 # ---- Build config ----
 
+# When including this project as a submodule, the user most like only cares about the ttx library.
+set(default_lib_mode OFF)
+if(NOT PROJECT_IS_TOP_LEVEL)
+    set(set_lib_mode ON)
+endif()
+
 option(ttx_APP_ONLY "Only build ttx app" OFF)
-option(ttx_LIB_ONLY "Only build ttx lib" OFF)
+option(ttx_LIB_ONLY "Only build ttx lib" ${default_lib_mode})

@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        preset: [ci-coverage, ci-sanitize, ci-ubuntu-clang, ci-ubuntu-dius-runtime]
+        preset: [ci-coverage, ci-sanitize, ci-ubuntu-clang]
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
@@ -35,7 +35,7 @@ jobs:
       - name: Verify headers
         run: |
           nix develop --command cmake --build --preset ${{ matrix.preset }} -t all_verify_interface_header_sets
-        if: matrix.preset == 'ci-ubuntu-clang' || matrix.preset == 'ci-ubuntu-dius-runtime'
+        if: matrix.preset == 'ci-ubuntu-clang'
       - name: Run tests
         run: |
           nix develop --command ctest --preset ${{ matrix.preset }}

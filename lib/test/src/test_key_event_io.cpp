@@ -1,5 +1,5 @@
-#include "di/vocab/array/array.h"
 #include "di/test/prelude.h"
+#include "di/vocab/array/array.h"
 #include "ttx/escape_sequence_parser.h"
 #include "ttx/key.h"
 #include "ttx/key_event.h"

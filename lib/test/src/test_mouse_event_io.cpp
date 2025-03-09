@@ -1,5 +1,5 @@
-#include "di/vocab/array/array.h"
 #include "di/test/prelude.h"
+#include "di/vocab/array/array.h"
 #include "dius/tty.h"
 #include "ttx/key_event_io.h"
 #include "ttx/modifiers.h"

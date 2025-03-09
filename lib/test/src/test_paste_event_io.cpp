@@ -1,5 +1,5 @@
-#include "di/vocab/array/array.h"
 #include "di/test/prelude.h"
+#include "di/vocab/array/array.h"
 #include "ttx/paste_event.h"
 #include "ttx/paste_event_io.h"
 

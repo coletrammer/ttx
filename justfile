@@ -6,6 +6,9 @@ alias t := test
 alias cb := configure_build
 alias bt := build_test
 alias cbt := configure_build_test
+alias r := run
+alias br := build_run
+alias cbr := configure_build_run
 alias bf := build_file
 alias vh := verify_headers
 
@@ -33,6 +36,18 @@ test *args="": ensure_configured
 
     $build_directory/lib/test/ttx_test {{ args }}
 
+# Run ttx
+run *args="": ensure_configured
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    build_directory=$(
+        jq -rc '.configurePresets.[] | select(.name == "{{ preset }}") | .binaryDir' CMakePresets.json CMakeUserPresets.json |
+            sed s/\${sourceDir}/./g
+    )
+
+    $build_directory/ttx {{ args }}
+
 # Simulate base CI
 ci:
     @just preset=ci-ubuntu-gcc cleanall
@@ -56,6 +71,16 @@ build_test *args="":
 configure_build_test *args="":
     @just preset={{ preset }} configure
     @just preset={{ preset }} bt {{ args }}
+
+# Build and run
+build_run *args="":
+    @just preset={{ preset }} build
+    @just preset={{ preset }} run {{ args }}
+
+# Configure and build and run
+configure_build_run *args="":
+    @just preset={{ preset }} configure
+    @just preset={{ preset }} br {{ args }}
 
 # Compile a specific file (regex matching)
 build_file name: ensure_configured

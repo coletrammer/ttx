@@ -31,7 +31,7 @@ to version 19+. Otherwise, `clangd` will choke on any code which uses C++ 26 fea
 ## CMake Developer Mode
 
 Build system targets that are only useful for developers of this project are
-hidden if the `dius_DEVELOPER_MODE` option is disabled. Enabling this
+hidden if the `ttx_DEVELOPER_MODE` option is disabled. Enabling this
 option makes tests and other developer targets and options available. Not
 enabling this option means that you are a consumer of this project and thus you
 have no need for these targets and options.
@@ -53,39 +53,39 @@ the project:
 
 ```json
 {
-  "version": 2,
-  "cmakeMinimumRequired": {
-    "major": 3,
-    "minor": 21,
-    "patch": 0
-  },
-  "configurePresets": [
-    {
-      "name": "dev",
-      "binaryDir": "${sourceDir}/build/dev",
-      "inherits": ["dev-mode", "docs", "ci-<os>"],
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
-      }
-    }
-  ],
-  "buildPresets": [
-    {
-      "name": "dev",
-      "configurePreset": "dev",
-      "configuration": "Debug"
-    }
-  ],
-  "testPresets": [
-    {
-      "name": "dev",
-      "configurePreset": "dev",
-      "configuration": "Debug",
-      "output": {
-        "outputOnFailure": true
-      }
-    }
-  ]
+    "version": 2,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 21,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "dev",
+            "binaryDir": "${sourceDir}/build/dev",
+            "inherits": ["dev-mode", "docs", "ci-<os>"],
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "dev",
+            "configurePreset": "dev",
+            "configuration": "Debug"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "dev",
+            "configurePreset": "dev",
+            "configuration": "Debug",
+            "output": {
+                "outputOnFailure": true
+            }
+        }
+    ]
 }
 ```
 
@@ -151,16 +151,23 @@ Available if `BUILD_DOCS` is enabled. Builds to documentation using
 Doxygen. The output will go to `<binary-dir>/docs/html` by default
 (customizable using `DOXYGEN_OUTPUT_DIRECTORY`).
 
-## di Library
+## dius Library
 
-When using the nix environment, the di library is automatically available to
+When using the nix environment, the dius library is automatically available to
 the CMake build. However, this copy is immutable. If you need to make changes
-to both libraries at once, a custom checkout of di can be used by creating
-a symbolic link named `di` in the root of this package. For instance, if your
-di checkout is in a sibling directory of your dius checkout, run:
+to both libraries at once, a custom checkout of dius can be used by creating
+a symbolic link named `dius` in the root of this package. For instance, if your
+dius checkout is in a sibling directory of your ttx checkout, run:
 
 ```sh
-ln -s "$(realpath ../di)" di
+ln -s "$(realpath ../dius)" dius
+```
+
+If you need to modify the di library instead (dius's dependency), you can
+add a symlink to dius's directory like so:
+
+```sh
+ln -s "$(realpath ../di)" ../dius
 ```
 
 ## Justfile
@@ -194,6 +201,12 @@ To format all source files, use:
 
 ```sh
 just format
+```
+
+To actually run ttx, use:
+
+```sh
+just run
 ```
 
 To see an overview of all `just` commands, simply run `just` with no arguments.
