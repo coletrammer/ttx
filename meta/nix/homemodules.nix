@@ -42,7 +42,7 @@
           if config.programs.ttx.package == null then [ ] else [ config.programs.ttx.package ];
 
         home.shellAliases = {
-          ttx = "ttx --prefix ${config.programs.ttx.settings.prefix} -- ${config.programs.ttx.settings.shell}";
+          ttx = "ttx --prefix ${config.programs.ttx.settings.prefix} ${config.programs.ttx.settings.shell}";
         };
       };
     };

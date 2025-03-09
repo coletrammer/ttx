@@ -26,7 +26,7 @@ nix run github:coletrammer/ttx -- $SHELL
 This project provides a home manager module which you can import into your own configuration. The following steps
 assuming your home manager configuration is managed by a flake.
 
-1. Add this project as an input to your flake:
+Add this project as an input to your flake:
 
 ```nix
 ttx = {
@@ -34,10 +34,11 @@ ttx = {
 
   # Only include this if you're using nixpkgs unstable. Otherwise the default compiler will
   # be too old.
-  inputs.nixpkgs.follows = "nixpkgs": };
+  inputs.nixpkgs.follows = "nixpkgs";
+};
 ```
 
-2. Import the home manager module
+Import the home manager module:
 
 ```nix
 imports = [
@@ -45,7 +46,7 @@ imports = [
 ];
 ```
 
-3. Enable in your configuration
+Enable in your configuration:
 
 ```nix
 programs.ttx = {
