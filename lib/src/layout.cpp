@@ -84,7 +84,7 @@ auto LayoutNode::hit_test_vertical_line(u32 col, u32 row_start, u32 row_end) -> 
         auto res = di::visit(di::overload(
                                  [&](LayoutEntry& entry) -> di::TreeSet<LayoutEntry*> {
                                      auto line_intersects =
-                                         !(row_end < entry.row || row_start >= entry.row + entry.size.rows);
+                                         row_end >= entry.row && row_start < entry.row + entry.size.rows;
                                      if (line_intersects && col >= entry.col && col < entry.col + entry.size.cols) {
                                          return di::single(&entry) | di::to<di::TreeSet>();
                                      }
@@ -105,7 +105,7 @@ auto LayoutNode::hit_test_horizontal_line(u32 row, u32 col_start, u32 col_end) -
         auto res = di::visit(di::overload(
                                  [&](LayoutEntry& entry) -> di::TreeSet<LayoutEntry*> {
                                      auto line_intersects =
-                                         !(col_end < entry.col || col_start >= entry.col + entry.size.cols);
+                                         col_end >= entry.col && col_start < entry.col + entry.size.cols;
                                      if (line_intersects && row >= entry.row && row < entry.row + entry.size.rows) {
                                          return di::single(&entry) | di::to<di::TreeSet>();
                                      }
@@ -158,7 +158,7 @@ auto LayoutGroup::split(dius::tty::WindowSize const& size, u32 row_offset, u32 c
 
     // Case 2: the parent's direction is the same as the requested direction.
     if (parent->m_direction == direction) {
-        auto child = parent->m_children.emplace(parent->m_children.begin() + index + 1, di::Box<Pane>());
+        auto* child = parent->m_children.emplace(parent->m_children.begin() + index + 1, di::Box<Pane>());
         return do_final_layout(child->get<di::Box<Pane>>());
     }
 
@@ -193,7 +193,7 @@ void LayoutGroup::remove_pane(Pane* pane) {
 
     // Now determine if we have any immediate children which are either empty or singular.
     // If so, we need to either remove or shrink our children.
-    for (auto it = m_children.begin(); it != m_children.end();) {
+    for (auto* it = m_children.begin(); it != m_children.end();) {
         auto advance = di::ScopeExit([&] {
             ++it;
         });

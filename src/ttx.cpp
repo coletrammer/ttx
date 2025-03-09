@@ -111,6 +111,7 @@ struct Render {
     }
 };
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 static auto main(Args& args) -> di::Result<void> {
     [[maybe_unused]] auto& log = dius::stderr = TRY(dius::open_sync("/tmp/ttx.log"_pv, dius::OpenMode::WriteClobber));
 
@@ -205,7 +206,7 @@ static auto main(Args& args) -> di::Result<void> {
     auto remove_tab = [&](LayoutState& state, Tab& tab) {
         // Clear active tab.
         if (state.active_tab == &tab) {
-            auto it = di::find(state.tabs, &tab, &di::Box<Tab>::get);
+            auto* it = di::find(state.tabs, &tab, &di::Box<Tab>::get);
             if (it == state.tabs.end()) {
                 set_active_tab(state, state.tabs.at(0).transform(&di::Box<Tab>::get).value_or(nullptr));
             } else if (state.tabs.size() == 1) {
@@ -265,24 +266,24 @@ static auto main(Args& args) -> di::Result<void> {
             return di::Unexpected(di::BasicError::InvalidArgument);
         }
 
-        auto maybe_pane = Pane::create(di::move(command), pane_layout->size,
-                                       di::make_function<void(Pane&)>([&layout_state, &tab, &push_event](Pane& pane) {
-                                           layout_state.with_lock([&](LayoutState& state) {
-                                               push_event(state, PaneExited(&tab, &pane));
-                                           });
-                                       }),
-                                       di::make_function<void(Pane&)>([&layout_state, &tab, &request_render](Pane&) {
-                                           layout_state.with_lock([&](LayoutState& state) {
-                                               if (state.active_tab == &tab) {
-                                                   request_render(state);
-                                               }
-                                           });
-                                       }),
-                                       [](di::Span<byte const> data) {
-                                           auto base64 = di::Base64View(data);
-                                           (void) di::writer_println<di::String::Encoding>(
-                                               dius::stdin, "\033]52;;{}\033\\"_sv, base64);
-                                       });
+        auto maybe_pane =
+            Pane::create(di::move(command), pane_layout->size,
+                         di::make_function<void(Pane&)>([&layout_state, &tab, &push_event](Pane& pane) {
+                             layout_state.with_lock([&](LayoutState& state) {
+                                 push_event(state, PaneExited(&tab, &pane));
+                             });
+                         }),
+                         di::make_function<void(Pane&)>([&layout_state, &tab, &request_render](Pane&) {
+                             layout_state.with_lock([&](LayoutState& state) {
+                                 if (state.active_tab == &tab) {
+                                     request_render(state);
+                                 }
+                             });
+                         }),
+                         [](di::Span<byte const> data) {
+                             auto base64 = di::Base64View(data);
+                             di::writer_println<di::String::Encoding>(dius::stdin, "\033]52;;{}\033\\"_sv, base64);
+                         });
         if (!maybe_pane) {
             tab.layout_root.remove_pane(nullptr);
             return di::Unexpected(di::move(maybe_pane).error());
@@ -382,7 +383,7 @@ static auto main(Args& args) -> di::Result<void> {
             for (auto const& event : events) {
                 if (auto ev = di::get_if<KeyEvent>(event)) {
                     if (ev->type() == KeyEventType::Press &&
-                        !(ev->key() > Key::ModifiersBegin && ev->key() < Key::ModifiersEnd)) {
+                        (ev->key() <= Key::ModifiersBegin || ev->key() >= Key::ModifiersEnd)) {
                         auto reset_got_prefix = di::ScopeExit([&] {
                             got_prefix = false;
                         });

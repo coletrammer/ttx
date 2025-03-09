@@ -48,7 +48,6 @@ void Terminal::on_parser_result(OSC const& osc) {
         osc_52(osc.data.substr(ps_end.end()));
         return;
     }
-    return;
 }
 
 void Terminal::on_parser_result(ControlCharacter const& control_character) {

@@ -53,39 +53,39 @@ the project:
 
 ```json
 {
-    "version": 2,
-    "cmakeMinimumRequired": {
-        "major": 3,
-        "minor": 21,
-        "patch": 0
-    },
-    "configurePresets": [
-        {
-            "name": "dev",
-            "binaryDir": "${sourceDir}/build/dev",
-            "inherits": ["dev-mode", "docs", "ci-<os>"],
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Debug"
-            }
-        }
-    ],
-    "buildPresets": [
-        {
-            "name": "dev",
-            "configurePreset": "dev",
-            "configuration": "Debug"
-        }
-    ],
-    "testPresets": [
-        {
-            "name": "dev",
-            "configurePreset": "dev",
-            "configuration": "Debug",
-            "output": {
-                "outputOnFailure": true
-            }
-        }
-    ]
+  "version": 2,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "dev",
+      "binaryDir": "${sourceDir}/build/dev",
+      "inherits": ["dev-mode", "docs", "ci-<os>"],
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "dev",
+      "configurePreset": "dev",
+      "configuration": "Debug"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "dev",
+      "configurePreset": "dev",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
 }
 ```
 

@@ -1,6 +1,6 @@
 coverage:
   ignore:
-    - "test/**"
+    - "**/test/**"
   status:
     project:
       default:
