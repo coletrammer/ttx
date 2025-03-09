@@ -299,7 +299,7 @@ static auto main(Args& args) -> di::Result<void> {
 
     auto add_tab = [&](LayoutState& state, di::Vector<di::TransparentStringView> command) -> di::Result<> {
         auto tab = di::make_box<Tab>();
-        tab->name = command[0].to_owned() | di::transform([](char c) {
+        tab->name = di::back(di::PathView(command[0])).value_or(""_tsv) | di::transform([](char c) {
                         return c32(c);
                     }) |
                     di::to<di::String>();
