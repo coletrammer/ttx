@@ -7,10 +7,11 @@
   perSystem =
     {
       pkgs,
+      system,
       ...
     }:
     let
-      constants = import ../constants.nix;
+      constants = import ../constants.nix { inherit system; };
       clangTools = pkgs."llvmPackages_${constants.clangVersion}".clang-tools.override {
         enableLibcxx = true;
       };
