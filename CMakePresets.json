@@ -62,6 +62,14 @@
             }
         },
         {
+            "name": "flags-darwin-gcc-clang",
+            "description": "These flags are supported by Clang and GCC on darwin",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_CXX_FLAGS": "-fdiagnostics-color=always -fstack-protector-strong -Wall -Wextra -Wpedantic"
+            }
+        },
+        {
             "name": "ci-linux",
             "description": "Includes fortification with the CMake default release flags",
             "inherits": ["flags-gcc-clang"],
@@ -72,6 +80,20 @@
                 "CMAKE_CXX_FLAGS_RELEASE": "-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 -O3 -DNDEBUG",
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "On",
                 "CMAKE_CXX_COMPILER_LAUNCHER": "ccache"
+            }
+        },
+        {
+            "name": "ci-darwin",
+            "description": "Includes fortification with the CMake default release flags",
+            "inherits": ["flags-darwin-gcc-clang"],
+            "generator": "Ninja",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "On",
+                "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
+                "CMAKE_OSX_SYSROOT": ""
             }
         },
         {
@@ -109,6 +131,10 @@
             "hidden": true
         },
         {
+            "name": "ci-macos",
+            "inherits": ["ci-build", "ci-darwin", "docs", "dev-mode", "clang"]
+        },
+        {
             "name": "ci-ubuntu-gcc",
             "binaryDir": "${sourceDir}/build",
             "inherits": ["ci-build", "ci-linux", "docs", "dev-mode"]
@@ -127,6 +153,10 @@
         {
             "name": "ci-sanitize",
             "configurePreset": "ci-sanitize"
+        },
+        {
+            "name": "ci-macos",
+            "configurePreset": "ci-macos"
         },
         {
             "name": "ci-ubuntu-gcc",
@@ -148,6 +178,13 @@
         {
             "name": "ci-sanitize",
             "configurePreset": "ci-sanitize",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "ci-macos",
+            "configurePreset": "ci-macos",
             "output": {
                 "outputOnFailure": true
             }
