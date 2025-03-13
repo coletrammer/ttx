@@ -17,9 +17,17 @@
 #include "ttx/utf8_stream_decoder.h"
 
 namespace ttx {
-static auto spawn_child(di::Vector<di::TransparentStringView> command, dius::SyncFile& pty)
-    -> di::Result<dius::system::ProcessHandle> {
+static auto spawn_child(di::Vector<di::TransparentStringView> command, dius::SyncFile& pty,
+                        dius::tty::WindowSize const& size) -> di::Result<dius::system::ProcessHandle> {
     auto tty_path = TRY(pty.get_psuedo_terminal_path());
+
+#ifdef __linux__
+    // On linux, we can set the terminal size in on the controlling pty. On MacOS, we need to do it in
+    // the child. Doing so requires using fork() instead of posix_spawn() when spawning the process, so
+    // we try to avoid it. Additionally, opening the psudeo terminal implicitly will make it the controlling
+    // terminal, so there's no need to call ioctl(TIOCSCTTY).
+    TRY(pty.set_tty_window_size(size));
+#endif
 
     return dius::system::Process(command | di::transform(di::to_owned) | di::to<di::Vector>())
         .with_new_session()
@@ -28,15 +36,18 @@ static auto spawn_child(di::Vector<di::TransparentStringView> command, dius::Syn
         .with_file_open(0, di::move(tty_path), dius::OpenMode::ReadWrite)
         .with_file_dup(0, 1)
         .with_file_dup(0, 2)
-        .with_file_close(pty.file_descriptor())
+#ifndef __linux__
+        .with_tty_window_size(0, size)
+        .with_controlling_tty(0)
+#endif
         .spawn();
 }
 
 auto Pane::create(di::Vector<di::TransparentStringView> command, dius::tty::WindowSize size,
                   di::Function<void(Pane&)> did_exit, di::Function<void(Pane&)> did_update,
                   di::Function<void(di::Span<byte const>)> did_selection) -> di::Result<di::Box<Pane>> {
-    auto pty_controller = TRY(dius::open_psuedo_terminal_controller(dius::OpenMode::ReadWrite, size));
-    auto process = TRY(spawn_child(di::move(command), pty_controller));
+    auto pty_controller = TRY(dius::open_psuedo_terminal_controller(dius::OpenMode::ReadWrite));
+    auto process = TRY(spawn_child(di::move(command), pty_controller, size));
     auto pane = di::make_box<Pane>(di::move(pty_controller), process, di::move(did_exit), di::move(did_update),
                                    di::move(did_selection));
     pane->m_terminal.get_assuming_no_concurrent_accesses().set_visible_size(size);
