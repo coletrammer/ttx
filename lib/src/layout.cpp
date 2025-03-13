@@ -171,15 +171,20 @@ auto LayoutGroup::split(dius::tty::WindowSize const& size, u32 row_offset, u32 c
     return do_final_layout(child.get<di::Box<Pane>>());
 }
 
-void LayoutGroup::remove_pane(Pane* pane) {
+auto LayoutGroup::remove_pane(Pane* pane) -> di::Box<Pane> {
     // First, try to delete the pane from this level.
+    auto result = di::Box<Pane> {};
     di::erase_if(m_children, [&](auto const& variant) {
         return di::visit(di::overload(
                              [&](di::Box<LayoutGroup> const&) {
                                  return false;
                              },
                              [&](di::Box<Pane> const& box) {
-                                 return box.get() == pane;
+                                 if (box.get() == pane) {
+                                     result = di::move(const_cast<di::Box<Pane>&>(box));
+                                     return true;
+                                 }
+                                 return false;
                              }),
                          variant);
     });
@@ -187,7 +192,10 @@ void LayoutGroup::remove_pane(Pane* pane) {
     // Then, try to delete the pane recursively.
     for (auto const& child : m_children) {
         if (auto group = di::get_if<di::Box<LayoutGroup>>(child)) {
-            group.value()->remove_pane(pane);
+            auto res = group.value()->remove_pane(pane);
+            if (res) {
+                result = di::move(res);
+            }
         }
     }
 
@@ -233,6 +241,8 @@ void LayoutGroup::remove_pane(Pane* pane) {
     if (m_children.size() <= 1) {
         m_direction = Direction::None;
     }
+
+    return result;
 }
 
 static void resize_pane(Pane* pane, dius::tty::WindowSize const& size) {

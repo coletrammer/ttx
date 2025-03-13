@@ -204,6 +204,10 @@ static auto main(Args& args) -> di::Result<void> {
     };
 
     auto remove_tab = [&](LayoutState& state, Tab& tab) {
+        // For now, ASSERT() there are no panes in the tab. If there were, we'd
+        // need to make sure not to destroy the panes while we hold the lock.
+        ASSERT(tab.layout_root.empty());
+
         // Clear active tab.
         if (state.active_tab == &tab) {
             auto* it = di::find(state.tabs, &tab, &di::Box<Tab>::get);
@@ -233,7 +237,7 @@ static auto main(Args& args) -> di::Result<void> {
         request_render(state);
     };
 
-    auto remove_pane = [&](LayoutState& state, Tab& tab, Pane* pane) {
+    auto remove_pane = [&](LayoutState& state, Tab& tab, Pane* pane) -> di::Box<Pane> {
         // Clear active pane.
         if (tab.active == pane) {
             if (pane) {
@@ -245,7 +249,7 @@ static auto main(Args& args) -> di::Result<void> {
             set_active(state, tab, candidates.front().value_or(nullptr));
         }
 
-        tab.layout_root.remove_pane(pane);
+        auto result = tab.layout_root.remove_pane(pane);
         do_layout(state, state.size);
 
         // Exit tab when there are no panes left.
@@ -253,6 +257,7 @@ static auto main(Args& args) -> di::Result<void> {
             remove_tab(state, tab);
         }
         request_render(state);
+        return result;
     };
 
     auto add_pane = [&](LayoutState& state, Tab& tab, di::Vector<di::TransparentStringView> command,
@@ -377,9 +382,7 @@ static auto main(Args& args) -> di::Result<void> {
             }
 
             auto utf8_string = utf8_decoder.decode(buffer | di::take(*nread));
-            di::writer_println<di::String::Encoding>(log, "input: {:?}"_sv, utf8_string);
             auto events = parser.parse(utf8_string);
-            di::writer_println<di::String::Encoding>(log, "events: {:?}"_sv, events);
             for (auto const& event : events) {
                 if (auto ev = di::get_if<KeyEvent>(event)) {
                     if (ev->type() == KeyEventType::Press &&
@@ -665,7 +668,12 @@ static auto main(Args& args) -> di::Result<void> {
                                   do_layout(state, size);
                               },
                               [&](PaneExited const& pane) {
-                                  remove_pane(state, *pane.tab, pane.pane);
+                                  auto result = remove_pane(state, *pane.tab, pane.pane);
+
+                                  // Make sure to only destroy the pane() without holding the lock.
+                                  lock.unlock();
+                                  result = {};
+                                  lock.lock();
                               },
                               [&](DoRender const&) {}),
                           event);

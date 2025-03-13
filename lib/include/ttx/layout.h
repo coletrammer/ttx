@@ -82,7 +82,7 @@ public:
         -> di::Tuple<di::Box<LayoutNode>, di::Optional<LayoutEntry&>, di::Optional<di::Box<Pane>&>>;
 
     // NOTE: after removing a pane, calling layout() is necessary as any previous LayoutNode's may become invalid.
-    void remove_pane(Pane* pane);
+    auto remove_pane(Pane* pane) -> di::Box<Pane>;
 
     // NOTE: in addition to computing the layout tree, Pane::resize() is called to inform each Pane of its (potentially)
     // new size.
