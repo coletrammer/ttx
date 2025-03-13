@@ -711,6 +711,12 @@ static auto main(Args& args) -> di::Result<void> {
         (void) render_thread.join();
     });
 
+#ifndef __linux__
+    // On MacOS, we need to install a useless signal handlers for sigwait() to
+    // actually work...
+    dius::system::install_dummy_signal_handler(dius::Signal::WindowChange);
+#endif
+
     while (!done.load(di::MemoryOrder::Acquire)) {
         if (!dius::system::wait_for_signal(dius::Signal::WindowChange)) {
             break;
