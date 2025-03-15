@@ -107,6 +107,20 @@ static auto main(Args& args) -> di::Result<void> {
 
     // Setup - initial tab and pane.
     TRY(layout_state.get_assuming_no_concurrent_accesses().add_tab(di::clone(args.command), *render_thread));
+    render_thread->request_render();
+
+    // Setup - remove all panes and tabs on exit.
+    auto _ = di::ScopeExit([&] {
+        layout_state.with_lock([&](LayoutState& state) {
+            while (!state.empty()) {
+                auto& tab = **state.tabs().front();
+                while (tab.active()) {
+                    state.remove_pane(tab, tab.active().data());
+                }
+                state.remove_tab(tab);
+            }
+        });
+    });
 
 #ifndef __linux__
     // On MacOS, we need to install a useless signal handlers for sigwait() to

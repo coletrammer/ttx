@@ -27,6 +27,7 @@ details.
   - [ ] Support session/window/pane switcher via Fzf popup
 - [ ] Graphics
   - [x] Kitty image protocol (APC passthrough)
+    - [ ] Proper Unicode handling (specifically 0 width characters)
   - [ ] Kitty image protocol (actual support)
     - [ ] Conversion of image to text (e.g. via `chafa`) when not supported by the host terminal
   - [ ] Sixels

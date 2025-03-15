@@ -62,8 +62,6 @@ private:
     dius::SyncFile m_pty_controller;
     di::Synchronized<Terminal> m_terminal;
     dius::system::ProcessHandle m_process;
-    dius::Thread m_process_thread;
-    dius::Thread m_reader_thread;
 
     di::Optional<MouseCoordinate> m_selection_start;
     di::Optional<MouseCoordinate> m_selection_end;
@@ -79,5 +77,9 @@ private:
 
     // Application controlled callback when APC command is set.
     di::Function<void(di::StringView)> m_apc_passthrough;
+
+    // These are declared last, for when dius::Thread calls join() in the destructor.
+    dius::Thread m_process_thread;
+    dius::Thread m_reader_thread;
 };
 }
