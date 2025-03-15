@@ -6,6 +6,7 @@
 #include "di/sync/atomic.h"
 #include "di/sync/memory_order.h"
 #include "di/vocab/pointer/box.h"
+#include "dius/print.h"
 #include "dius/sync_file.h"
 #include "dius/system/process.h"
 #include "dius/tty.h"
@@ -90,6 +91,9 @@ auto Pane::create(di::Vector<di::TransparentStringView> command, dius::tty::Wind
                 }
                 return false;
             });
+
+            // (void) di::writer_println<di::String::Encoding>(dius::stderr, "{:?}"_sv, utf8_string);
+            // (void) di::writer_println<di::String::Encoding>(dius::stderr, "{}"_sv, parser_result);
 
             auto events = pane.m_terminal.with_lock([&](Terminal& terminal) {
                 terminal.on_parser_results(parser_result.span());

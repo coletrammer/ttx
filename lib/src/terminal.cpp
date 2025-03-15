@@ -563,7 +563,6 @@ void Terminal::csi_il(Params const& params) {
     u32 lines_to_insert = di::max(1u, params.get(0, 1));
     for (u32 i = 0; i < lines_to_insert; i++) {
         di::rotate(m_rows.begin() + m_cursor_row, m_rows.begin() + m_scroll_end, m_rows.begin() + m_scroll_end + 1);
-        // m_rows.rotate_right(m_cursor_row, m_scroll_end + 1);
         m_rows[m_cursor_row] = Row();
         m_rows[m_cursor_row].resize(m_col_count);
     }
@@ -578,7 +577,6 @@ void Terminal::csi_dl(Params const& params) {
     u32 lines_to_delete = di::clamp(params.get(0, 1), 1u, (m_scroll_end - m_cursor_row));
     for (u32 i = 0; i < lines_to_delete; i++) {
         di::rotate(m_rows.begin() + m_cursor_row, m_rows.begin() + m_cursor_row + 1, m_rows.begin() + m_scroll_end + 1);
-        // m_rows.rotate_left(m_cursor_row, m_scroll_end + 1);
         m_rows[m_scroll_end] = Row();
         m_rows[m_scroll_end].resize(m_col_count);
     }
@@ -1199,7 +1197,7 @@ void Terminal::scroll_down() {
 
 void Terminal::scroll_up_if_needed() {
     if (m_cursor_row == m_scroll_start - 1) {
-        m_cursor_row = di::clamp(m_cursor_row, m_scroll_start, m_scroll_end);
+        m_cursor_row = u32(di::clamp(i32(m_cursor_row), i32(m_scroll_start), i32(m_scroll_end)));
 
         if (!m_rows_above.empty()) {
             scroll_up();
