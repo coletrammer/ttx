@@ -109,6 +109,7 @@ auto Pane::create_mock() -> di::Box<Pane> {
 }
 
 Pane::~Pane() {
+    // TODO: timeout/skip waiting for processes to die after sending SIGHUP.
     (void) m_process.signal(dius::Signal::Hangup);
     (void) m_reader_thread.join();
     (void) m_process_thread.join();
