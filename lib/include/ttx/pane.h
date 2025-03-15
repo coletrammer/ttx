@@ -22,20 +22,23 @@ class Pane {
 public:
     static auto create(di::Vector<di::TransparentStringView> command, dius::tty::WindowSize size,
                        di::Function<void(Pane&)> did_exit, di::Function<void(Pane&)> did_update,
-                       di::Function<void(di::Span<byte const>)> did_selection) -> di::Result<di::Box<Pane>>;
+                       di::Function<void(di::Span<byte const>)> did_selection,
+                       di::Function<void(di::StringView)> apc_passthrough) -> di::Result<di::Box<Pane>>;
 
     // For testing, create a mock pane. This doesn't actually create a psuedo terminal or a subprocess.
     static auto create_mock() -> di::Box<Pane>;
 
     explicit Pane(dius::SyncFile pty_controller, dius::system::ProcessHandle process,
                   di::Function<void(Pane&)> did_exit, di::Function<void(Pane&)> did_update,
-                  di::Function<void(di::Span<byte const>)> did_selection)
+                  di::Function<void(di::Span<byte const>)> did_selection,
+                  di::Function<void(di::StringView)> apc_passthrough)
         : m_pty_controller(di::move(pty_controller))
         , m_terminal(m_pty_controller)
         , m_process(process)
         , m_did_exit(di::move(did_exit))
         , m_did_update(di::move(did_update))
-        , m_did_selection(di::move(did_selection)) {}
+        , m_did_selection(di::move(did_selection))
+        , m_apc_passthrough(di::move(apc_passthrough)) {}
     ~Pane();
 
     auto draw(Renderer& renderer) -> RenderedCursor;
@@ -73,5 +76,8 @@ private:
 
     // Application controlled callback when text is selected.
     di::Function<void(di::Span<byte const>)> m_did_selection;
+
+    // Application controlled callback when APC command is set.
+    di::Function<void(di::StringView)> m_apc_passthrough;
 };
 }

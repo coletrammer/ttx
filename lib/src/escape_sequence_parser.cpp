@@ -106,8 +106,13 @@ STATE(escape) {
         return;
     }
 
-    if (code_point == 0x58 || code_point == 0x5E || code_point == 0x5F) {
-        transition(State::SosPmApcString);
+    if (code_point == 0x5F) {
+        transition(State::ApcString);
+        return;
+    }
+
+    if (code_point == 0x58 || code_point == 0x5E) {
+        transition(State::SosPmString);
         return;
     }
 
@@ -444,8 +449,29 @@ STATE(osc_string) {
     }
 }
 
-STATE(sos_pm_apc_string) {
-    ON_ENTRY_NOOP(SosPmApcString);
+STATE(apc_string) {
+    ON_ENTRY(ApcString) {
+        apc_start();
+    }
+
+    if (is_string_terminator(code_point)) {
+        transition(State::Ground);
+        return;
+    }
+
+    if (is_executable(code_point)) {
+        ignore(code_point);
+        return;
+    }
+
+    if (is_printable(code_point)) {
+        apc_put(code_point);
+        return;
+    }
+}
+
+STATE(sos_pm_string) {
+    ON_ENTRY_NOOP(SosPmString);
 
     if (is_string_terminator(code_point)) {
         transition(State::Ground);
@@ -547,6 +573,20 @@ void EscapeSequenceParser::osc_put(c32 code_point) {
 void EscapeSequenceParser::osc_end() {
     auto terminator = m_saw_legacy_string_terminator ? "\a"_sv : "\033\\"_sv;
     m_result.push_back(OSC(di::move(m_data), terminator));
+}
+
+void EscapeSequenceParser::apc_start() {
+    m_on_state_exit = [this] {
+        apc_end();
+    };
+}
+
+void EscapeSequenceParser::apc_put(c32 code_point) {
+    m_data.push_back(code_point);
+}
+
+void EscapeSequenceParser::apc_end() {
+    m_result.push_back(APC(di::move(m_data)));
 }
 
 void EscapeSequenceParser::output_ss3(c32 code_point) {

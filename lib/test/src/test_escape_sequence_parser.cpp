@@ -67,6 +67,22 @@ static void osc() {
     ASSERT_EQ(expected.size(), actual.size());
 }
 
+static void apc() {
+    constexpr auto input = "\033_Gx=1;asdf\033\\"_sv;
+
+    auto expected = di::Array {
+        ttx::ParserResult { ttx::APC { "Gx=1;asdf"_s } },
+    };
+
+    auto parser = ttx::EscapeSequenceParser {};
+    auto actual = parser.parse_application_escape_sequences(input);
+
+    for (auto const& [ex, ac] : di::zip(expected, actual)) {
+        ASSERT_EQ(ex, ac);
+    }
+    ASSERT_EQ(expected.size(), actual.size());
+}
+
 static void input() {
     using namespace ttx;
 
@@ -98,5 +114,6 @@ static void input() {
 TEST(escape_sequence_parser, nvim_startup)
 TEST(escape_sequence_parser, empty_params)
 TEST(escape_sequence_parser, osc)
+TEST(escape_sequence_parser, apc)
 TEST(escape_sequence_parser, input)
 }

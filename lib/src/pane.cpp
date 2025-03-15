@@ -45,11 +45,12 @@ static auto spawn_child(di::Vector<di::TransparentStringView> command, dius::Syn
 
 auto Pane::create(di::Vector<di::TransparentStringView> command, dius::tty::WindowSize size,
                   di::Function<void(Pane&)> did_exit, di::Function<void(Pane&)> did_update,
-                  di::Function<void(di::Span<byte const>)> did_selection) -> di::Result<di::Box<Pane>> {
+                  di::Function<void(di::Span<byte const>)> did_selection,
+                  di::Function<void(di::StringView)> apc_passthrough) -> di::Result<di::Box<Pane>> {
     auto pty_controller = TRY(dius::open_psuedo_terminal_controller(dius::OpenMode::ReadWrite));
     auto process = TRY(spawn_child(di::move(command), pty_controller, size));
     auto pane = di::make_box<Pane>(di::move(pty_controller), process, di::move(did_exit), di::move(did_update),
-                                   di::move(did_selection));
+                                   di::move(did_selection), di::move(apc_passthrough));
     pane->m_terminal.get_assuming_no_concurrent_accesses().set_visible_size(size);
 
     pane->m_process_thread = TRY(dius::Thread::create([&pane = *pane] mutable {
@@ -80,6 +81,16 @@ auto Pane::create(di::Vector<di::TransparentStringView> command, dius::tty::Wind
             auto utf8_string = utf8_decoder.decode(buffer | di::take(*nread));
 
             auto parser_result = parser.parse_application_escape_sequences(utf8_string);
+            di::erase_if(parser_result, [&](auto const& event) {
+                if (auto ev = di::get_if<APC>(event)) {
+                    if (pane.m_apc_passthrough) {
+                        pane.m_apc_passthrough(ev->data);
+                    }
+                    return true;
+                }
+                return false;
+            });
+
             auto events = pane.m_terminal.with_lock([&](Terminal& terminal) {
                 terminal.on_parser_results(parser_result.span());
                 return terminal.outgoing_events();
@@ -105,7 +116,8 @@ auto Pane::create(di::Vector<di::TransparentStringView> command, dius::tty::Wind
 
 auto Pane::create_mock() -> di::Box<Pane> {
     auto fake_psuedo_terminal = dius::SyncFile();
-    return di::make_box<Pane>(di::move(fake_psuedo_terminal), dius::system::ProcessHandle(), nullptr, nullptr, nullptr);
+    return di::make_box<Pane>(di::move(fake_psuedo_terminal), dius::system::ProcessHandle(), nullptr, nullptr, nullptr,
+                              nullptr);
 }
 
 Pane::~Pane() {

@@ -20,6 +20,7 @@ private:
     void handle(PrintableCharacter const& printable_character);
     void handle(DCS const& dcs);
     void handle(OSC const& osc);
+    void handle(APC const& apc);
     void handle(CSI const& csi);
     void handle(Escape const& escape);
     void handle(ControlCharacter const& control_character);

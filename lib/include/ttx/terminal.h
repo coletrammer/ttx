@@ -131,6 +131,7 @@ private:
     void on_parser_result(PrintableCharacter const& printable_character);
     void on_parser_result(DCS const& dcs);
     void on_parser_result(OSC const& osc);
+    void on_parser_result(APC const& apc);
     void on_parser_result(CSI const& csi);
     void on_parser_result(Escape const& escape);
     void on_parser_result(ControlCharacter const& control);

@@ -17,7 +17,7 @@ details.
 
 - [ ] Platform support
   - [x] Linux
-  - [ ] MacOS
+  - [x] MacOS
   - [ ] Windows
 - [ ] Basic multiplexing functionality
   - [x] Layout tree with horizontal and vertical splits
@@ -26,7 +26,8 @@ details.
   - [ ] Popup windows
   - [ ] Support session/window/pane switcher via Fzf popup
 - [ ] Graphics
-  - [ ] Kitty image protocol
+  - [x] Kitty image protocol (APC passthrough)
+  - [ ] Kitty image protocol (actual support)
     - [ ] Conversion of image to text (e.g. via `chafa`) when not supported by the host terminal
   - [ ] Sixels
   - [ ] Iterm image protocol

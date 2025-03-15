@@ -42,6 +42,16 @@ struct OSC {
     }
 };
 
+struct APC {
+    di::String data;
+
+    auto operator==(APC const&) const -> bool = default;
+
+    constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<APC>) {
+        return di::make_fields<"APC">(di::field<"data", &APC::data>);
+    }
+};
+
 struct CSI {
     di::String intermediate;
     Params params;
@@ -79,7 +89,7 @@ struct ControlCharacter {
     }
 };
 
-using ParserResult = di::Variant<PrintableCharacter, DCS, OSC, CSI, Escape, ControlCharacter>;
+using ParserResult = di::Variant<PrintableCharacter, DCS, OSC, APC, CSI, Escape, ControlCharacter>;
 
 class EscapeSequenceParser {
 public:
@@ -111,7 +121,8 @@ private:
     M(DcsPassthrough, dcs_passthrough)         \
     M(DcsIgnore, dcs_ignore)                   \
     M(OscString, osc_string)                   \
-    M(SosPmApcString, sos_pm_apc_string)       \
+    M(ApcString, apc_string)                   \
+    M(SosPmString, sos_pm_string)              \
     M(Ss3, ss3)
 
     enum class State {
@@ -138,6 +149,9 @@ private:
     void osc_start();
     void osc_put(c32 code_point);
     void osc_end();
+    void apc_start();
+    void apc_put(c32 code_point);
+    void apc_end();
     void output_ss3(c32 code_point);
 
     void transition(State state);

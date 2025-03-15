@@ -50,6 +50,8 @@ void Terminal::on_parser_result(OSC const& osc) {
     }
 }
 
+void Terminal::on_parser_result(APC const&) {}
+
 void Terminal::on_parser_result(ControlCharacter const& control_character) {
     switch (control_character.code_point) {
         case 8: {
