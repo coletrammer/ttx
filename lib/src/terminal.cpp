@@ -887,9 +887,9 @@ void Terminal::csi_dsr(Params const& params) {
 
 // DEC Set Top and Bottom Margins - https://www.vt100.net/docs/vt100-ug/chapter3.html#DECSTBM
 void Terminal::csi_decstbm(Params const& params) {
-    u32 new_scroll_start = params.get(0, 1) - 1;
-    u32 new_scroll_end = params.get(1, m_row_count) - 1;
-    if (new_scroll_end - new_scroll_start < 2) {
+    u32 new_scroll_start = di::min(params.get(0, 1) - 1, m_row_count - 1);
+    u32 new_scroll_end = di::min(params.get(1, m_row_count) - 1, m_row_count - 1);
+    if (new_scroll_end - new_scroll_start < 1) {
         return;
     }
     m_rows_above.clear();

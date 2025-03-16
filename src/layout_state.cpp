@@ -76,7 +76,7 @@ auto LayoutState::remove_pane(Tab& tab, Pane* pane) -> di::Box<Pane> {
 
 auto LayoutState::add_pane(Tab& tab, di::Vector<di::TransparentStringView> command, Direction direction,
                            RenderThread& render_thread) -> di::Result<> {
-    return tab.add_pane(m_size, 1, 0, di::move(command), direction, render_thread);
+    return tab.add_pane(m_size.rows_shrinked(1), 1, 0, di::move(command), direction, render_thread);
 }
 
 auto LayoutState::add_tab(di::Vector<di::TransparentStringView> command, RenderThread& render_thread) -> di::Result<> {
