@@ -1210,7 +1210,7 @@ void Terminal::scroll_up_if_needed() {
         m_rows[m_scroll_start].resize(m_col_count);
         invalidate_all();
 
-        if (total_rows() - m_rows.size() > m_row_count + 100) {
+        if (total_rows() - m_rows.size() > m_row_count + 1000) {
             m_rows_below.erase(m_rows_below.begin());
         }
     }
@@ -1232,7 +1232,7 @@ void Terminal::scroll_down_if_needed() {
         m_rows[m_scroll_end].resize(m_col_count);
         invalidate_all();
 
-        if (total_rows() - m_rows.size() > m_row_count + 100) {
+        if (total_rows() - m_rows.size() > m_row_count + 1000) {
             m_rows_above.erase(m_rows_above.begin());
         }
     }
