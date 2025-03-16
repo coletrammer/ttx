@@ -1,4 +1,5 @@
 #include "di/test/prelude.h"
+#include "dius/print.h"
 #include "dius/tty.h"
 #include "ttx/layout.h"
 
@@ -60,6 +61,30 @@ static void splits() {
     validate_layout_for_pane(pane4, *l3, 22, 65, { 10, 63 });
 }
 
+static void many_splits() {
+    constexpr auto size = dius::tty::WindowSize(1000 + 99, 1000 + 99, 0, 0);
+
+    auto root = LayoutGroup {};
+
+    // Initial pane
+    auto [pane0, l0] = add_pane(root, size, nullptr, Direction::None);
+
+    // Add 99 panes, and verify space is distributed evenly between them.
+    auto panes = di::Vector<Pane*> {};
+    for (auto _ : di::range(99)) {
+        auto [pane, _] = add_pane(root, size, &pane0, Direction::Vertical);
+        panes.push_back(&pane);
+    }
+
+    auto l = root.layout(size, 0, 0);
+    for (auto* pane : panes) {
+        auto entry = l->find_pane(pane);
+        ASSERT(entry);
+
+        ASSERT_EQ(entry->size.rows, 10);
+    }
+}
+
 static void remove_pane() {
     constexpr auto size = dius::tty::WindowSize(64, 128, 1280, 640);
 
@@ -98,11 +123,26 @@ static void remove_pane() {
         // group with pane 1.
         root.remove_pane(&pane0);
 
+        // Now the layout looks something like this:
+        // |------------------|
+        // |2                 |
+        // |------------------|
+        // |3                 |
+        // |------------------|
+        // |4                 |
+        // |------------------|
+        // |1                 |
+        // |                  |
+        // |                  |
+        // |                  |
+        // |                  |
+        // |------------------|
+
         auto l0 = root.layout(size, 0, 0);
-        validate_layout_for_pane(pane2, *l0, 0, 0, { 15, 128 });
-        validate_layout_for_pane(pane3, *l0, 16, 0, { 16, 128 });
-        validate_layout_for_pane(pane4, *l0, 33, 0, { 15, 128 });
-        validate_layout_for_pane(pane1, *l0, 49, 0, { 15, 128 });
+        validate_layout_for_pane(pane2, *l0, 0, 0, { 11, 128 });
+        validate_layout_for_pane(pane3, *l0, 12, 0, { 10, 128 });
+        validate_layout_for_pane(pane4, *l0, 23, 0, { 11, 128 });
+        validate_layout_for_pane(pane1, *l0, 35, 0, { 29, 128 });
     }
 
     {
@@ -182,6 +222,7 @@ static void hit_test() {
 }
 
 TEST(layout, splits)
+TEST(layout, many_splits)
 TEST(layout, remove_pane)
 TEST(layout, hit_test)
 }

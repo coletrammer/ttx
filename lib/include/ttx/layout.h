@@ -66,6 +66,16 @@ struct LayoutNode {
     }
 };
 
+// Pane sizes are computed in units of this number of precision, using fixed point arithemetic.
+constexpr inline auto max_layout_precision = i64(100'000);
+
+// Represents a pane in a layout group. This includes extra metadata
+// necessary for layout.
+struct LayoutPane {
+    di::Box<Pane> pane {};
+    i64 relative_size { max_layout_precision };
+};
+
 // Represents a group of panes in a hierarchy. Instead of using a strict binary tree,
 // we allow multiple children on a single level so that by default, splits made in
 // the same direction share space evenly.
@@ -74,6 +84,7 @@ public:
     constexpr auto direction() const -> Direction { return m_direction; }
     constexpr auto empty() const -> bool { return m_children.empty(); }
     constexpr auto single() const -> bool { return m_children.size() == 1; }
+    constexpr auto relative_size() -> i64& { return m_relative_size; }
 
     // NOTE: this method returns the correct size for the new pane, and a lvalue reference where
     // the caller should store its newly created Pane. We need this akward API so that we can
@@ -91,7 +102,12 @@ public:
 private:
     friend struct FindPaneInLayoutGroup;
 
-    di::Vector<di::Variant<di::Box<LayoutGroup>, di::Box<Pane>>> m_children;
+    void redistribute_space(di::Variant<di::Box<LayoutGroup>, di::Box<LayoutPane>>* new_child,
+                            i64 original_size_available, i64 new_size_available);
+    void validate_layout();
+
+    di::Vector<di::Variant<di::Box<LayoutGroup>, di::Box<LayoutPane>>> m_children;
+    i64 m_relative_size { max_layout_precision };
     Direction m_direction { Direction::None };
 };
 }
