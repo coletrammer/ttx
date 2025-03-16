@@ -2,6 +2,7 @@
 
 #include "di/container/queue/queue.h"
 #include "dius/condition_variable.h"
+#include "input.h"
 #include "layout_state.h"
 #include "tab.h"
 #include "ttx/pane.h"
@@ -17,7 +18,11 @@ struct DoRender {};
 
 struct Exit {};
 
-using RenderEvent = di::Variant<dius::tty::WindowSize, PaneExited, DoRender, Exit>;
+struct InputStatus {
+    InputMode mode { InputMode::Insert };
+};
+
+using RenderEvent = di::Variant<dius::tty::WindowSize, PaneExited, InputStatus, DoRender, Exit>;
 
 class RenderThread {
 public:
@@ -35,6 +40,7 @@ private:
     void render_thread();
     void do_render(Renderer& renderer);
 
+    InputStatus m_input_status;
     di::Synchronized<di::Queue<RenderEvent>> m_events;
     dius::ConditionVariable m_condition;
     di::Synchronized<LayoutState>& m_layout_state;

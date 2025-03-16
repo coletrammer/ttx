@@ -70,6 +70,8 @@ void RenderThread::render_thread() {
                 if (should_exit) {
                     return;
                 }
+            } else if (auto ev = di::get_if<InputStatus>(event)) {
+                m_input_status = *ev;
             } else if (auto ev = di::get_if<DoRender>(event)) {
                 // Do nothing. This was just to wake us up.
             } else if (auto ev = di::get_if<Exit>(event)) {
@@ -160,7 +162,11 @@ void RenderThread::do_render(Renderer& renderer) {
             })) |
             di::join_with(U' ') | di::to<di::String>();
         renderer.clear_row(0);
-        renderer.put_text(text.view(), 0, 0);
+        renderer.put_text(di::to_string(m_input_status.mode).view(), 0, 0,
+                          GraphicsRendition {
+                              .font_weight = FontWeight::Bold,
+                          });
+        renderer.put_text(text.view(), 0, 7);
 
         auto cursor = di::Optional<RenderedCursor> {};
 

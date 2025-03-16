@@ -40,6 +40,15 @@ void InputThread::request_exit() {
     }
 }
 
+void InputThread::set_input_mode(InputMode mode) {
+    if (m_mode == mode) {
+        return;
+    }
+
+    m_mode = mode;
+    m_render_thread.push_event(InputStatus { .mode = mode });
+}
+
 void InputThread::input_thread() {
     auto _ = di::ScopeExit([&] {
         m_render_thread.request_exit();
@@ -76,65 +85,70 @@ void InputThread::input_thread() {
 void InputThread::handle_event(KeyEvent const& event) {
     if (event.type() == KeyEventType::Press &&
         (event.key() <= Key::ModifiersBegin || event.key() >= Key::ModifiersEnd)) {
-        auto reset_got_prefix = di::ScopeExit([&] {
-            m_got_prefix = false;
+        auto reset_mode = di::ScopeExit([&] {
+            set_input_mode(InputMode::Insert);
         });
 
-        if (!m_got_prefix && event.key() == m_prefix && !!(event.modifiers() & Modifiers::Control)) {
-            m_got_prefix = true;
-            reset_got_prefix.release();
+        if (m_mode == InputMode::Insert && event.key() == m_prefix && !!(event.modifiers() & Modifiers::Control)) {
+            set_input_mode(InputMode::Normal);
+            reset_mode.release();
             return;
         }
 
-        if (m_got_prefix && event.key() == Key::H && !!(event.modifiers() & Modifiers::Control)) {
+        auto can_navigate = m_mode == InputMode::Normal || m_mode == InputMode::Switch;
+        if (can_navigate && event.key() == Key::H && !!(event.modifiers() & Modifiers::Control)) {
             m_layout_state.with_lock([&](LayoutState& state) {
                 if (!state.active_tab()) {
                     return;
                 }
                 state.active_tab()->navigate(NavigateDirection::Left);
-                reset_got_prefix.release();
             });
             m_render_thread.request_render();
+            set_input_mode(InputMode::Switch);
+            reset_mode.release();
             return;
         }
 
-        if (m_got_prefix && event.key() == Key::L && !!(event.modifiers() & Modifiers::Control)) {
+        if (can_navigate && event.key() == Key::L && !!(event.modifiers() & Modifiers::Control)) {
             m_layout_state.with_lock([&](LayoutState& state) {
                 if (!state.active_tab()) {
                     return;
                 }
                 state.active_tab()->navigate(NavigateDirection::Right);
-                reset_got_prefix.release();
             });
             m_render_thread.request_render();
+            set_input_mode(InputMode::Switch);
+            reset_mode.release();
             return;
         }
 
-        if (m_got_prefix && event.key() == Key::K && !!(event.modifiers() & Modifiers::Control)) {
+        if (can_navigate && event.key() == Key::K && !!(event.modifiers() & Modifiers::Control)) {
             m_layout_state.with_lock([&](LayoutState& state) {
                 if (!state.active_tab()) {
                     return;
                 }
                 state.active_tab()->navigate(NavigateDirection::Up);
-                reset_got_prefix.release();
             });
             m_render_thread.request_render();
+            set_input_mode(InputMode::Switch);
+            reset_mode.release();
             return;
         }
 
-        if (m_got_prefix && event.key() == Key::J && !!(event.modifiers() & Modifiers::Control)) {
+        if (can_navigate && event.key() == Key::J && !!(event.modifiers() & Modifiers::Control)) {
             m_layout_state.with_lock([&](LayoutState& state) {
                 if (!state.active_tab()) {
                     return;
                 }
                 state.active_tab()->navigate(NavigateDirection::Down);
-                reset_got_prefix.release();
             });
             m_render_thread.request_render();
+            set_input_mode(InputMode::Switch);
+            reset_mode.release();
             return;
         }
 
-        if (m_got_prefix && event.key() == Key::C) {
+        if (m_mode == InputMode::Normal && event.key() == Key::C) {
             m_layout_state.with_lock([&](LayoutState& state) {
                 (void) state.add_tab(di::clone(m_command), m_render_thread);
             });
@@ -143,7 +157,7 @@ void InputThread::handle_event(KeyEvent const& event) {
         }
 
         auto window_nav_keys = di::range(i32(Key::_1), i32(Key::_9) + 1) | di::transform(di::construct<Key>);
-        if (m_got_prefix && di::contains(window_nav_keys, event.key())) {
+        if (m_mode == InputMode::Normal && di::contains(window_nav_keys, event.key())) {
             m_layout_state.with_lock([&](LayoutState& state) {
                 auto index = usize(event.key()) - usize(Key::_1);
                 if (auto tab = state.tabs().at(index)) {
@@ -154,12 +168,12 @@ void InputThread::handle_event(KeyEvent const& event) {
             return;
         }
 
-        if (m_got_prefix && event.key() == Key::D) {
+        if (m_mode == InputMode::Normal && event.key() == Key::D) {
             m_done.store(true, di::MemoryOrder::Release);
             return;
         }
 
-        if (m_got_prefix && event.key() == Key::X) {
+        if (m_mode == InputMode::Normal && event.key() == Key::X) {
             m_layout_state.with_lock([&](LayoutState& state) {
                 if (auto pane = state.active_pane()) {
                     pane->exit();
@@ -169,7 +183,7 @@ void InputThread::handle_event(KeyEvent const& event) {
             return;
         }
 
-        if (m_got_prefix && event.key() == Key::BackSlash && !!(Modifiers::Shift)) {
+        if (m_mode == InputMode::Normal && event.key() == Key::BackSlash && !!(Modifiers::Shift)) {
             m_layout_state.with_lock([&](LayoutState& state) {
                 if (!state.active_tab()) {
                     return;
@@ -181,7 +195,7 @@ void InputThread::handle_event(KeyEvent const& event) {
             return;
         }
 
-        if (m_got_prefix && event.key() == Key::Minus) {
+        if (m_mode == InputMode::Normal && event.key() == Key::Minus) {
             m_layout_state.with_lock([&](LayoutState& state) {
                 if (!state.active_tab()) {
                     return;
