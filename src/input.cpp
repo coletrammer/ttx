@@ -86,6 +86,7 @@ void InputThread::input_thread() {
     }
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void InputThread::handle_event(KeyEvent const& event) {
     if (event.type() == KeyEventType::Press &&
         (event.key() <= Key::ModifiersBegin || event.key() >= Key::ModifiersEnd)) {

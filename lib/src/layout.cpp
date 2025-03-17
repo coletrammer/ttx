@@ -400,7 +400,7 @@ auto LayoutGroup::resize(LayoutNode& root, Pane* pane, ResizeDirection direction
     ASSERT_GT(relevant_node->group->m_children.size(), 1);
 
     // Now find the relevant layout item.
-    auto it = di::find_if(relevant_node->group->m_children, [&](auto const& x) {
+    auto* it = di::find_if(relevant_node->group->m_children, [&](auto const& x) {
         return di::visit(di::overload(
                              [&](di::Box<LayoutPane> const& layout_pane) -> bool {
                                  return layout_pane->pane.get() == pane;
@@ -417,7 +417,7 @@ auto LayoutGroup::resize(LayoutNode& root, Pane* pane, ResizeDirection direction
     if (it == relevant_node->group->m_children.begin() && sibling_is_prior) {
         return false;
     }
-    auto sibling = sibling_is_prior ? di::prev(it) : di::next(it);
+    auto* sibling = sibling_is_prior ? di::prev(it) : di::next(it);
     if (sibling == relevant_node->group->m_children.end()) {
         return false;
     }
