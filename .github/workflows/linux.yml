@@ -26,6 +26,19 @@ jobs:
         uses: hendrikmuhs/ccache-action@v1.2
         with:
           key: ${{ github.job }}-${{ matrix.preset }}
+      - name: Get the dius SHA to use
+        run: |
+          # Get the correct revision from the flake lock file.
+          rev="$(jq -cr '.nodes.dius.locked.rev' flake.lock)"
+          echo "dius_rev=$rev" >> "$GITHUB_ENV"
+        if: matrix.preset == 'ci-sanitize' || matrix.preset == 'ci-ubuntu-clang'
+      - name: Override the dius checkout to non nix
+        uses: actions/checkout@v4
+        with:
+          repository: coletrammer/dius
+          ref: ${{ env.dius_rev }}
+          path: dius
+        if: matrix.preset == 'ci-sanitize' || matrix.preset == 'ci-ubuntu-clang'
       - name: Configure build
         run: |
           nix develop --command cmake --preset ${{ matrix.preset }} -DCMAKE_COMPILE_WARNING_AS_ERROR=On
