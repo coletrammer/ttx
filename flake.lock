@@ -6,11 +6,11 @@
         "nixpkgs": ["nixpkgs"]
       },
       "locked": {
-        "lastModified": 1741842759,
-        "narHash": "sha256-vWqJvNvEPB51T2g7xYkORo4oCVlrJglJTSv1AIT3/AQ=",
+        "lastModified": 1742152507,
+        "narHash": "sha256-cJ6hOeY/aY+zETqL40veWBOH5Y1wHCRh8jWUlD+Sc3g=",
         "owner": "coletrammer",
         "repo": "di",
-        "rev": "cdbcae54acf7f95dc71a4a821c49366edc4541b2",
+        "rev": "9878dbf4eb7dc0ce828eb59a96442aa2e9b0abd7",
         "type": "github"
       },
       "original": {
@@ -26,11 +26,11 @@
         "nixpkgs": ["nixpkgs"]
       },
       "locked": {
-        "lastModified": 1741847185,
-        "narHash": "sha256-2ksvB2NYceRhgSvv2N86UK777sPeHcgPIwXtKySYvRI=",
+        "lastModified": 1742167628,
+        "narHash": "sha256-9sekISvEV3P+PJVaH9thzP7WvNC5aiCwyR8HqYiYS9w=",
         "owner": "coletrammer",
         "repo": "dius",
-        "rev": "b5987a59fa300de807cb33215596d4524f997903",
+        "rev": "b0a5d50e67700bd3b6cb1819a7c242dfad45632f",
         "type": "github"
       },
       "original": {
