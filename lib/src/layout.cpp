@@ -1,5 +1,6 @@
 #include "ttx/layout.h"
 
+#include "di/container/algorithm/count_if.h"
 #include "di/container/interface/erase.h"
 #include "di/container/view/as_rvalue.h"
 #include "di/function/overload.h"
@@ -137,9 +138,18 @@ auto LayoutNode::hit_test_horizontal_line(u32 row, u32 col_start, u32 col_end) -
 
 void LayoutGroup::redistribute_space(di::Variant<di::Box<LayoutGroup>, di::Box<LayoutPane>>* new_child,
                                      i64 original_size_available, i64 new_size_available) {
-    if (empty()) {
+    auto relevant_children_count = di::count_if(m_children, [&](auto const& child) {
+        return &child != new_child;
+    });
+    if (relevant_children_count == 0) {
         return;
     }
+
+    // Special case: if all relevant children have size 0, we need to evenly space them out
+    // amonst the available space.
+    auto all_zero = di::all_of(m_children, [&](auto const& child) {
+        return &child == new_child || di::visit(GetRelativeSize {}, child) == 0;
+    });
 
     // Redistribute existing layout size's into the space remaining.
     auto available_size = new_size_available;
@@ -150,7 +160,12 @@ void LayoutGroup::redistribute_space(di::Variant<di::Box<LayoutGroup>, di::Box<L
         }
 
         auto& relative_size = di::visit(GetRelativeSize {}, child);
-        auto new_target_size = leftover_size + di::Rational(relative_size, original_size_available);
+        auto new_target_size = leftover_size;
+        if (all_zero) {
+            new_target_size += di::Rational(1_i64, i64(relevant_children_count));
+        } else {
+            new_target_size += di::Rational(relative_size, original_size_available);
+        }
         auto new_relative_size = (new_target_size * available_size).round();
         relative_size = new_relative_size;
 
@@ -179,7 +194,10 @@ void LayoutGroup::validate_layout() {
     // correct value.
     auto total_relative_size = i64(0);
     for (auto& child : m_children) {
-        total_relative_size += di::visit(GetRelativeSize {}, child);
+        auto size = di::visit(GetRelativeSize {}, child);
+        ASSERT_GT_EQ(size, 0);
+        ASSERT_LT_EQ(size, max_layout_precision);
+        total_relative_size += size;
     }
     ASSERT_EQ(total_relative_size, max_layout_precision);
 }
@@ -351,9 +369,90 @@ static void resize_pane(Pane* pane, dius::tty::WindowSize const& size) {
     }
 };
 
+auto LayoutGroup::resize(LayoutNode& root, Pane* pane, ResizeDirection direction, i32 amount_in_cells) -> bool {
+    auto entry = root.find_pane(pane);
+    if (!entry) {
+        return false;
+    }
+    auto* parent = entry->parent;
+    ASSERT(parent);
+    ASSERT(parent->group);
+    auto* grand_parent = parent->parent;
+
+    // First identify whether we are modifying the parent layout group or the grand parent layout group.
+    // Each level only concerns itself with horizontal or vertical spacing, not both.
+    auto is_horizontal = direction == ResizeDirection::Right || direction == ResizeDirection::Left;
+    auto* relevant_node = (parent->direction == Direction::Horizontal && is_horizontal) ||
+                                  (parent->direction == Direction::Vertical && !is_horizontal)
+                              ? parent
+                              : grand_parent;
+
+    // Ignore request to resize groups in the wrong direction or if there is only a single item in the group
+    // (direction == Direction::None).
+    if (!relevant_node || (is_horizontal && relevant_node->direction != Direction::Horizontal) ||
+        (!is_horizontal && relevant_node->direction != Direction::Vertical)) {
+        return false;
+    }
+
+    ASSERT(relevant_node);
+    ASSERT(relevant_node->group);
+    ASSERT_NOT_EQ(relevant_node->group->m_direction, Direction::None);
+    ASSERT_GT(relevant_node->group->m_children.size(), 1);
+
+    // Now find the relevant layout item.
+    auto it = di::find_if(relevant_node->group->m_children, [&](auto const& x) {
+        return di::visit(di::overload(
+                             [&](di::Box<LayoutPane> const& layout_pane) -> bool {
+                                 return layout_pane->pane.get() == pane;
+                             },
+                             [&](di::Box<LayoutGroup> const& layout_node) -> bool {
+                                 return layout_node.get() == parent->group;
+                             }),
+                         x);
+    });
+    ASSERT_NOT_EQ(it, relevant_node->group->m_children.end());
+
+    // Now determine the sibling we need to take size from, and validate that it exists.
+    auto sibling_is_prior = direction == ResizeDirection::Left || direction == ResizeDirection::Top;
+    if (it == relevant_node->group->m_children.begin() && sibling_is_prior) {
+        return false;
+    }
+    auto sibling = sibling_is_prior ? di::prev(it) : di::next(it);
+    if (sibling == relevant_node->group->m_children.end()) {
+        return false;
+    }
+
+    // Now convert from cell space to relative layout space.
+    auto available_size =
+        relevant_node->direction == Direction::Horizontal ? relevant_node->size.cols : relevant_node->size.rows;
+    if (available_size <= relevant_node->children.size() * 2 - 1) {
+        return false;
+    }
+    available_size -= relevant_node->children.size() * 2 - 1;
+
+    // Now assign new layout values, clamping to prevent negative numbers.
+    auto relative_size = (di::Rational<i64>(amount_in_cells, available_size) * max_layout_precision).round();
+    auto& child_size = di::visit(GetRelativeSize {}, *it);
+    auto& sibling_size = di::visit(GetRelativeSize {}, *sibling);
+    if (relative_size > 0) {
+        relative_size = di::min(relative_size, sibling_size);
+    } else if (relative_size < 0) {
+        relative_size = di::max(relative_size, -child_size);
+    }
+    if (relative_size == 0) {
+        return false;
+    }
+    child_size += relative_size;
+    sibling_size -= relative_size;
+
+    relevant_node->group->validate_layout();
+    return true;
+}
+
 auto LayoutGroup::layout(dius::tty::WindowSize const& size, u32 row_offset, u32 col_offset) -> di::Box<LayoutNode> {
-    auto node = di::make_box<LayoutNode>(
-        row_offset, col_offset, size, di::Vector<di::Variant<di::Box<LayoutNode>, LayoutEntry>> {}, this, direction());
+    auto node = di::make_box<LayoutNode>(row_offset, col_offset, size,
+                                         di::Vector<di::Variant<di::Box<LayoutNode>, LayoutEntry>> {}, nullptr, this,
+                                         direction());
 
     // Base case: we less than 1 pane, so allocate all of our space to it.
     if (m_direction == Direction::None) {
@@ -428,7 +527,9 @@ auto LayoutGroup::layout(dius::tty::WindowSize const& size, u32 row_offset, u32 
                           });
                       },
                       [&](di::Box<LayoutGroup> const& group) {
-                          node->children.emplace_back(group->layout(size, row, col));
+                          auto result = group->layout(size, row, col);
+                          result->parent = node.get();
+                          node->children.emplace_back(di::move(result));
                       }),
                   child);
 

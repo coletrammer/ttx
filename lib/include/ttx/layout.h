@@ -49,6 +49,7 @@ struct LayoutNode {
     u32 col { 0 };
     dius::tty::WindowSize size;
     di::Vector<di::Variant<di::Box<LayoutNode>, LayoutEntry>> children;
+    LayoutNode* parent { nullptr };
     LayoutGroup* group { nullptr };
     Direction direction { Direction::None };
 
@@ -62,7 +63,8 @@ struct LayoutNode {
         return di::make_fields<"LayoutNode">(
             di::field<"row", &LayoutNode::row>, di::field<"col", &LayoutNode::col>,
             di::field<"size", &LayoutNode::size>, di::field<"children", &LayoutNode::children>,
-            di::field<"group", &LayoutNode::group>, di::field<"direction", &LayoutNode::direction>);
+            di::field<"parent", &LayoutNode::parent>, di::field<"group", &LayoutNode::group>,
+            di::field<"direction", &LayoutNode::direction>);
     }
 };
 
@@ -74,6 +76,13 @@ constexpr inline auto max_layout_precision = i64(100'000);
 struct LayoutPane {
     di::Box<Pane> pane {};
     i64 relative_size { max_layout_precision };
+};
+
+enum class ResizeDirection {
+    Left,
+    Right,
+    Top,
+    Bottom,
 };
 
 // Represents a group of panes in a hierarchy. Instead of using a strict binary tree,
@@ -94,6 +103,10 @@ public:
 
     // NOTE: after removing a pane, calling layout() is necessary as any previous LayoutNode's may become invalid.
     auto remove_pane(Pane* pane) -> di::Box<Pane>;
+
+    // NOTE: after resizing a pane, caling layout() is necessary for the change to take effect. This functions
+    // returns true if any change occurred.
+    auto resize(LayoutNode& root, Pane* pane, ResizeDirection direction, i32 amount_in_cells) -> bool;
 
     // NOTE: in addition to computing the layout tree, Pane::resize() is called to inform each Pane of its (potentially)
     // new size.

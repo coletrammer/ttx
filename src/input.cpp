@@ -7,6 +7,7 @@
 #include "ttx/focus_event.h"
 #include "ttx/key_event.h"
 #include "ttx/layout.h"
+#include "ttx/modifiers.h"
 #include "ttx/mouse_event.h"
 #include "ttx/paste_event.h"
 #include "ttx/terminal_input.h"
@@ -41,6 +42,9 @@ void InputThread::request_exit() {
 }
 
 void InputThread::set_input_mode(InputMode mode) {
+    if (m_mode == InputMode::Resize && mode == InputMode::Switch) {
+        return;
+    }
     if (m_mode == mode) {
         return;
     }
@@ -89,13 +93,17 @@ void InputThread::handle_event(KeyEvent const& event) {
             set_input_mode(InputMode::Insert);
         });
 
-        if (m_mode == InputMode::Insert && event.key() == m_prefix && !!(event.modifiers() & Modifiers::Control)) {
+        if (m_mode != InputMode::Normal && event.key() == m_prefix && !!(event.modifiers() & Modifiers::Control)) {
             set_input_mode(InputMode::Normal);
             reset_mode.release();
             return;
         }
 
-        auto can_navigate = m_mode == InputMode::Normal || m_mode == InputMode::Switch;
+        if (m_mode != InputMode::Insert && event.key() == Key::Escape) {
+            return;
+        }
+
+        auto can_navigate = m_mode != InputMode::Insert;
         if (can_navigate && event.key() == Key::H && !!(event.modifiers() & Modifiers::Control)) {
             m_layout_state.with_lock([&](LayoutState& state) {
                 if (!state.active_tab()) {
@@ -144,6 +152,48 @@ void InputThread::handle_event(KeyEvent const& event) {
             });
             m_render_thread.request_render();
             set_input_mode(InputMode::Switch);
+            reset_mode.release();
+            return;
+        }
+
+        auto can_resize = m_mode == InputMode::Normal || m_mode == InputMode::Resize;
+        if (can_resize &&
+            (event.key() == Key::J || event.key() == Key::H || event.key() == Key::L || event.key() == Key::K)) {
+            m_layout_state.with_lock([&](LayoutState& state) {
+                auto tab = state.active_tab();
+                if (!tab) {
+                    return;
+                }
+                auto layout = tab.value().layout_tree();
+                if (!layout) {
+                    return;
+                }
+                auto pane = tab.value().active();
+                if (!pane) {
+                    return;
+                }
+                auto amount = !!(event.modifiers() & Modifiers::Shift) ? -2 : 2;
+                auto direction = [&] {
+                    switch (event.key()) {
+                        case Key::J:
+                            return ResizeDirection::Bottom;
+                        case Key::K:
+                            return ResizeDirection::Top;
+                        case Key::L:
+                            return ResizeDirection::Right;
+                        case Key::H:
+                            return ResizeDirection::Left;
+                        default:
+                            di::unreachable();
+                    }
+                }();
+                auto need_relayout = tab.value().layout_group().resize(*layout, pane.data(), direction, amount);
+                if (need_relayout) {
+                    state.layout();
+                }
+            });
+            m_render_thread.request_render();
+            set_input_mode(InputMode::Resize);
             reset_mode.release();
             return;
         }

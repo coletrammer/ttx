@@ -36,6 +36,7 @@ public:
     auto name() const -> di::StringView { return m_name; }
     auto empty() const -> bool { return m_layout_root.empty(); }
 
+    auto layout_group() -> LayoutGroup& { return m_layout_root; }
     auto layout_tree() const -> di::Optional<LayoutNode&> {
         if (!m_layout_tree) {
             return {};
