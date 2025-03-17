@@ -18,8 +18,12 @@ see the steps [here](./build.md).
 Using nix, its easy to run ttx directly without installing it.
 
 ```sh
-nix run github:coletrammer/ttx -- $SHELL
+nix run github:coletrammer/ttx $SHELL
 ```
+
+> [!NOTE]
+> If the nix command fails, subsequent runs will fail as well because the result is cached by nix. To actually retry the
+> build (and fetch the latest commit), pass the `--refresh` to `nix`:
 
 ### Install Using Home Manager (recommended)
 
