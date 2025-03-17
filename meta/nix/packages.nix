@@ -49,7 +49,7 @@
       ttx-lib = mkLibPackage pkgs.stdenv "ttx-lib" "dius";
       ttx-lib-dius-runtime = mkLibPackage pkgs.stdenv "ttx-lib-dius-runtime" "dius-runtime";
       ttx = mkAppPackage pkgs.stdenv "ttx" ttx-lib;
-      ttx-dius-runtime = mkAppPackage pkgs.stdenv "ttx" ttx-lib-dius-runtime;
+      ttx-dius-runtime = mkAppPackage pkgs.stdenv "ttx-dius-runtime" ttx-lib-dius-runtime;
 
       ttx-app = mkApp ttx;
       ttx-app-dius-runtime = mkApp ttx-dius-runtime;
