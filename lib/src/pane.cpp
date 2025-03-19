@@ -136,7 +136,7 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
         if (terminal.allowed_to_draw()) {
             for (auto const& [r, row] : di::enumerate(terminal.rows())) {
                 for (auto const& [c, cell] : di::enumerate(row)) {
-                    auto selected = in_selection({ u32(c), u32(r) });
+                    auto selected = in_selection({ u32(c), u32(r) + terminal.row_offset() });
                     if (cell.dirty || selected) {
                         cell.dirty = selected;
 
@@ -178,7 +178,7 @@ auto Pane::event(KeyEvent const& event) -> bool {
 
 auto Pane::event(MouseEvent const& event) -> bool {
     auto [application_cursor_keys_mode, alternate_scroll_mode, mouse_protocol, mouse_encoding,
-          in_alternate_screen_buffer, window_size] = m_terminal.with_lock([&](Terminal& terminal) {
+          in_alternate_screen_buffer, window_size, row_offset] = m_terminal.with_lock([&](Terminal& terminal) {
         return di::Tuple {
             terminal.application_cursor_keys_mode(),
             terminal.alternate_scroll_mode(),
@@ -186,6 +186,7 @@ auto Pane::event(MouseEvent const& event) -> bool {
             terminal.mouse_encoding(),
             terminal.in_alternate_screen_buffer(),
             terminal.size(),
+            terminal.row_offset(),
         };
     });
 
@@ -213,14 +214,16 @@ auto Pane::event(MouseEvent const& event) -> bool {
     }
 
     // Selection logic.
+    auto scroll_adjusted_position = event.position().in_cells();
+    scroll_adjusted_position = { scroll_adjusted_position.x(), scroll_adjusted_position.y() + row_offset };
     if (event.button() == MouseButton::Left && event.type() == MouseEventType::Press) {
         // Start selection.
-        m_selection_start = m_selection_end = event.position().in_cells();
+        m_selection_start = m_selection_end = scroll_adjusted_position;
         return true;
     }
 
     if (m_selection_start.has_value() && event.button() == MouseButton::Left && event.type() == MouseEventType::Move) {
-        m_selection_end = event.position().in_cells();
+        m_selection_end = scroll_adjusted_position;
         return true;
     }
 
@@ -271,6 +274,7 @@ void Pane::invalidate_all() {
 }
 
 void Pane::resize(dius::tty::WindowSize const& size) {
+    clear_selection();
     m_terminal.with_lock([&](Terminal& terminal) {
         terminal.set_visible_size(size);
     });
