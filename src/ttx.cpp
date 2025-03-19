@@ -24,23 +24,35 @@ namespace ttx {
 struct Args {
     di::Vector<di::TransparentStringView> command;
     Key prefix { Key::B };
+    bool single { false };
+    di::Optional<di::PathView> capture_command_output_path;
+    di::Optional<di::PathView> replay_path;
     bool help { false };
 
     constexpr static auto get_cli_parser() {
         return di::cli_parser<Args>("ttx"_sv, "Terminal multiplexer"_sv)
             .option<&Args::prefix>('p', "prefix"_tsv, "Prefix key for key bindings"_sv)
-            .argument<&Args::command>("COMMAND"_sv, "Program to run in terminal"_sv, true)
+            .option<&Args::single>('s', "single"_tsv, "Force a single full-screen pane"_sv)
+            .option<&Args::capture_command_output_path>('c', "capture-command-output-path"_tsv,
+                                                        "Capture command output to a file"_sv)
+            .option<&Args::replay_path>('r', "replay-path"_tsv, "Replay capture output"_sv)
+            .argument<&Args::command>("COMMAND"_sv, "Program to run in terminal"_sv)
             .help();
     }
 };
 
 static auto main(Args& args) -> di::Result<void> {
+    if (args.command.empty() && !args.replay_path) {
+        dius::eprintln("error: ttx requires a command argument to know what to launch"_sv);
+        return di::Unexpected(di::BasicError::InvalidArgument);
+    }
+
     // Setup - log to file.
     [[maybe_unused]] auto& log = dius::stderr = TRY(dius::open_sync("/tmp/ttx.log"_pv, dius::OpenMode::WriteClobber));
 
     // Setup - initial state and terminal size.
     auto initial_size = TRY(dius::stdin.get_tty_window_size());
-    auto layout_state = di::Synchronized(LayoutState(initial_size));
+    auto layout_state = di::Synchronized(LayoutState(initial_size, args.single));
 
     // Setup - raw mode
     auto _ = TRY(dius::stdin.enter_raw_mode());
@@ -106,7 +118,13 @@ static auto main(Args& args) -> di::Result<void> {
     });
 
     // Setup - initial tab and pane.
-    TRY(layout_state.get_assuming_no_concurrent_accesses().add_tab(di::clone(args.command), *render_thread));
+    TRY(layout_state.get_assuming_no_concurrent_accesses().add_tab(
+        {
+            .command = di::clone(args.command),
+            .capture_command_output_path = args.capture_command_output_path.transform(di::to_owned),
+            .replay_path = args.replay_path.transform(di::to_owned),
+        },
+        *render_thread));
     render_thread->request_render();
 
     // Setup - remove all panes and tabs on exit.

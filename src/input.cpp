@@ -201,7 +201,7 @@ void InputThread::handle_event(KeyEvent const& event) {
 
         if (m_mode == InputMode::Normal && event.key() == Key::C) {
             m_layout_state.with_lock([&](LayoutState& state) {
-                (void) state.add_tab(di::clone(m_command), m_render_thread);
+                (void) state.add_tab({ .command = di::clone(m_command) }, m_render_thread);
             });
             m_render_thread.request_render();
             return;
@@ -239,7 +239,7 @@ void InputThread::handle_event(KeyEvent const& event) {
                 if (!state.active_tab()) {
                     return;
                 }
-                (void) state.add_pane(*state.active_tab(), di::clone(m_command), Direction::Horizontal,
+                (void) state.add_pane(*state.active_tab(), { .command = di::clone(m_command) }, Direction::Horizontal,
                                       m_render_thread);
             });
             m_render_thread.request_render();
@@ -251,7 +251,8 @@ void InputThread::handle_event(KeyEvent const& event) {
                 if (!state.active_tab()) {
                     return;
                 }
-                (void) state.add_pane(*state.active_tab(), di::clone(m_command), Direction::Vertical, m_render_thread);
+                (void) state.add_pane(*state.active_tab(), { .command = di::clone(m_command) }, Direction::Vertical,
+                                      m_render_thread);
             });
             m_render_thread.request_render();
             return;

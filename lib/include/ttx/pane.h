@@ -18,11 +18,20 @@
 #include "ttx/terminal.h"
 
 namespace ttx {
+struct CreatePaneArgs {
+    di::Vector<di::TransparentStringView> command {};
+    di::Optional<di::Path> capture_command_output_path {};
+    di::Optional<di::Path> replay_path {};
+};
+
 class Pane {
 public:
-    static auto create(di::Vector<di::TransparentStringView> command, dius::tty::WindowSize size,
-                       di::Function<void(Pane&)> did_exit, di::Function<void(Pane&)> did_update,
-                       di::Function<void(di::Span<byte const>)> did_selection,
+    static auto create_from_replay(di::PathView replay_path, dius::tty::WindowSize size,
+                                   di::Function<void(Pane&)> did_exit, di::Function<void(Pane&)> did_update,
+                                   di::Function<void(di::Span<byte const>)> did_selection,
+                                   di::Function<void(di::StringView)> apc_passthrough) -> di::Result<di::Box<Pane>>;
+    static auto create(CreatePaneArgs args, dius::tty::WindowSize size, di::Function<void(Pane&)> did_exit,
+                       di::Function<void(Pane&)> did_update, di::Function<void(di::Span<byte const>)> did_selection,
                        di::Function<void(di::StringView)> apc_passthrough) -> di::Result<di::Box<Pane>>;
 
     // For testing, create a mock pane. This doesn't actually create a psuedo terminal or a subprocess.

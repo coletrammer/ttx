@@ -44,12 +44,79 @@ static auto spawn_child(di::Vector<di::TransparentStringView> command, dius::Syn
         .spawn();
 }
 
-auto Pane::create(di::Vector<di::TransparentStringView> command, dius::tty::WindowSize size,
-                  di::Function<void(Pane&)> did_exit, di::Function<void(Pane&)> did_update,
-                  di::Function<void(di::Span<byte const>)> did_selection,
+auto Pane::create_from_replay(di::PathView replay_path, dius::tty::WindowSize size, di::Function<void(Pane&)> did_exit,
+                              di::Function<void(Pane&)> did_update,
+                              di::Function<void(di::Span<byte const>)> did_selection,
+                              di::Function<void(di::StringView)> apc_passthrough) -> di::Result<di::Box<Pane>> {
+    auto replay_file = TRY(dius::open_sync(replay_path, dius::OpenMode::Readonly));
+
+    // When replaying content, there is no need for any threads, a psudeo terminal or a sub-process.
+    auto pane = di::make_box<Pane>(dius::SyncFile(), dius::system::ProcessHandle(), di::move(did_exit),
+                                   di::move(did_update), di::move(did_selection), di::move(apc_passthrough));
+
+    // Typically, the capture file should immediately set the window size using CSI 8; height; width t, so this is
+    // just to be safe. Not initially the terminal size currently causes the terminal to misbehave.
+    pane->m_terminal.get_assuming_no_concurrent_accesses().set_visible_size(size);
+
+    // Now read the replay file and play it back directly into the terminal. By doing this synchronously any test system
+    // can look at the pane content's afterwards and no we've finished.
+    auto buffer = di::Vector<byte> {};
+    buffer.resize(16384);
+
+    auto parser = EscapeSequenceParser();
+    auto utf8_decoder = Utf8StreamDecoder {};
+    for (;;) {
+        auto nread = replay_file.read_some(buffer.span());
+        if (!nread.has_value() || nread == 0) {
+            break;
+        }
+
+        auto utf8_string = utf8_decoder.decode(buffer | di::take(*nread));
+
+        auto parser_result = parser.parse_application_escape_sequences(utf8_string);
+        di::erase_if(parser_result, [&](auto const& event) {
+            if (auto ev = di::get_if<APC>(event)) {
+                if (pane->m_apc_passthrough) {
+                    pane->m_apc_passthrough(ev->data);
+                }
+                return true;
+            }
+            return false;
+        });
+
+        auto events = pane->m_terminal.with_lock([&](Terminal& terminal) {
+            terminal.on_parser_results(parser_result.span());
+            return terminal.outgoing_events();
+        });
+
+        for (auto&& event : events) {
+            di::visit(di::overload([&](SetClipboard&& ev) {
+                          if (pane->m_did_selection) {
+                              pane->m_did_selection(ev.data.span());
+                          }
+                      }),
+                      di::move(event));
+        }
+    }
+
+    return pane;
+}
+
+auto Pane::create(CreatePaneArgs args, dius::tty::WindowSize size, di::Function<void(Pane&)> did_exit,
+                  di::Function<void(Pane&)> did_update, di::Function<void(di::Span<byte const>)> did_selection,
                   di::Function<void(di::StringView)> apc_passthrough) -> di::Result<di::Box<Pane>> {
+    if (args.replay_path) {
+        return create_from_replay(*args.replay_path, size, di::move(did_exit), di::move(did_update),
+                                  di::move(did_selection), di::move(apc_passthrough));
+    }
+
+    auto capture_file = di::Optional<dius::SyncFile> {};
+    if (args.capture_command_output_path) {
+        capture_file = TRY(dius::open_sync(args.capture_command_output_path.value(), dius::OpenMode::WriteClobber));
+    }
+
     auto pty_controller = TRY(dius::open_psuedo_terminal_controller(dius::OpenMode::ReadWrite));
-    auto process = TRY(spawn_child(di::move(command), pty_controller, size));
+    auto process = TRY(spawn_child(di::move(args.command), pty_controller, size));
     auto pane = di::make_box<Pane>(di::move(pty_controller), process, di::move(did_exit), di::move(did_update),
                                    di::move(did_selection), di::move(apc_passthrough));
     pane->m_terminal.get_assuming_no_concurrent_accesses().set_visible_size(size);
@@ -66,17 +133,21 @@ auto Pane::create(di::Vector<di::TransparentStringView> command, dius::tty::Wind
         (void) pane.m_process.wait();
     }));
 
-    pane->m_reader_thread = TRY(dius::Thread::create([&pane = *pane] -> void {
+    pane->m_reader_thread = TRY(dius::Thread::create([&pane = *pane, capture_file = di::move(capture_file)] -> void {
         auto parser = EscapeSequenceParser();
-
         auto utf8_decoder = Utf8StreamDecoder {};
-        while (!pane.m_done.load(di::MemoryOrder::Acquire)) {
-            auto buffer = di::Vector<byte> {};
-            buffer.resize(16384);
 
+        auto buffer = di::Vector<byte> {};
+        buffer.resize(16384);
+
+        while (!pane.m_done.load(di::MemoryOrder::Acquire)) {
             auto nread = pane.m_pty_controller.read_some(buffer.span());
             if (!nread.has_value()) {
                 break;
+            }
+
+            if (capture_file) {
+                (void) di::write_exactly(*capture_file, buffer | di::take(*nread));
             }
 
             auto utf8_string = utf8_decoder.decode(buffer | di::take(*nread));

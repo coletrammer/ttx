@@ -5,14 +5,14 @@
 #include "ttx/pane.h"
 
 namespace ttx {
+class RenderThread;
+
 enum class NavigateDirection {
     Left,
     Right,
     Up,
     Down,
 };
-
-class RenderThread;
 
 // Corresponds to tmux window.
 struct Tab {
@@ -25,8 +25,8 @@ public:
     // Returns the removed pane, if found.
     auto remove_pane(Pane* pane) -> di::Box<Pane>;
 
-    auto add_pane(dius::tty::WindowSize const& size, u32 row, u32 col, di::Vector<di::TransparentStringView> command,
-                  Direction direction, RenderThread& render_thread) -> di::Result<>;
+    auto add_pane(dius::tty::WindowSize const& size, u32 row, u32 col, CreatePaneArgs args, Direction direction,
+                  RenderThread& render_thread) -> di::Result<>;
 
     void navigate(NavigateDirection direction);
 

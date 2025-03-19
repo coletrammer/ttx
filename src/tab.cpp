@@ -32,8 +32,8 @@ auto Tab::remove_pane(Pane* pane) -> di::Box<Pane> {
     return m_layout_root.remove_pane(pane);
 }
 
-auto Tab::add_pane(dius::tty::WindowSize const& size, u32 row, u32 col, di::Vector<di::TransparentStringView> command,
-                   Direction direction, RenderThread& render_thread) -> di::Result<> {
+auto Tab::add_pane(dius::tty::WindowSize const& size, u32 row, u32 col, CreatePaneArgs args, Direction direction,
+                   RenderThread& render_thread) -> di::Result<> {
     auto [new_layout, pane_layout, pane_out] = m_layout_root.split(size, row, col, m_active, direction);
 
     if (!pane_layout || !pane_out || pane_layout->size == dius::tty::WindowSize {}) {
@@ -43,7 +43,7 @@ auto Tab::add_pane(dius::tty::WindowSize const& size, u32 row, u32 col, di::Vect
     }
 
     auto maybe_pane = Pane::create(
-        di::move(command), pane_layout->size,
+        di::move(args), pane_layout->size,
         [this, &render_thread](Pane& pane) {
             render_thread.push_event(PaneExited(this, &pane));
         },

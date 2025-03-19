@@ -162,17 +162,19 @@ void RenderThread::do_render(Renderer& renderer) {
         renderer.start(state.size());
 
         // Status bar.
-        auto text =
-            di::enumerate(state.tabs()) | di::transform(di::uncurry([&](usize i, di::Box<Tab> const& tab) {
-                return *di::present("[{}{} {}]"_sv, tab.get() == active_tab.data() ? U'*' : U' ', i + 1, tab->name());
-            })) |
-            di::join_with(U' ') | di::to<di::String>();
-        renderer.clear_row(0);
-        renderer.put_text(di::to_string(m_input_status.mode).view(), 0, 0,
-                          GraphicsRendition {
-                              .font_weight = FontWeight::Bold,
-                          });
-        renderer.put_text(text.view(), 0, 7);
+        if (!state.show_status_bar()) {
+            auto text = di::enumerate(state.tabs()) | di::transform(di::uncurry([&](usize i, di::Box<Tab> const& tab) {
+                            return *di::present("[{}{} {}]"_sv, tab.get() == active_tab.data() ? U'*' : U' ', i + 1,
+                                                tab->name());
+                        })) |
+                        di::join_with(U' ') | di::to<di::String>();
+            renderer.clear_row(0);
+            renderer.put_text(di::to_string(m_input_status.mode).view(), 0, 0,
+                              GraphicsRendition {
+                                  .font_weight = FontWeight::Bold,
+                              });
+            renderer.put_text(text.view(), 0, 7);
+        }
 
         auto cursor = di::Optional<RenderedCursor> {};
 

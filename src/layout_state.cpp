@@ -1,7 +1,8 @@
 #include "layout_state.h"
 
 namespace ttx {
-LayoutState::LayoutState(dius::tty::WindowSize const& size) : m_size(size) {}
+LayoutState::LayoutState(dius::tty::WindowSize const& size, bool show_status_bar)
+    : m_size(size), m_show_status_bar(show_status_bar) {}
 
 void LayoutState::layout(di::Optional<dius::tty::WindowSize> size) {
     if (!size) {
@@ -13,7 +14,12 @@ void LayoutState::layout(di::Optional<dius::tty::WindowSize> size) {
     if (!m_active_tab) {
         return;
     }
-    m_active_tab->layout(m_size.rows_shrinked(1), 1, 0);
+    if (show_status_bar()) {
+        // Now status bar when forcing a single pane.
+        m_active_tab->layout(m_size, 0, 0);
+    } else {
+        m_active_tab->layout(m_size.rows_shrinked(1), 1, 0);
+    }
 }
 
 auto LayoutState::set_active_tab(Tab* tab) -> bool {
@@ -74,17 +80,22 @@ auto LayoutState::remove_pane(Tab& tab, Pane* pane) -> di::Box<Pane> {
     return result;
 }
 
-auto LayoutState::add_pane(Tab& tab, di::Vector<di::TransparentStringView> command, Direction direction,
-                           RenderThread& render_thread) -> di::Result<> {
-    return tab.add_pane(m_size.rows_shrinked(1), 1, 0, di::move(command), direction, render_thread);
+auto LayoutState::add_pane(Tab& tab, CreatePaneArgs args, Direction direction, RenderThread& render_thread)
+    -> di::Result<> {
+    if (show_status_bar()) {
+        return tab.add_pane(m_size, 0, 0, di::move(args), direction, render_thread);
+    } else {
+        return tab.add_pane(m_size.rows_shrinked(1), 1, 0, di::move(args), direction, render_thread);
+    }
 }
 
-auto LayoutState::add_tab(di::Vector<di::TransparentStringView> command, RenderThread& render_thread) -> di::Result<> {
-    auto tab = di::make_box<Tab>(di::back(di::PathView(command[0])).value_or(""_tsv) | di::transform([](char c) {
-                                     return c32(c);
-                                 }) |
-                                 di::to<di::String>());
-    TRY(add_pane(*tab, di::move(command), Direction::None, render_thread));
+auto LayoutState::add_tab(CreatePaneArgs args, RenderThread& render_thread) -> di::Result<> {
+    auto name = args.replay_path ? "capture"_s
+                                 : di::back(di::PathView(args.command[0])).value_or(""_tsv) | di::transform([](char c) {
+                                       return c32(c);
+                                   }) | di::to<di::String>();
+    auto tab = di::make_box<Tab>(di::move(name));
+    TRY(add_pane(*tab, di::move(args), Direction::None, render_thread));
 
     set_active_tab(tab.get());
     m_tabs.push_back(di::move(tab));
