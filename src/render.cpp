@@ -52,7 +52,11 @@ void RenderThread::render_thread() {
             });
 
             // SAFETY: we acquired the lock manually above.
-            return di::move(m_events.get_assuming_no_concurrent_accesses()) | di::to<di::Vector>();
+            auto result = di::Vector<RenderEvent> {};
+            for (auto& event : m_events.get_assuming_no_concurrent_accesses()) {
+                result.push_back(di::move(event));
+            }
+            return result;
         }();
 
         // Process any pending events.
@@ -72,6 +76,8 @@ void RenderThread::render_thread() {
                 }
             } else if (auto ev = di::get_if<InputStatus>(event)) {
                 m_input_status = *ev;
+            } else if (auto ev = di::get_if<WriteString>(event)) {
+                (void) dius::stdin.write_exactly(di::as_bytes(ev->string.span()));
             } else if (auto ev = di::get_if<DoRender>(event)) {
                 // Do nothing. This was just to wake us up.
             } else if (auto ev = di::get_if<Exit>(event)) {

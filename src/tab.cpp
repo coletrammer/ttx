@@ -50,15 +50,15 @@ auto Tab::add_pane(dius::tty::WindowSize const& size, u32 row, u32 col, di::Vect
         [&render_thread](Pane&) {
             render_thread.request_render();
         },
-        [](di::Span<byte const> data) {
+        [&render_thread](di::Span<byte const> data) {
             auto base64 = di::Base64View(data);
-            di::writer_println<di::String::Encoding>(dius::stdin, "\033]52;;{}\033\\"_sv, base64);
+            auto string = *di::present("\033]52;;{}\033\\"_sv, base64);
+            render_thread.push_event(WriteString(di::move(string)));
         },
-        [](di::StringView apc_data) {
-            // Pass-through APC commands to host terminal. This makes kitty graphics "work">
-            (void) di::write_exactly(dius::stdin, di::as_bytes("\033_"_sv.span()));
-            (void) di::write_exactly(dius::stdin, di::as_bytes(apc_data.span()));
-            (void) di::write_exactly(dius::stdin, di::as_bytes("\033\\"_sv.span()));
+        [&render_thread](di::StringView apc_data) {
+            // Pass-through APC commands to host terminal. This makes kitty graphics "work".
+            auto string = *di::present("\033_{}\033\\"_sv, apc_data);
+            render_thread.push_event(WriteString(di::move(string)));
         });
     if (!maybe_pane) {
         m_layout_root.remove_pane(nullptr);

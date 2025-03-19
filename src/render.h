@@ -22,7 +22,11 @@ struct InputStatus {
     InputMode mode { InputMode::Insert };
 };
 
-using RenderEvent = di::Variant<dius::tty::WindowSize, PaneExited, InputStatus, DoRender, Exit>;
+struct WriteString {
+    di::String string;
+};
+
+using RenderEvent = di::Variant<dius::tty::WindowSize, PaneExited, InputStatus, WriteString, DoRender, Exit>;
 
 class RenderThread {
 public:
