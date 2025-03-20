@@ -59,6 +59,7 @@ public:
 
     void invalidate_all();
     void resize(dius::tty::WindowSize const& size);
+    void stop_capture();
     void exit();
 
 private:
@@ -67,6 +68,7 @@ private:
     void clear_selection();
 
     di::Atomic<bool> m_done { false };
+    di::Atomic<bool> m_capture { true };
     di::Optional<MousePosition> m_last_mouse_position;
     dius::SyncFile m_pty_controller;
     di::Synchronized<Terminal> m_terminal;

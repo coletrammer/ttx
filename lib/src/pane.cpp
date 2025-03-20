@@ -113,6 +113,11 @@ auto Pane::create(CreatePaneArgs args, dius::tty::WindowSize size, di::Function<
     auto capture_file = di::Optional<dius::SyncFile> {};
     if (args.capture_command_output_path) {
         capture_file = TRY(dius::open_sync(args.capture_command_output_path.value(), dius::OpenMode::WriteClobber));
+
+        // Write out inital terminal size information.
+        di::writer_print<di::String::Encoding>(capture_file.value(), "\033[4;{};{}t"_sv, size.pixel_height,
+                                               size.pixel_width);
+        di::writer_print<di::String::Encoding>(capture_file.value(), "\033[8;{};{}t"_sv, size.rows, size.cols);
     }
 
     auto pty_controller = TRY(dius::open_psuedo_terminal_controller(dius::OpenMode::ReadWrite));
@@ -133,58 +138,63 @@ auto Pane::create(CreatePaneArgs args, dius::tty::WindowSize size, di::Function<
         (void) pane.m_process.wait();
     }));
 
-    pane->m_reader_thread = TRY(dius::Thread::create([&pane = *pane, capture_file = di::move(capture_file)] -> void {
-        auto parser = EscapeSequenceParser();
-        auto utf8_decoder = Utf8StreamDecoder {};
+    pane->m_reader_thread =
+        TRY(dius::Thread::create([&pane = *pane, capture_file = di::move(capture_file)] mutable -> void {
+            auto parser = EscapeSequenceParser();
+            auto utf8_decoder = Utf8StreamDecoder {};
 
-        auto buffer = di::Vector<byte> {};
-        buffer.resize(16384);
+            auto buffer = di::Vector<byte> {};
+            buffer.resize(16384);
 
-        while (!pane.m_done.load(di::MemoryOrder::Acquire)) {
-            auto nread = pane.m_pty_controller.read_some(buffer.span());
-            if (!nread.has_value()) {
-                break;
-            }
-
-            if (capture_file) {
-                (void) di::write_exactly(*capture_file, buffer | di::take(*nread));
-            }
-
-            auto utf8_string = utf8_decoder.decode(buffer | di::take(*nread));
-
-            auto parser_result = parser.parse_application_escape_sequences(utf8_string);
-            di::erase_if(parser_result, [&](auto const& event) {
-                if (auto ev = di::get_if<APC>(event)) {
-                    if (pane.m_apc_passthrough) {
-                        pane.m_apc_passthrough(ev->data);
-                    }
-                    return true;
+            while (!pane.m_done.load(di::MemoryOrder::Acquire)) {
+                auto nread = pane.m_pty_controller.read_some(buffer.span());
+                if (!nread.has_value()) {
+                    break;
                 }
-                return false;
-            });
 
-            // (void) di::writer_println<di::String::Encoding>(dius::stderr, "{:?}"_sv, utf8_string);
-            // (void) di::writer_println<di::String::Encoding>(dius::stderr, "{}"_sv, parser_result);
+                if (capture_file) {
+                    if (pane.m_capture.load(di::MemoryOrder::Acquire)) {
+                        (void) di::write_exactly(*capture_file, buffer | di::take(*nread));
+                    } else {
+                        capture_file = {};
+                    }
+                }
 
-            auto events = pane.m_terminal.with_lock([&](Terminal& terminal) {
-                terminal.on_parser_results(parser_result.span());
-                return terminal.outgoing_events();
-            });
+                auto utf8_string = utf8_decoder.decode(buffer | di::take(*nread));
 
-            for (auto&& event : events) {
-                di::visit(di::overload([&](SetClipboard&& ev) {
-                              if (pane.m_did_selection) {
-                                  pane.m_did_selection(ev.data.span());
-                              }
-                          }),
-                          di::move(event));
+                auto parser_result = parser.parse_application_escape_sequences(utf8_string);
+                di::erase_if(parser_result, [&](auto const& event) {
+                    if (auto ev = di::get_if<APC>(event)) {
+                        if (pane.m_apc_passthrough) {
+                            pane.m_apc_passthrough(ev->data);
+                        }
+                        return true;
+                    }
+                    return false;
+                });
+
+                // (void) di::writer_println<di::String::Encoding>(dius::stderr, "{:?}"_sv, utf8_string);
+                // (void) di::writer_println<di::String::Encoding>(dius::stderr, "{}"_sv, parser_result);
+
+                auto events = pane.m_terminal.with_lock([&](Terminal& terminal) {
+                    terminal.on_parser_results(parser_result.span());
+                    return terminal.outgoing_events();
+                });
+
+                for (auto&& event : events) {
+                    di::visit(di::overload([&](SetClipboard&& ev) {
+                                  if (pane.m_did_selection) {
+                                      pane.m_did_selection(ev.data.span());
+                                  }
+                              }),
+                              di::move(event));
+                }
+
+                if (pane.m_did_update) {
+                    pane.m_did_update(pane);
+                }
             }
-
-            if (pane.m_did_update) {
-                pane.m_did_update(pane);
-            }
-        }
-    }));
+        }));
 
     return pane;
 }
@@ -349,6 +359,10 @@ void Pane::resize(dius::tty::WindowSize const& size) {
     m_terminal.with_lock([&](Terminal& terminal) {
         terminal.set_visible_size(size);
     });
+}
+
+void Pane::stop_capture() {
+    m_capture.store(false, di::MemoryOrder::Release);
 }
 
 void Pane::exit() {

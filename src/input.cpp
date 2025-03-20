@@ -224,6 +224,15 @@ void InputThread::handle_event(KeyEvent const& event) {
             return;
         }
 
+        if (m_mode == InputMode::Normal && event.key() == Key::I && !!(event.modifiers() & Modifiers::Shift)) {
+            m_layout_state.with_lock([&](LayoutState& state) {
+                if (auto pane = state.active_pane()) {
+                    pane->stop_capture();
+                }
+            });
+            return;
+        }
+
         if (m_mode == InputMode::Normal && event.key() == Key::X) {
             m_layout_state.with_lock([&](LayoutState& state) {
                 if (auto pane = state.active_pane()) {

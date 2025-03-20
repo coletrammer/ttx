@@ -269,6 +269,10 @@ void Terminal::on_parser_result(CSI const& csi) {
             csi_scosc(csi.params);
             return;
         }
+        case 't': {
+            csi_xtwinops(csi.params);
+            return;
+        }
         case 'u': {
             csi_scorc(csi.params);
             return;
@@ -909,6 +913,55 @@ void Terminal::csi_scorc(Params const&) {
     restore_pos();
 }
 
+// Window manipulation -
+// https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h4-Functions-using-CSI-_-ordered-by-the-final-character-lparen-s-rparen:CSI-Ps;Ps;Ps-t.1EB0
+void Terminal::csi_xtwinops(Params const& params) {
+    auto command = params.get(0);
+    switch (command) {
+        case 4: {
+            // This could also set the width and height as based on the ratio of pixels to cells,
+            // but we skip this for now. This command is used for testing ttx (forcing a specific
+            // size), but does not change the visible size of the terminal itself, which is already
+            // constrained by the layout.
+            auto height = di::min(params.get(1, m_ypixels), 100000u);
+            auto width = di::min(params.get(2, m_xpixels), 100000u);
+            if (height == 0) {
+                height = m_available_ypixels_in_display;
+            }
+            if (width == 0) {
+                width = m_available_xpixels_in_display;
+            }
+            m_ypixels = height;
+            m_xpixels = width;
+            break;
+        }
+        case 8: {
+            // This logic is similar to DECSET 3 - 80/132 column mode, in that we don't actually resize the terminal's
+            // visible area. This only resizes the terminal's internal size, which is useful for facilitating testing
+            // or if the application requires the terminal to be a certain size.
+            auto rows = di::min(params.get(1, m_row_count), 1000u);
+            auto cols = di::min(params.get(2, m_col_count), 1000u);
+            if (rows == 0 && cols == 0) {
+                m_force_terminal_size = false;
+            } else {
+                m_force_terminal_size = true;
+            }
+            if (rows == 0) {
+                rows = m_available_rows_in_display;
+            }
+            if (cols == 0) {
+                cols = m_available_cols_in_display;
+            }
+            resize({ rows, cols, m_xpixels, m_ypixels });
+            clear();
+            csi_decstbm({});
+            break;
+        }
+        default:
+            break;
+    }
+}
+
 // https://sw.kovidgoyal.net/kitty/keyboard-protocol/#progressive-enhancement
 void Terminal::csi_set_key_reporting_flags(Params const& params) {
     auto flags_u32 = params.get(0);
@@ -982,7 +1035,7 @@ void Terminal::set_visible_size(dius::tty::WindowSize const& window_size) {
     m_available_cols_in_display = window_size.cols;
     m_available_xpixels_in_display = window_size.pixel_width;
     m_available_ypixels_in_display = window_size.pixel_height;
-    if (!m_80_col_mode && !m_132_col_mode) {
+    if (!m_80_col_mode && !m_132_col_mode && !m_force_terminal_size) {
         resize(window_size);
     }
 }
@@ -1008,6 +1061,9 @@ void Terminal::resize(dius::tty::WindowSize const& window_size) {
     for (auto& row : m_rows_below) {
         row.resize(window_size.cols);
     }
+
+    // Reset the margins - invalid margins make us crash on overflow...
+    csi_decstbm({});
 
     set_cursor(m_cursor_row, m_cursor_col);
 

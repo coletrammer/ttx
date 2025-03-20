@@ -46,6 +46,7 @@ public:
         result.m_80_col_mode = m_80_col_mode;
         result.m_132_col_mode = m_132_col_mode;
         result.m_allow_80_132_col_mode = m_allow_80_132_col_mode;
+        result.m_force_terminal_size = m_force_terminal_size;
 
         result.m_tab_stops = di::clone(m_tab_stops);
         result.m_cursor_row = m_cursor_row;
@@ -236,6 +237,7 @@ private:
     void csi_decstbm(Params const& params);
     void csi_scosc(Params const& params);
     void csi_scorc(Params const& params);
+    void csi_xtwinops(Params const& params);
 
     void csi_set_key_reporting_flags(Params const& params);
     void csi_get_key_reporting_flags(Params const& params);
@@ -254,6 +256,7 @@ private:
     bool m_80_col_mode { false };
     bool m_132_col_mode { false };
     bool m_allow_80_132_col_mode { false };
+    bool m_force_terminal_size { false };
 
     di::Vector<u32> m_tab_stops;
     u32 m_cursor_row { 0 };
