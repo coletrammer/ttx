@@ -1,6 +1,7 @@
 #pragma once
 
 #include "di/container/string/prelude.h"
+#include "di/reflect/prelude.h"
 #include "ttx/layout.h"
 #include "ttx/pane.h"
 
@@ -13,6 +14,12 @@ enum class NavigateDirection {
     Up,
     Down,
 };
+
+constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<NavigateDirection>) {
+    using enum NavigateDirection;
+    return di::make_enumerators<"NavigateDirection">(di::enumerator<"Left", Left>, di::enumerator<"Right", Right>,
+                                                     di::enumerator<"Up", Up>, di::enumerator<"Down", Down>);
+}
 
 // Corresponds to tmux window.
 struct Tab {

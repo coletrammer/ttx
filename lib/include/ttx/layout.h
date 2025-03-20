@@ -85,6 +85,12 @@ enum class ResizeDirection {
     Bottom,
 };
 
+constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<ResizeDirection>) {
+    using enum ResizeDirection;
+    return di::make_enumerators<"ResizeDirection">(di::enumerator<"Left", Left>, di::enumerator<"Right", Right>,
+                                                   di::enumerator<"Top", Top>, di::enumerator<"Bottom", Bottom>);
+}
+
 // Represents a group of panes in a hierarchy. Instead of using a strict binary tree,
 // we allow multiple children on a single level so that by default, splits made in
 // the same direction share space evenly.

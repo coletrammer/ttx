@@ -2,7 +2,7 @@
 
 #include "di/container/queue/queue.h"
 #include "dius/condition_variable.h"
-#include "input.h"
+#include "input_mode.h"
 #include "layout_state.h"
 #include "tab.h"
 #include "ttx/pane.h"

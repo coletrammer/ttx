@@ -1,25 +1,14 @@
 #pragma once
 
 #include "di/reflect/prelude.h"
+#include "input_mode.h"
+#include "key_bind.h"
 #include "layout_state.h"
 #include "ttx/focus_event.h"
 #include "ttx/key_event.h"
 #include "ttx/paste_event.h"
 
 namespace ttx {
-enum class InputMode {
-    Insert, // Default mode - sends keys to active pane.
-    Normal, // Normal mode - waiting for key after pressing the prefix key.
-    Switch, // Switch mode - only a subset of keys will be handled by ttx, for moving.
-    Resize, // Resize mode - only a subset of keys will be handled by ttx, for resizing panes.
-};
-
-constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<InputMode>) {
-    using enum InputMode;
-    return di::make_enumerators<"InputMode">(di::enumerator<"INSERT", Insert>, di::enumerator<"NORMAL", Normal>,
-                                             di::enumerator<"SWITCH", Switch>, di::enumerator<"RESIZE", Resize>);
-}
-
 class RenderThread;
 
 class InputThread {
@@ -45,8 +34,8 @@ private:
     void handle_event(PasteEvent const& event);
 
     InputMode m_mode { InputMode::Insert };
+    di::Vector<KeyBind> m_key_binds;
     di::Vector<di::TransparentStringView> m_command;
-    Key m_prefix { Key::B };
     di::Atomic<bool> m_done { false };
     di::Synchronized<LayoutState>& m_layout_state;
     RenderThread& m_render_thread;

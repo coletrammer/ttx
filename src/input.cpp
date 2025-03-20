@@ -1,6 +1,7 @@
 #include "input.h"
 
-#include "di/util/construct.h"
+#include "input_mode.h"
+#include "key_bind.h"
 #include "layout_state.h"
 #include "render.h"
 #include "tab.h"
@@ -26,7 +27,10 @@ auto InputThread::create(di::Vector<di::TransparentStringView> command, Key pref
 
 InputThread::InputThread(di::Vector<di::TransparentStringView> command, Key prefix,
                          di::Synchronized<LayoutState>& layout_state, RenderThread& render_thread)
-    : m_command(di::move(command)), m_prefix(prefix), m_layout_state(layout_state), m_render_thread(render_thread) {}
+    : m_key_binds(make_key_binds(prefix))
+    , m_command(di::move(command))
+    , m_layout_state(layout_state)
+    , m_render_thread(render_thread) {}
 
 InputThread::~InputThread() {
     request_exit();
@@ -88,193 +92,27 @@ void InputThread::input_thread() {
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void InputThread::handle_event(KeyEvent const& event) {
-    if (event.type() == KeyEventType::Press &&
-        (event.key() <= Key::ModifiersBegin || event.key() >= Key::ModifiersEnd)) {
-        auto reset_mode = di::ScopeExit([&] {
-            set_input_mode(InputMode::Insert);
-        });
-
-        if (m_mode != InputMode::Normal && event.key() == m_prefix && !!(event.modifiers() & Modifiers::Control)) {
-            set_input_mode(InputMode::Normal);
-            reset_mode.release();
-            return;
+    for (auto const& bind : m_key_binds) {
+        // Ignore key up events and modifier keys when not in insert mode.
+        if (m_mode != InputMode::Insert && (event.type() == KeyEventType::Release ||
+                                            (event.key() > Key::ModifiersBegin && event.key() < Key::ModifiersEnd))) {
+            continue;
         }
 
-        if (m_mode != InputMode::Insert && event.key() == Key::Escape) {
-            return;
-        }
-
-        auto can_navigate = m_mode != InputMode::Insert;
-        if (can_navigate && event.key() == Key::H && !!(event.modifiers() & Modifiers::Control)) {
-            m_layout_state.with_lock([&](LayoutState& state) {
-                if (!state.active_tab()) {
-                    return;
-                }
-                state.active_tab()->navigate(NavigateDirection::Left);
+        auto modifiers = event.modifiers() & ~(Modifiers::LockModifiers);
+        auto key_matches = bind.key == Key::None || (event.key() == bind.key && modifiers == bind.modifiers);
+        if (m_mode == bind.mode && key_matches) {
+            bind.action.apply({
+                .key_event = event,
+                .layout_state = m_layout_state,
+                .render_thread = m_render_thread,
+                .command = m_command,
+                .done = m_done,
             });
-            m_render_thread.request_render();
-            set_input_mode(InputMode::Switch);
-            reset_mode.release();
-            return;
-        }
-
-        if (can_navigate && event.key() == Key::L && !!(event.modifiers() & Modifiers::Control)) {
-            m_layout_state.with_lock([&](LayoutState& state) {
-                if (!state.active_tab()) {
-                    return;
-                }
-                state.active_tab()->navigate(NavigateDirection::Right);
-            });
-            m_render_thread.request_render();
-            set_input_mode(InputMode::Switch);
-            reset_mode.release();
-            return;
-        }
-
-        if (can_navigate && event.key() == Key::K && !!(event.modifiers() & Modifiers::Control)) {
-            m_layout_state.with_lock([&](LayoutState& state) {
-                if (!state.active_tab()) {
-                    return;
-                }
-                state.active_tab()->navigate(NavigateDirection::Up);
-            });
-            m_render_thread.request_render();
-            set_input_mode(InputMode::Switch);
-            reset_mode.release();
-            return;
-        }
-
-        if (can_navigate && event.key() == Key::J && !!(event.modifiers() & Modifiers::Control)) {
-            m_layout_state.with_lock([&](LayoutState& state) {
-                if (!state.active_tab()) {
-                    return;
-                }
-                state.active_tab()->navigate(NavigateDirection::Down);
-            });
-            m_render_thread.request_render();
-            set_input_mode(InputMode::Switch);
-            reset_mode.release();
-            return;
-        }
-
-        auto can_resize = m_mode == InputMode::Normal || m_mode == InputMode::Resize;
-        if (can_resize &&
-            (event.key() == Key::J || event.key() == Key::H || event.key() == Key::L || event.key() == Key::K)) {
-            m_layout_state.with_lock([&](LayoutState& state) {
-                auto tab = state.active_tab();
-                if (!tab) {
-                    return;
-                }
-                auto layout = tab.value().layout_tree();
-                if (!layout) {
-                    return;
-                }
-                auto pane = tab.value().active();
-                if (!pane) {
-                    return;
-                }
-                auto amount = !!(event.modifiers() & Modifiers::Shift) ? -2 : 2;
-                auto direction = [&] {
-                    switch (event.key()) {
-                        case Key::J:
-                            return ResizeDirection::Bottom;
-                        case Key::K:
-                            return ResizeDirection::Top;
-                        case Key::L:
-                            return ResizeDirection::Right;
-                        case Key::H:
-                            return ResizeDirection::Left;
-                        default:
-                            di::unreachable();
-                    }
-                }();
-                auto need_relayout = tab.value().layout_group().resize(*layout, pane.data(), direction, amount);
-                if (need_relayout) {
-                    state.layout();
-                }
-            });
-            m_render_thread.request_render();
-            set_input_mode(InputMode::Resize);
-            reset_mode.release();
-            return;
-        }
-
-        if (m_mode == InputMode::Normal && event.key() == Key::C) {
-            m_layout_state.with_lock([&](LayoutState& state) {
-                (void) state.add_tab({ .command = di::clone(m_command) }, m_render_thread);
-            });
-            m_render_thread.request_render();
-            return;
-        }
-
-        auto window_nav_keys = di::range(i32(Key::_1), i32(Key::_9) + 1) | di::transform(di::construct<Key>);
-        if (m_mode == InputMode::Normal && di::contains(window_nav_keys, event.key())) {
-            m_layout_state.with_lock([&](LayoutState& state) {
-                auto index = usize(event.key()) - usize(Key::_1);
-                if (auto tab = state.tabs().at(index)) {
-                    state.set_active_tab(tab.value().get());
-                }
-            });
-            m_render_thread.request_render();
-            return;
-        }
-
-        if (m_mode == InputMode::Normal && event.key() == Key::D) {
-            m_done.store(true, di::MemoryOrder::Release);
-            return;
-        }
-
-        if (m_mode == InputMode::Normal && event.key() == Key::I && !!(event.modifiers() & Modifiers::Shift)) {
-            m_layout_state.with_lock([&](LayoutState& state) {
-                if (auto pane = state.active_pane()) {
-                    pane->stop_capture();
-                }
-            });
-            return;
-        }
-
-        if (m_mode == InputMode::Normal && event.key() == Key::X) {
-            m_layout_state.with_lock([&](LayoutState& state) {
-                if (auto pane = state.active_pane()) {
-                    pane->exit();
-                }
-            });
-            m_render_thread.request_render();
-            return;
-        }
-
-        if (m_mode == InputMode::Normal && event.key() == Key::BackSlash && !!(Modifiers::Shift)) {
-            m_layout_state.with_lock([&](LayoutState& state) {
-                if (!state.active_tab()) {
-                    return;
-                }
-                (void) state.add_pane(*state.active_tab(), { .command = di::clone(m_command) }, Direction::Horizontal,
-                                      m_render_thread);
-            });
-            m_render_thread.request_render();
-            return;
-        }
-
-        if (m_mode == InputMode::Normal && event.key() == Key::Minus) {
-            m_layout_state.with_lock([&](LayoutState& state) {
-                if (!state.active_tab()) {
-                    return;
-                }
-                (void) state.add_pane(*state.active_tab(), { .command = di::clone(m_command) }, Direction::Vertical,
-                                      m_render_thread);
-            });
-            m_render_thread.request_render();
+            set_input_mode(bind.next_mode);
             return;
         }
     }
-
-    // NOTE: we need to hold the layout state lock the entire time
-    // to prevent the Pane object from being prematurely destroyed.
-    m_layout_state.with_lock([&](LayoutState& state) {
-        if (auto pane = state.active_pane()) {
-            pane->event(event);
-        }
-    });
 }
 
 void InputThread::handle_event(MouseEvent const& event) {

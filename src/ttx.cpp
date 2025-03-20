@@ -25,6 +25,7 @@ struct Args {
     di::Vector<di::TransparentStringView> command;
     Key prefix { Key::B };
     bool single { false };
+    bool print_keybinds { false };
     di::Optional<di::PathView> capture_command_output_path;
     di::Optional<di::PathView> replay_path;
     bool help { false };
@@ -33,6 +34,7 @@ struct Args {
         return di::cli_parser<Args>("ttx"_sv, "Terminal multiplexer"_sv)
             .option<&Args::prefix>('p', "prefix"_tsv, "Prefix key for key bindings"_sv)
             .option<&Args::single>('s', "single"_tsv, "Force a single full-screen pane"_sv)
+            .option<&Args::print_keybinds>('k', "keybinds"_tsv, "Print key bindings"_sv)
             .option<&Args::capture_command_output_path>('c', "capture-command-output-path"_tsv,
                                                         "Capture command output to a file"_sv)
             .option<&Args::replay_path>('r', "replay-path"_tsv, "Replay capture output"_sv)
@@ -42,6 +44,14 @@ struct Args {
 };
 
 static auto main(Args& args) -> di::Result<void> {
+    if (args.print_keybinds) {
+        auto binds = make_key_binds(args.prefix);
+        for (auto const& bind : binds) {
+            dius::println("{}"_sv, bind);
+        }
+        return {};
+    }
+
     if (args.command.empty() && !args.replay_path) {
         dius::eprintln("error: ttx requires a command argument to know what to launch"_sv);
         return di::Unexpected(di::BasicError::InvalidArgument);
