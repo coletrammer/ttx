@@ -154,6 +154,32 @@ auto add_pane(Direction direction) -> Action {
     };
 }
 
+auto scroll_all(Direction direction, i32 amount_in_cells) -> Action {
+    auto direction_name = [&] {
+        switch (direction) {
+            case Direction::Horizontal:
+                return amount_in_cells > 0 ? "right"_sv : "left"_sv;
+            case Direction::Vertical:
+                return amount_in_cells > 0 ? "down"_sv : "up"_sv;
+            case Direction::None:
+                break;
+        }
+        return "nowhere"_sv;
+    }();
+    return {
+        .description = *di::present("Scroll all panes {} by {} cells"_sv, direction_name, di::abs(amount_in_cells)),
+        .apply =
+            [direction, amount_in_cells](ActionContext const& context) {
+                context.layout_state.with_lock([&](LayoutState& state) {
+                    if (auto pane = state.active_pane()) {
+                        pane->scroll(direction, amount_in_cells);
+                    }
+                });
+                context.render_thread.request_render();
+            },
+    };
+}
+
 auto send_to_pane() -> Action {
     // NOTE: we need to hold the layout state lock the entire time
     // to prevent the Pane object from being prematurely destroyed.

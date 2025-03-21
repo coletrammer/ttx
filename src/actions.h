@@ -15,5 +15,6 @@ auto quit() -> Action;
 auto stop_capture() -> Action;
 auto exit_pane() -> Action;
 auto add_pane(Direction direction) -> Action;
+auto scroll_all(Direction direction, i32 amount_in_cells) -> Action;
 auto send_to_pane() -> Action;
 }

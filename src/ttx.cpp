@@ -24,7 +24,7 @@ namespace ttx {
 struct Args {
     di::Vector<di::TransparentStringView> command;
     Key prefix { Key::B };
-    bool single { false };
+    bool hide_status_bar { false };
     bool print_keybinds { false };
     di::Optional<di::PathView> capture_command_output_path;
     di::Optional<di::PathView> replay_path;
@@ -33,7 +33,7 @@ struct Args {
     constexpr static auto get_cli_parser() {
         return di::cli_parser<Args>("ttx"_sv, "Terminal multiplexer"_sv)
             .option<&Args::prefix>('p', "prefix"_tsv, "Prefix key for key bindings"_sv)
-            .option<&Args::single>('s', "single"_tsv, "Force a single full-screen pane"_sv)
+            .option<&Args::hide_status_bar>('s', "hide-status-bar"_tsv, "Hide the status bar"_sv)
             .option<&Args::print_keybinds>('k', "keybinds"_tsv, "Print key bindings"_sv)
             .option<&Args::capture_command_output_path>('c', "capture-command-output-path"_tsv,
                                                         "Capture command output to a file"_sv)
@@ -44,17 +44,22 @@ struct Args {
 };
 
 static auto main(Args& args) -> di::Result<void> {
+    auto const replay_mode = args.replay_path.has_value();
+    auto key_binds = make_key_binds(args.prefix, replay_mode);
     if (args.print_keybinds) {
-        auto binds = make_key_binds(args.prefix);
-        for (auto const& bind : binds) {
+        for (auto const& bind : key_binds) {
             dius::println("{}"_sv, bind);
         }
         return {};
     }
 
+    args.hide_status_bar |= replay_mode;
     if (args.command.empty() && !args.replay_path) {
         dius::eprintln("error: ttx requires a command argument to know what to launch"_sv);
         return di::Unexpected(di::BasicError::InvalidArgument);
+    } else if (args.command.empty()) {
+        // For safety, make sure the command isn't empty, even though it shouldn't be used.
+        args.command = { "sh"_tsv };
     }
 
     // Setup - log to file.
@@ -62,7 +67,7 @@ static auto main(Args& args) -> di::Result<void> {
 
     // Setup - initial state and terminal size.
     auto initial_size = TRY(dius::stdin.get_tty_window_size());
-    auto layout_state = di::Synchronized(LayoutState(initial_size, args.single));
+    auto layout_state = di::Synchronized(LayoutState(initial_size, args.hide_status_bar));
 
     // Setup - raw mode
     auto _ = TRY(dius::stdin.enter_raw_mode());
@@ -122,7 +127,8 @@ static auto main(Args& args) -> di::Result<void> {
     });
 
     // Setup - input thread.
-    auto input_thread = TRY(InputThread::create(di::clone(args.command), args.prefix, layout_state, *render_thread));
+    auto input_thread =
+        TRY(InputThread::create(di::clone(args.command), di::move(key_binds), layout_state, *render_thread));
     auto _ = di::ScopeExit([&] {
         input_thread->request_exit();
     });

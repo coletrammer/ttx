@@ -47,6 +47,7 @@ public:
         result.m_132_col_mode = m_132_col_mode;
         result.m_allow_80_132_col_mode = m_allow_80_132_col_mode;
         result.m_force_terminal_size = m_force_terminal_size;
+        result.m_allow_force_terminal_size = m_allow_force_terminal_size;
 
         result.m_tab_stops = di::clone(m_tab_stops);
         result.m_cursor_row = m_cursor_row;
@@ -119,6 +120,8 @@ public:
     auto in_alternate_screen_buffer() const -> bool { return !!m_save_state; }
     auto focus_event_mode() const -> FocusEventMode { return m_focus_event_mode; }
 
+    void reset_mouse_reporting() { m_mouse_protocol = MouseProtocol::None; }
+
     auto bracked_paste_mode() const -> BracketedPasteMode { return m_bracketed_paste_mode; }
 
     auto rows() const -> di::Vector<Row> const& { return m_rows; }
@@ -127,6 +130,8 @@ public:
     void invalidate_all();
 
     auto outgoing_events() -> di::Vector<TerminalEvent> { return di::move(m_outgoing_events); }
+
+    void set_allow_force_terminal_size(bool b = true) { m_allow_force_terminal_size = b; }
 
 private:
     void on_parser_result(PrintableCharacter const& printable_character);
@@ -257,6 +262,7 @@ private:
     bool m_132_col_mode { false };
     bool m_allow_80_132_col_mode { false };
     bool m_force_terminal_size { false };
+    bool m_allow_force_terminal_size { false };
 
     di::Vector<u32> m_tab_stops;
     u32 m_cursor_row { 0 };

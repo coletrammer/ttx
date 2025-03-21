@@ -11,6 +11,7 @@
 #include "dius/system/process.h"
 #include "dius/thread.h"
 #include "dius/tty.h"
+#include "ttx/direction.h"
 #include "ttx/key_event.h"
 #include "ttx/mouse.h"
 #include "ttx/paste_event.h"
@@ -59,6 +60,7 @@ public:
 
     void invalidate_all();
     void resize(dius::tty::WindowSize const& size);
+    void scroll(Direction direction, i32 amount_in_cells);
     void stop_capture();
     void exit();
 
@@ -66,6 +68,7 @@ private:
     auto selection_text() -> di::String;
     auto in_selection(MouseCoordinate coordinate) -> bool;
     void clear_selection();
+    void reset_scroll();
 
     di::Atomic<bool> m_done { false };
     di::Atomic<bool> m_capture { true };
@@ -73,6 +76,9 @@ private:
     dius::SyncFile m_pty_controller;
     di::Synchronized<Terminal> m_terminal;
     dius::system::ProcessHandle m_process;
+
+    u32 m_vertical_scroll_offset { 0 };
+    u32 m_horizontal_scroll_offset { 0 };
 
     di::Optional<MouseCoordinate> m_selection_start;
     di::Optional<MouseCoordinate> m_selection_end;

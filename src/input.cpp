@@ -15,19 +15,19 @@
 #include "ttx/utf8_stream_decoder.h"
 
 namespace ttx {
-auto InputThread::create(di::Vector<di::TransparentStringView> command, Key prefix,
+auto InputThread::create(di::Vector<di::TransparentStringView> command, di::Vector<KeyBind> key_binds,
                          di::Synchronized<LayoutState>& layout_state, RenderThread& render_thread)
     -> di::Result<di::Box<InputThread>> {
-    auto result = di::make_box<InputThread>(di::move(command), prefix, layout_state, render_thread);
+    auto result = di::make_box<InputThread>(di::move(command), di::move(key_binds), layout_state, render_thread);
     result->m_thread = TRY(dius::Thread::create([&self = *result.get()] {
         self.input_thread();
     }));
     return result;
 }
 
-InputThread::InputThread(di::Vector<di::TransparentStringView> command, Key prefix,
+InputThread::InputThread(di::Vector<di::TransparentStringView> command, di::Vector<KeyBind> key_binds,
                          di::Synchronized<LayoutState>& layout_state, RenderThread& render_thread)
-    : m_key_binds(make_key_binds(prefix))
+    : m_key_binds(di::move(key_binds))
     , m_command(di::move(command))
     , m_layout_state(layout_state)
     , m_render_thread(render_thread) {}
@@ -90,7 +90,6 @@ void InputThread::input_thread() {
     }
 }
 
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void InputThread::handle_event(KeyEvent const& event) {
     for (auto const& bind : m_key_binds) {
         // Ignore key up events and modifier keys when not in insert mode.
@@ -100,7 +99,8 @@ void InputThread::handle_event(KeyEvent const& event) {
         }
 
         auto modifiers = event.modifiers() & ~(Modifiers::LockModifiers);
-        auto key_matches = bind.key == Key::None || (event.key() == bind.key && modifiers == bind.modifiers);
+        auto key_matches = bind.key == Key::None || (event.type() != KeyEventType::Release && event.key() == bind.key &&
+                                                     modifiers == bind.modifiers);
         if (m_mode == bind.mode && key_matches) {
             bind.action.apply({
                 .key_event = event,

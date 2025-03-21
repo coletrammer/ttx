@@ -59,7 +59,50 @@ auto make_resize_binds(di::Vector<KeyBind>& result, InputMode mode) {
     }
 }
 
-auto make_key_binds(Key prefix) -> di::Vector<KeyBind> {
+static auto make_replay_key_binds() -> di::Vector<KeyBind> {
+    auto result = di::Vector<KeyBind> {};
+
+    // Insert mode
+    result.push_back({
+        .key = Key::Q,
+        .mode = InputMode::Insert,
+        .action = quit(),
+    });
+    result.push_back({
+        .key = Key::C,
+        .modifiers = Modifiers::Control,
+        .mode = InputMode::Insert,
+        .action = quit(),
+    });
+    result.push_back({
+        .key = Key::J,
+        .mode = InputMode::Insert,
+        .action = scroll_all(Direction::Vertical, 1),
+    });
+    result.push_back({
+        .key = Key::K,
+        .mode = InputMode::Insert,
+        .action = scroll_all(Direction::Vertical, -1),
+    });
+    result.push_back({
+        .key = Key::L,
+        .mode = InputMode::Insert,
+        .action = scroll_all(Direction::Horizontal, 1),
+    });
+    result.push_back({
+        .key = Key::H,
+        .mode = InputMode::Insert,
+        .action = scroll_all(Direction::Horizontal, -1),
+    });
+
+    return result;
+}
+
+auto make_key_binds(Key prefix, bool replay_mode) -> di::Vector<KeyBind> {
+    if (replay_mode) {
+        return make_replay_key_binds();
+    }
+
     auto result = di::Vector<KeyBind> {};
 
     // Insert mode
@@ -130,6 +173,13 @@ auto make_key_binds(Key prefix) -> di::Vector<KeyBind> {
 
     // Switch Mode
     {
+        result.push_back({
+            .key = prefix,
+            .modifiers = Modifiers::Control,
+            .mode = InputMode::Switch,
+            .next_mode = InputMode::Normal,
+            .action = enter_normal_mode(),
+        });
         make_navigate_binds(result, InputMode::Switch, InputMode::Switch);
         result.push_back({
             .key = Key::None,
@@ -140,6 +190,13 @@ auto make_key_binds(Key prefix) -> di::Vector<KeyBind> {
 
     // Resize Mode
     {
+        result.push_back({
+            .key = prefix,
+            .modifiers = Modifiers::Control,
+            .mode = InputMode::Resize,
+            .next_mode = InputMode::Normal,
+            .action = enter_normal_mode(),
+        });
         make_resize_binds(result, InputMode::Resize);
         make_navigate_binds(result, InputMode::Resize, InputMode::Resize);
         result.push_back({

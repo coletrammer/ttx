@@ -162,7 +162,7 @@ void RenderThread::do_render(Renderer& renderer) {
         renderer.start(state.size());
 
         // Status bar.
-        if (!state.show_status_bar()) {
+        if (!state.hide_status_bar()) {
             auto text = di::enumerate(state.tabs()) | di::transform(di::uncurry([&](usize i, di::Box<Tab> const& tab) {
                             return *di::present("[{}{} {}]"_sv, tab.get() == active_tab.data() ? U'*' : U' ', i + 1,
                                                 tab->name());

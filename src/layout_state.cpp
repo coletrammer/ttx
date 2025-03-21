@@ -1,8 +1,8 @@
 #include "layout_state.h"
 
 namespace ttx {
-LayoutState::LayoutState(dius::tty::WindowSize const& size, bool show_status_bar)
-    : m_size(size), m_show_status_bar(show_status_bar) {}
+LayoutState::LayoutState(dius::tty::WindowSize const& size, bool hide_status_bar)
+    : m_size(size), m_hide_status_bar(hide_status_bar) {}
 
 void LayoutState::layout(di::Optional<dius::tty::WindowSize> size) {
     if (!size) {
@@ -14,7 +14,7 @@ void LayoutState::layout(di::Optional<dius::tty::WindowSize> size) {
     if (!m_active_tab) {
         return;
     }
-    if (show_status_bar()) {
+    if (hide_status_bar()) {
         // Now status bar when forcing a single pane.
         m_active_tab->layout(m_size, 0, 0);
     } else {
@@ -82,7 +82,7 @@ auto LayoutState::remove_pane(Tab& tab, Pane* pane) -> di::Box<Pane> {
 
 auto LayoutState::add_pane(Tab& tab, CreatePaneArgs args, Direction direction, RenderThread& render_thread)
     -> di::Result<> {
-    if (show_status_bar()) {
+    if (hide_status_bar()) {
         return tab.add_pane(m_size, 0, 0, di::move(args), direction, render_thread);
     } else {
         return tab.add_pane(m_size.rows_shrinked(1), 1, 0, di::move(args), direction, render_thread);

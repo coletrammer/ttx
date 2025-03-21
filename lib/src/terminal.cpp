@@ -919,6 +919,10 @@ void Terminal::csi_xtwinops(Params const& params) {
     auto command = params.get(0);
     switch (command) {
         case 4: {
+            if (!m_allow_force_terminal_size) {
+                break;
+            }
+
             // This could also set the width and height as based on the ratio of pixels to cells,
             // but we skip this for now. This command is used for testing ttx (forcing a specific
             // size), but does not change the visible size of the terminal itself, which is already
@@ -936,6 +940,10 @@ void Terminal::csi_xtwinops(Params const& params) {
             break;
         }
         case 8: {
+            if (!m_allow_force_terminal_size) {
+                break;
+            }
+
             // This logic is similar to DECSET 3 - 80/132 column mode, in that we don't actually resize the terminal's
             // visible area. This only resizes the terminal's internal size, which is useful for facilitating testing
             // or if the application requires the terminal to be a certain size.

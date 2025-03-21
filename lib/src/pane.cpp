@@ -58,6 +58,9 @@ auto Pane::create_from_replay(di::PathView replay_path, dius::tty::WindowSize si
     // just to be safe. Not initially the terminal size currently causes the terminal to misbehave.
     pane->m_terminal.get_assuming_no_concurrent_accesses().set_visible_size(size);
 
+    // Allow the terminal to use CSI 8; height; width; t. Normally this would be ignored as it.
+    pane->m_terminal.get_assuming_no_concurrent_accesses().set_allow_force_terminal_size();
+
     // Now read the replay file and play it back directly into the terminal. By doing this synchronously any test system
     // can look at the pane content's afterwards and no we've finished.
     auto buffer = di::Vector<byte> {};
@@ -98,6 +101,9 @@ auto Pane::create_from_replay(di::PathView replay_path, dius::tty::WindowSize si
                       di::move(event));
         }
     }
+
+    // Ensure mouse works even if the replayed file enabled mouse reporting.
+    pane->m_terminal.get_assuming_no_concurrent_accesses().reset_mouse_reporting();
 
     return pane;
 }
@@ -217,6 +223,9 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
         if (terminal.allowed_to_draw()) {
             for (auto const& [r, row] : di::enumerate(terminal.rows())) {
                 for (auto const& [c, cell] : di::enumerate(row)) {
+                    if (r < m_vertical_scroll_offset || c < m_horizontal_scroll_offset) {
+                        continue;
+                    }
                     auto selected = in_selection({ u32(c), u32(r) + terminal.row_offset() });
                     if (cell.dirty || selected) {
                         cell.dirty = selected;
@@ -225,16 +234,20 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
                         if (selected) {
                             sgr.inverted = !sgr.inverted;
                         }
-                        renderer.put_text(cell.ch, r, c, sgr);
+                        renderer.put_text(cell.ch, r - m_vertical_scroll_offset, c - m_horizontal_scroll_offset, sgr);
                     }
                 }
             }
         }
         return RenderedCursor {
-            .cursor_row = terminal.cursor_row(),
-            .cursor_col = terminal.cursor_col(),
+            .cursor_row = terminal.cursor_row() - m_vertical_scroll_offset,
+            .cursor_col = terminal.cursor_col() - m_horizontal_scroll_offset,
             .style = terminal.cursor_style(),
-            .hidden = terminal.cursor_hidden() || !terminal.allowed_to_draw(),
+            .hidden = terminal.cursor_hidden() || !terminal.allowed_to_draw() ||
+                      terminal.cursor_row() < m_vertical_scroll_offset ||
+                      terminal.cursor_row() - m_vertical_scroll_offset >= terminal.visible_size().rows ||
+                      terminal.cursor_col() < m_horizontal_scroll_offset ||
+                      terminal.cursor_col() - m_horizontal_scroll_offset >= terminal.visible_size().cols,
         };
     });
 }
@@ -282,21 +295,21 @@ auto Pane::event(MouseEvent const& event) -> bool {
 
     // Support mouse scrolling.
     if (event.button() == MouseButton::ScrollUp && event.type() == MouseEventType::Press) {
+        scroll(Direction::Vertical, -1);
         m_terminal.with_lock([&](Terminal& terminal) {
             terminal.scroll_up();
         });
         return true;
     }
     if (event.button() == MouseButton::ScrollDown && event.type() == MouseEventType::Press) {
-        m_terminal.with_lock([&](Terminal& terminal) {
-            terminal.scroll_down();
-        });
+        scroll(Direction::Vertical, 1);
         return true;
     }
 
     // Selection logic.
     auto scroll_adjusted_position = event.position().in_cells();
-    scroll_adjusted_position = { scroll_adjusted_position.x(), scroll_adjusted_position.y() + row_offset };
+    scroll_adjusted_position = { scroll_adjusted_position.x() + m_horizontal_scroll_offset,
+                                 scroll_adjusted_position.y() + m_vertical_scroll_offset + row_offset };
     if (event.button() == MouseButton::Left && event.type() == MouseEventType::Press) {
         // Start selection.
         m_selection_start = m_selection_end = scroll_adjusted_position;
@@ -356,9 +369,58 @@ void Pane::invalidate_all() {
 
 void Pane::resize(dius::tty::WindowSize const& size) {
     clear_selection();
+    reset_scroll();
     m_terminal.with_lock([&](Terminal& terminal) {
         terminal.set_visible_size(size);
     });
+}
+
+void Pane::scroll(Direction direction, i32 amount_in_cells) {
+    if (direction == Direction::None) {
+        return;
+    }
+
+    if (direction == Direction::Vertical) {
+        m_terminal.with_lock([&](Terminal& terminal) {
+            while (amount_in_cells < 0) {
+                if (m_vertical_scroll_offset > 0) {
+                    m_vertical_scroll_offset--;
+                    terminal.invalidate_all();
+                } else {
+                    terminal.scroll_up();
+                }
+                amount_in_cells++;
+            }
+            while (amount_in_cells > 0) {
+                if (terminal.visible_size().rows < terminal.row_count() &&
+                    m_vertical_scroll_offset < terminal.row_count() - terminal.visible_size().rows) {
+                    m_vertical_scroll_offset++;
+                    terminal.invalidate_all();
+                } else {
+                    terminal.scroll_down();
+                }
+                amount_in_cells--;
+            }
+        });
+    } else if (direction == Direction::Horizontal) {
+        m_terminal.with_lock([&](Terminal& terminal) {
+            while (amount_in_cells < 0) {
+                if (m_horizontal_scroll_offset > 0) {
+                    m_horizontal_scroll_offset--;
+                    terminal.invalidate_all();
+                }
+                amount_in_cells++;
+            }
+            while (amount_in_cells > 0) {
+                if (terminal.visible_size().cols < terminal.col_count() &&
+                    m_horizontal_scroll_offset < terminal.col_count() - terminal.visible_size().cols) {
+                    m_horizontal_scroll_offset++;
+                    terminal.invalidate_all();
+                }
+                amount_in_cells--;
+            }
+        });
+    }
 }
 
 void Pane::stop_capture() {
@@ -430,5 +492,9 @@ auto Pane::selection_text() -> di::String {
 
 void Pane::clear_selection() {
     m_selection_start = m_selection_end = {};
+}
+
+void Pane::reset_scroll() {
+    m_vertical_scroll_offset = m_horizontal_scroll_offset = 0;
 }
 }
