@@ -27,7 +27,7 @@ struct Args {
     bool hide_status_bar { false };
     bool print_keybinds { false };
     di::Optional<di::PathView> capture_command_output_path;
-    di::Optional<di::PathView> replay_path;
+    bool replay { false };
     bool help { false };
 
     constexpr static auto get_cli_parser() {
@@ -37,14 +37,15 @@ struct Args {
             .option<&Args::print_keybinds>('k', "keybinds"_tsv, "Print key bindings"_sv)
             .option<&Args::capture_command_output_path>('c', "capture-command-output-path"_tsv,
                                                         "Capture command output to a file"_sv)
-            .option<&Args::replay_path>('r', "replay-path"_tsv, "Replay capture output"_sv)
+            .option<&Args::replay>('r', "replay-path"_tsv,
+                                   "Replay capture output (file paths are passed via positional args)"_sv)
             .argument<&Args::command>("COMMAND"_sv, "Program to run in terminal"_sv)
             .help();
     }
 };
 
 static auto main(Args& args) -> di::Result<void> {
-    auto const replay_mode = args.replay_path.has_value();
+    auto const replay_mode = args.replay;
     auto key_binds = make_key_binds(args.prefix, replay_mode);
     if (args.print_keybinds) {
         for (auto const& bind : key_binds) {
@@ -54,14 +55,15 @@ static auto main(Args& args) -> di::Result<void> {
     }
 
     args.hide_status_bar |= replay_mode;
-    if (args.command.empty() && !args.replay_path) {
-        dius::eprintln("error: ttx requires a command argument to know what to launch"_sv);
-        return di::Unexpected(di::BasicError::InvalidArgument);
-    } else if (args.command.empty()) {
-        // For safety, make sure the command isn't empty, even though it shouldn't be used.
-        args.command = { "sh"_tsv };
+    if (args.command.empty()) {
+        if (!args.replay) {
+            dius::eprintln("error: ttx requires a command argument to know what to launch"_sv);
+            return di::Unexpected(di::BasicError::InvalidArgument);
+        } else {
+            dius::eprintln("error: ttx requires at least 1 argument to know what file to replay"_sv);
+            return di::Unexpected(di::BasicError::InvalidArgument);
+        }
     }
-
     // Setup - log to file.
     [[maybe_unused]] auto& log = dius::stderr = TRY(dius::open_sync("/tmp/ttx.log"_pv, dius::OpenMode::WriteClobber));
 
@@ -134,13 +136,25 @@ static auto main(Args& args) -> di::Result<void> {
     });
 
     // Setup - initial tab and pane.
-    TRY(layout_state.get_assuming_no_concurrent_accesses().add_tab(
-        {
-            .command = di::clone(args.command),
-            .capture_command_output_path = args.capture_command_output_path.transform(di::to_owned),
-            .replay_path = args.replay_path.transform(di::to_owned),
-        },
-        *render_thread));
+    if (replay_mode) {
+        auto& state = layout_state.get_assuming_no_concurrent_accesses();
+        for (auto replay_path : args.command) {
+            if (state.empty()) {
+                TRY(state.add_tab({ .replay_path = di::PathView(replay_path).to_owned() }, *render_thread));
+            } else {
+                // Horizontal split (means vertical layout)
+                TRY(state.add_pane(*state.active_tab(), { .replay_path = di::PathView(replay_path).to_owned() },
+                                   Direction::Vertical, *render_thread));
+            }
+        }
+    } else {
+        TRY(layout_state.get_assuming_no_concurrent_accesses().add_tab(
+            {
+                .command = di::clone(args.command),
+                .capture_command_output_path = args.capture_command_output_path.transform(di::to_owned),
+            },
+            *render_thread));
+    }
     render_thread->request_render();
 
     // Setup - remove all panes and tabs on exit.

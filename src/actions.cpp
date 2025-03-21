@@ -154,7 +154,7 @@ auto add_pane(Direction direction) -> Action {
     };
 }
 
-auto scroll_all(Direction direction, i32 amount_in_cells) -> Action {
+auto scroll(Direction direction, i32 amount_in_cells) -> Action {
     auto direction_name = [&] {
         switch (direction) {
             case Direction::Horizontal:
@@ -167,7 +167,7 @@ auto scroll_all(Direction direction, i32 amount_in_cells) -> Action {
         return "nowhere"_sv;
     }();
     return {
-        .description = *di::present("Scroll all panes {} by {} cells"_sv, direction_name, di::abs(amount_in_cells)),
+        .description = *di::present("Scroll active pane {} by {} cells"_sv, direction_name, di::abs(amount_in_cells)),
         .apply =
             [direction, amount_in_cells](ActionContext const& context) {
                 context.layout_state.with_lock([&](LayoutState& state) {

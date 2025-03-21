@@ -77,23 +77,24 @@ static auto make_replay_key_binds() -> di::Vector<KeyBind> {
     result.push_back({
         .key = Key::J,
         .mode = InputMode::Insert,
-        .action = scroll_all(Direction::Vertical, 1),
+        .action = scroll(Direction::Vertical, 1),
     });
     result.push_back({
         .key = Key::K,
         .mode = InputMode::Insert,
-        .action = scroll_all(Direction::Vertical, -1),
+        .action = scroll(Direction::Vertical, -1),
     });
     result.push_back({
         .key = Key::L,
         .mode = InputMode::Insert,
-        .action = scroll_all(Direction::Horizontal, 1),
+        .action = scroll(Direction::Horizontal, 1),
     });
     result.push_back({
         .key = Key::H,
         .mode = InputMode::Insert,
-        .action = scroll_all(Direction::Horizontal, -1),
+        .action = scroll(Direction::Horizontal, -1),
     });
+    make_navigate_binds(result, InputMode::Insert, InputMode::Insert);
 
     return result;
 }
