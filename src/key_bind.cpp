@@ -99,7 +99,7 @@ static auto make_replay_key_binds() -> di::Vector<KeyBind> {
     return result;
 }
 
-auto make_key_binds(Key prefix, bool replay_mode) -> di::Vector<KeyBind> {
+auto make_key_binds(Key prefix, di::Path save_state_path, bool replay_mode) -> di::Vector<KeyBind> {
     if (replay_mode) {
         return make_replay_key_binds();
     }
@@ -148,6 +148,12 @@ auto make_key_binds(Key prefix, bool replay_mode) -> di::Vector<KeyBind> {
             .modifiers = Modifiers::Shift,
             .mode = InputMode::Normal,
             .action = stop_capture(),
+        });
+        result.push_back({
+            .key = Key::S,
+            .modifiers = Modifiers::Shift,
+            .mode = InputMode::Normal,
+            .action = save_state(di::move(save_state_path)),
         });
         result.push_back({
             .key = Key::X,

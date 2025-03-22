@@ -26,6 +26,7 @@ struct Args {
     Key prefix { Key::B };
     bool hide_status_bar { false };
     bool print_keybinds { false };
+    di::PathView save_state_path { "/tmp/ttx-save-state.ansi"_pv };
     di::Optional<di::PathView> capture_command_output_path;
     bool replay { false };
     bool help { false };
@@ -37,6 +38,8 @@ struct Args {
             .option<&Args::print_keybinds>('k', "keybinds"_tsv, "Print key bindings"_sv)
             .option<&Args::capture_command_output_path>('c', "capture-command-output-path"_tsv,
                                                         "Capture command output to a file"_sv)
+            .option<&Args::save_state_path>('S', "save-state-path"_tsv,
+                                            "Save state path when triggering saving a pane's state"_sv)
             .option<&Args::replay>('r', "replay-path"_tsv,
                                    "Replay capture output (file paths are passed via positional args)"_sv)
             .argument<&Args::command>("COMMAND"_sv, "Program to run in terminal"_sv)
@@ -46,7 +49,7 @@ struct Args {
 
 static auto main(Args& args) -> di::Result<void> {
     auto const replay_mode = args.replay;
-    auto key_binds = make_key_binds(args.prefix, replay_mode);
+    auto key_binds = make_key_binds(args.prefix, args.save_state_path.to_owned(), replay_mode);
     if (args.print_keybinds) {
         for (auto const& bind : key_binds) {
             dius::println("{}"_sv, bind);

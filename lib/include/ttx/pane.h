@@ -61,6 +61,7 @@ public:
     void invalidate_all();
     void resize(dius::tty::WindowSize const& size);
     void scroll(Direction direction, i32 amount_in_cells);
+    auto state_as_escape_sequences() -> di::String;
     void stop_capture();
     void exit();
 

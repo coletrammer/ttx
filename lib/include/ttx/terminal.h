@@ -1,6 +1,7 @@
 #pragma once
 
 #include "di/container/ring/ring.h"
+#include "di/io/vector_writer.h"
 #include "dius/sync_file.h"
 #include "dius/tty.h"
 #include "ttx/cursor_style.h"
@@ -80,6 +81,10 @@ public:
         result.m_scroll_end = m_scroll_end;
         return result;
     }
+
+    // Return a string which when replayed will result in the terminal
+    // having state identical to the current state.
+    auto state_as_escape_sequences() const -> di::String;
 
     void on_parser_results(di::Span<ParserResult const> results);
 
@@ -188,6 +193,8 @@ private:
     void clear_row(u32 row, char ch = ' ');
     void clear_row_until(u32 row, u32 end_col, char ch = ' ');
     void clear_row_to_end(u32 row, u32 start_col, char ch = ' ');
+
+    auto state_as_escape_sequences_internal(di::VectorWriter<>& writer) const;
 
     void set_use_alternate_screen_buffer(bool b);
 

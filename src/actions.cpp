@@ -108,6 +108,27 @@ auto quit() -> Action {
     };
 }
 
+auto save_state(di::Path path) -> Action {
+    return {
+        .description = *di::present("Save the state of the active pane to a file ({})"_sv, path),
+        .apply =
+            di::make_function<void(ActionContext const&) const&>([path = di::move(path)](ActionContext const& context) {
+                context.layout_state.with_lock([&](LayoutState& state) {
+                    if (auto pane = state.active_pane()) {
+                        auto file = dius::open_sync(path, dius::OpenMode::WriteNew);
+                        if (!file) {
+                            // TODO: signal error to user!
+                            return;
+                        }
+
+                        auto contents = pane->state_as_escape_sequences();
+                        (void) file.value().write_exactly(di::as_bytes(contents.span()));
+                    }
+                });
+            }),
+    };
+}
+
 auto stop_capture() -> Action {
     return {
         .description = "Stop input capture for the active pane"_s,

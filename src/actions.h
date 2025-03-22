@@ -12,6 +12,7 @@ auto resize(ResizeDirection direction, i32 amount_in_cells) -> Action;
 auto create_tab() -> Action;
 auto switch_tab(usize index) -> Action;
 auto quit() -> Action;
+auto save_state(di::Path path) -> Action;
 auto stop_capture() -> Action;
 auto exit_pane() -> Action;
 auto add_pane(Direction direction) -> Action;

@@ -253,9 +253,13 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
 }
 
 auto Pane::event(KeyEvent const& event) -> bool {
-    // Clear the selection on key presses that send text.
+    // Clear the selection and scrolling on key presses that send text.
     if (!event.text().empty()) {
         clear_selection();
+        reset_scroll();
+        m_terminal.with_lock([&](Terminal& terminal) {
+            terminal.scroll_to_bottom();
+        });
     }
 
     auto [application_cursor_keys_mode, key_reporting_flags] = m_terminal.with_lock([&](Terminal& terminal) {
@@ -421,6 +425,12 @@ void Pane::scroll(Direction direction, i32 amount_in_cells) {
             }
         });
     }
+}
+
+auto Pane::state_as_escape_sequences() -> di::String {
+    return m_terminal.with_lock([&](Terminal& terminal) {
+        return terminal.state_as_escape_sequences();
+    });
 }
 
 void Pane::stop_capture() {

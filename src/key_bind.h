@@ -24,5 +24,5 @@ struct KeyBind {
     }
 };
 
-auto make_key_binds(Key prefix, bool replay_mode) -> di::Vector<KeyBind>;
+auto make_key_binds(Key prefix, di::Path save_state_path, bool replay_mode) -> di::Vector<KeyBind>;
 }
