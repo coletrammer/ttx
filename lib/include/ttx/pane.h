@@ -23,12 +23,14 @@ struct CreatePaneArgs {
     di::Vector<di::TransparentStringView> command {};
     di::Optional<di::Path> capture_command_output_path {};
     di::Optional<di::Path> replay_path {};
+    di::Optional<di::Path> save_state_path {};
 };
 
 class Pane {
 public:
-    static auto create_from_replay(di::PathView replay_path, dius::tty::WindowSize size,
-                                   di::Function<void(Pane&)> did_exit, di::Function<void(Pane&)> did_update,
+    static auto create_from_replay(di::PathView replay_path, di::Optional<di::Path> save_state_path,
+                                   dius::tty::WindowSize size, di::Function<void(Pane&)> did_exit,
+                                   di::Function<void(Pane&)> did_update,
                                    di::Function<void(di::Span<byte const>)> did_selection,
                                    di::Function<void(di::StringView)> apc_passthrough) -> di::Result<di::Box<Pane>>;
     static auto create(CreatePaneArgs args, dius::tty::WindowSize size, di::Function<void(Pane&)> did_exit,
@@ -61,7 +63,7 @@ public:
     void invalidate_all();
     void resize(dius::tty::WindowSize const& size);
     void scroll(Direction direction, i32 amount_in_cells);
-    auto state_as_escape_sequences() -> di::String;
+    auto save_state(di::PathView path) -> di::Result<>;
     void stop_capture();
     void exit();
 

@@ -44,7 +44,8 @@ static auto spawn_child(di::Vector<di::TransparentStringView> command, dius::Syn
         .spawn();
 }
 
-auto Pane::create_from_replay(di::PathView replay_path, dius::tty::WindowSize size, di::Function<void(Pane&)> did_exit,
+auto Pane::create_from_replay(di::PathView replay_path, di::Optional<di::Path> save_state_path,
+                              dius::tty::WindowSize size, di::Function<void(Pane&)> did_exit,
                               di::Function<void(Pane&)> did_update,
                               di::Function<void(di::Span<byte const>)> did_selection,
                               di::Function<void(di::StringView)> apc_passthrough) -> di::Result<di::Box<Pane>> {
@@ -102,6 +103,12 @@ auto Pane::create_from_replay(di::PathView replay_path, dius::tty::WindowSize si
         }
     }
 
+    // If requested, write out the terminal state now that everything has been replayed.
+    // This is useful to testing.
+    for (auto const& path : save_state_path) {
+        TRY(pane->save_state(path));
+    }
+
     // Ensure mouse works even if the replayed file enabled mouse reporting.
     pane->m_terminal.get_assuming_no_concurrent_accesses().reset_mouse_reporting();
 
@@ -112,8 +119,8 @@ auto Pane::create(CreatePaneArgs args, dius::tty::WindowSize size, di::Function<
                   di::Function<void(Pane&)> did_update, di::Function<void(di::Span<byte const>)> did_selection,
                   di::Function<void(di::StringView)> apc_passthrough) -> di::Result<di::Box<Pane>> {
     if (args.replay_path) {
-        return create_from_replay(*args.replay_path, size, di::move(did_exit), di::move(did_update),
-                                  di::move(did_selection), di::move(apc_passthrough));
+        return create_from_replay(*args.replay_path, di::move(args.save_state_path), size, di::move(did_exit),
+                                  di::move(did_update), di::move(did_selection), di::move(apc_passthrough));
     }
 
     auto capture_file = di::Optional<dius::SyncFile> {};
@@ -427,10 +434,12 @@ void Pane::scroll(Direction direction, i32 amount_in_cells) {
     }
 }
 
-auto Pane::state_as_escape_sequences() -> di::String {
-    return m_terminal.with_lock([&](Terminal& terminal) {
+auto Pane::save_state(di::PathView path) -> di::Result<> {
+    auto file = TRY(dius::open_sync(path, dius::OpenMode::WriteNew));
+    auto contents = m_terminal.with_lock([&](Terminal& terminal) {
         return terminal.state_as_escape_sequences();
     });
+    return file.write_exactly(di::as_bytes(contents.span()));
 }
 
 void Pane::stop_capture() {

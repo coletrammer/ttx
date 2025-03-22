@@ -26,9 +26,10 @@ struct Args {
     Key prefix { Key::B };
     bool hide_status_bar { false };
     bool print_keybinds { false };
-    di::PathView save_state_path { "/tmp/ttx-save-state.ansi"_pv };
+    di::Optional<di::PathView> save_state_path;
     di::Optional<di::PathView> capture_command_output_path;
     bool replay { false };
+    bool headless { false };
     bool help { false };
 
     constexpr static auto get_cli_parser() {
@@ -40,6 +41,7 @@ struct Args {
                                                         "Capture command output to a file"_sv)
             .option<&Args::save_state_path>('S', "save-state-path"_tsv,
                                             "Save state path when triggering saving a pane's state"_sv)
+            .option<&Args::headless>('h', "headless"_tsv, "Headless mode"_sv)
             .option<&Args::replay>('r', "replay-path"_tsv,
                                    "Replay capture output (file paths are passed via positional args)"_sv)
             .argument<&Args::command>("COMMAND"_sv, "Program to run in terminal"_sv)
@@ -49,7 +51,8 @@ struct Args {
 
 static auto main(Args& args) -> di::Result<void> {
     auto const replay_mode = args.replay;
-    auto key_binds = make_key_binds(args.prefix, args.save_state_path.to_owned(), replay_mode);
+    auto key_binds = make_key_binds(
+        args.prefix, args.save_state_path.value_or("/tmp/ttx-save-state.ansi"_pv).to_owned(), replay_mode);
     if (args.print_keybinds) {
         for (auto const& bind : key_binds) {
             dius::println("{}"_sv, bind);
@@ -67,15 +70,22 @@ static auto main(Args& args) -> di::Result<void> {
             return di::Unexpected(di::BasicError::InvalidArgument);
         }
     }
+
     // Setup - log to file.
     [[maybe_unused]] auto& log = dius::stderr = TRY(dius::open_sync("/tmp/ttx.log"_pv, dius::OpenMode::WriteClobber));
 
+    // Setup - in headless mode there is no terminal. Ensure stdin is not valid.
+    if (args.headless) {
+        (void) dius::stdin.close();
+    }
+
     // Setup - initial state and terminal size.
-    auto initial_size = TRY(dius::stdin.get_tty_window_size());
+    auto initial_size =
+        args.headless ? dius::tty::WindowSize { 25, 80, 25 * 16, 80 * 16 } : TRY(dius::stdin.get_tty_window_size());
     auto layout_state = di::Synchronized(LayoutState(initial_size, args.hide_status_bar));
 
     // Setup - raw mode
-    auto _ = TRY(dius::stdin.enter_raw_mode());
+    auto _ = args.headless ? di::ScopeExit(di::Function<void()>([] {})) : TRY(dius::stdin.enter_raw_mode());
 
     // Setup - alternate screen buffer.
     di::writer_print<di::String::Encoding>(dius::stdin, "\033[?1049h\033[H\033[2J"_sv);
@@ -138,12 +148,30 @@ static auto main(Args& args) -> di::Result<void> {
         input_thread->request_exit();
     });
 
+    // Setup - remove all panes and tabs on exit.
+    auto _ = di::ScopeExit([&] {
+        layout_state.with_lock([&](LayoutState& state) {
+            while (!state.empty()) {
+                auto& tab = **state.tabs().front();
+                while (tab.active()) {
+                    state.remove_pane(tab, tab.active().data());
+                }
+                state.remove_tab(tab);
+            }
+        });
+    });
+
     // Setup - initial tab and pane.
     if (replay_mode) {
         auto& state = layout_state.get_assuming_no_concurrent_accesses();
         for (auto replay_path : args.command) {
             if (state.empty()) {
-                TRY(state.add_tab({ .replay_path = di::PathView(replay_path).to_owned() }, *render_thread));
+                TRY(state.add_tab(
+                    {
+                        .replay_path = di::PathView(replay_path).to_owned(),
+                        .save_state_path = args.save_state_path.transform(di::to_owned),
+                    },
+                    *render_thread));
             } else {
                 // Horizontal split (means vertical layout)
                 TRY(state.add_pane(*state.active_tab(), { .replay_path = di::PathView(replay_path).to_owned() },
@@ -158,21 +186,15 @@ static auto main(Args& args) -> di::Result<void> {
             },
             *render_thread));
     }
+
+    // In headless mode, exit immediately.
+    if (args.headless) {
+        return {};
+    }
+
     render_thread->request_render();
 
-    // Setup - remove all panes and tabs on exit.
-    auto _ = di::ScopeExit([&] {
-        layout_state.with_lock([&](LayoutState& state) {
-            while (!state.empty()) {
-                auto& tab = **state.tabs().front();
-                while (tab.active()) {
-                    state.remove_pane(tab, tab.active().data());
-                }
-                state.remove_tab(tab);
-            }
-        });
-    });
-
+    // For testing, exit immediately after writing the replaying content and writing the save state.
 #ifndef __linux__
     // On MacOS, we need to install a useless signal handlers for sigwait() to
     // actually work...
