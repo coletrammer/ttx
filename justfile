@@ -3,8 +3,12 @@ preset := env("PRESET", "dev")
 alias c := configure
 alias b := build
 alias t := test
+alias ut := unit_test
+alias tt := terminal_test
+alias gtt := generate_terminal_test
 alias cb := configure_build
 alias bt := build_test
+alias but := build_unit_test
 alias cbt := configure_build_test
 alias r := run
 alias br := build_run
@@ -26,6 +30,10 @@ build *args="": ensure_configured
 
 # Run tests
 test *args="": ensure_configured
+    ctest --preset {{ preset }} {{ args }}
+
+# Run unit tests
+unit_test *args="": ensure_configured
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -35,6 +43,18 @@ test *args="": ensure_configured
     )
 
     $build_directory/lib/test/ttx_test {{ args }}
+
+# Run terminal tests
+terminal_test *args="": ensure_configured
+    ctest --preset {{ preset }} -R "^terminal:" {{ args }}
+
+# Generate expected result terminal test
+generate_terminal_test name: ensure_configured
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    export TTX_GENERATE_TERMINAL_TEST_ARGS="{{ name }}"
+    cmake --build --preset {{ preset }} -t generate-terminal-test
 
 # Run ttx
 run *args="": ensure_configured
@@ -66,6 +86,11 @@ configure_build:
 build_test *args="":
     @just preset={{ preset }} build -t ttx_test
     @just preset={{ preset }} test {{ args }}
+
+# Build and run unit tests
+build_unit_test *args="":
+    @just preset={{ preset }} build -t ttx_test
+    @just preset={{ preset }} unit_test {{ args }}
 
 # Configure and build and test
 configure_build_test *args="":

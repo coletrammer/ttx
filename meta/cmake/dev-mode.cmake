@@ -1,6 +1,8 @@
 include(CTest)
 if(BUILD_TESTING)
     add_subdirectory(lib/test)
+
+    include(meta/cmake/terminal-test.cmake)
 endif()
 
 option(ENABLE_COVERAGE "Enable coverage support separate from CTest's" OFF)

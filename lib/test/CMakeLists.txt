@@ -10,7 +10,7 @@ if(PROJECT_IS_TOP_LEVEL)
     enable_testing()
 endif()
 
-# ---- Tests ----
+# ---- Unit Tests ----
 
 file(GLOB sources CONFIGURE_DEPENDS src/*.cpp)
 add_executable(ttx_test ${sources})
