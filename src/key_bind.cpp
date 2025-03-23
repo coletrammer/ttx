@@ -6,7 +6,7 @@
 #include "ttx/modifiers.h"
 
 namespace ttx {
-auto make_switch_tab_binds(di::Vector<KeyBind>& result) {
+static auto make_switch_tab_binds(di::Vector<KeyBind>& result) {
     for (auto i : di::range(9zu)) {
         auto key = Key(di::to_underlying(Key::_1) + i);
         result.push_back({
@@ -17,7 +17,7 @@ auto make_switch_tab_binds(di::Vector<KeyBind>& result) {
     }
 }
 
-auto make_navigate_binds(di::Vector<KeyBind>& result, InputMode mode, InputMode next_mode) {
+static auto make_navigate_binds(di::Vector<KeyBind>& result, InputMode mode, InputMode next_mode) {
     auto keys = di::Array {
         di::Tuple { Key::J, NavigateDirection::Down },
         di::Tuple { Key::K, NavigateDirection::Up },
@@ -35,7 +35,7 @@ auto make_navigate_binds(di::Vector<KeyBind>& result, InputMode mode, InputMode 
     }
 }
 
-auto make_resize_binds(di::Vector<KeyBind>& result, InputMode mode) {
+static auto make_resize_binds(di::Vector<KeyBind>& result, InputMode mode) {
     auto keys = di::Array {
         di::Tuple { Key::J, ResizeDirection::Bottom },
         di::Tuple { Key::K, ResizeDirection::Top },

@@ -65,10 +65,9 @@ static auto main(Args& args) -> di::Result<void> {
         if (!args.replay) {
             dius::eprintln("error: ttx requires a command argument to know what to launch"_sv);
             return di::Unexpected(di::BasicError::InvalidArgument);
-        } else {
-            dius::eprintln("error: ttx requires at least 1 argument to know what file to replay"_sv);
-            return di::Unexpected(di::BasicError::InvalidArgument);
         }
+        dius::eprintln("error: ttx requires at least 1 argument to know what file to replay"_sv);
+        return di::Unexpected(di::BasicError::InvalidArgument);
     }
 
     // Setup - log to file.

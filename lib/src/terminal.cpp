@@ -951,11 +951,7 @@ void Terminal::csi_xtwinops(Params const& params) {
             // or if the application requires the terminal to be a certain size.
             auto rows = di::min(params.get(1, m_row_count), 1000u);
             auto cols = di::min(params.get(2, m_col_count), 1000u);
-            if (rows == 0 && cols == 0) {
-                m_force_terminal_size = false;
-            } else {
-                m_force_terminal_size = true;
-            }
+            m_force_terminal_size = rows != 0 || cols != 0;
             if (rows == 0) {
                 rows = m_available_rows_in_display;
             }
@@ -1365,7 +1361,7 @@ auto Terminal::state_as_escape_sequences_internal(di::VectorWriter<>& writer) co
         di::container::for_each(all_rows, output_row);
 
         // Pan up so that the active region is correct.
-        if (m_rows_below.size() > 0) {
+        if (!m_rows_below.empty()) {
             di::writer_print<di::String::Encoding>(writer, "\033[H\033[{}T"_sv, m_rows_below.size());
         }
     }
