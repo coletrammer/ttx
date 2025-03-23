@@ -263,10 +263,6 @@ auto Pane::event(KeyEvent const& event) -> bool {
     // Clear the selection and scrolling on key presses that send text.
     if (!event.text().empty()) {
         clear_selection();
-        reset_scroll();
-        m_terminal.with_lock([&](Terminal& terminal) {
-            terminal.scroll_to_bottom();
-        });
     }
 
     auto [application_cursor_keys_mode, key_reporting_flags] = m_terminal.with_lock([&](Terminal& terminal) {
