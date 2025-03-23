@@ -46,9 +46,6 @@ void InputThread::request_exit() {
 }
 
 void InputThread::set_input_mode(InputMode mode) {
-    if (m_mode == InputMode::Resize && mode == InputMode::Switch) {
-        return;
-    }
     if (m_mode == mode) {
         return;
     }

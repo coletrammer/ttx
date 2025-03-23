@@ -131,7 +131,7 @@ auto make_key_binds(Key prefix, di::Path save_state_path, bool replay_mode) -> d
             .action = send_to_pane(),
         });
         make_resize_binds(result, InputMode::Normal);
-        make_navigate_binds(result, InputMode::Normal, InputMode::Switch);
+        make_navigate_binds(result, InputMode::Normal, InputMode::Insert);
         result.push_back({
             .key = Key::C,
             .mode = InputMode::Normal,
