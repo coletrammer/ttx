@@ -58,6 +58,7 @@
           ".prettierignore"
           "**/*.xml"
           "**/*.in"
+          "**/*.ansi"
           "docs/header.html"
           "LICENSE"
         ];
