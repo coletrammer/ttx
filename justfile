@@ -84,7 +84,7 @@ configure_build:
 
 # Build and test
 build_test *args="":
-    @just preset={{ preset }} build -t ttx_test
+    @just preset={{ preset }} build
     @just preset={{ preset }} test {{ args }}
 
 # Build and run unit tests
