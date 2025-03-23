@@ -152,10 +152,9 @@ static auto main(Args& args) -> di::Result<void> {
         layout_state.with_lock([&](LayoutState& state) {
             while (!state.empty()) {
                 auto& tab = **state.tabs().front();
-                while (tab.active()) {
-                    state.remove_pane(tab, tab.active().data());
+                for (auto* pane : tab.panes()) {
+                    state.remove_pane(tab, pane);
                 }
-                state.remove_tab(tab);
             }
         });
     });

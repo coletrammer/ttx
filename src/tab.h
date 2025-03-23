@@ -58,6 +58,8 @@ public:
         return *m_active;
     }
 
+    auto panes() const -> di::Ring<Pane*> const& { return m_panes_ordered_by_recency; }
+
     auto set_is_active(bool b) -> bool;
     auto is_active() -> bool { return m_is_active; }
 
