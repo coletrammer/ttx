@@ -40,6 +40,7 @@ struct Color {
     u8 b = 0;
 
     auto operator==(Color const& other) const -> bool = default;
+    auto operator<=>(Color const& other) const = default;
 
     constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<Color>) {
         return di::make_fields<"Color">(di::field<"c", &Color::c>, di::field<"r", &Color::r>, di::field<"g", &Color::g>,
@@ -123,6 +124,7 @@ struct GraphicsRendition {
     auto as_csi_params() const -> di::Vector<Params>;
 
     auto operator==(GraphicsRendition const& other) const -> bool = default;
+    auto operator<=>(GraphicsRendition const& other) const = default;
 
     constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<GraphicsRendition>) {
         return di::make_fields<"GraphicsRendition">(
