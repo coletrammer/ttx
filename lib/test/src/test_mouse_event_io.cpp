@@ -7,6 +7,7 @@
 #include "ttx/mouse_event.h"
 #include "ttx/mouse_event_io.h"
 #include "ttx/params.h"
+#include "ttx/size.h"
 
 namespace mouse_event_io {
 static void serialize() {
@@ -19,7 +20,7 @@ static void serialize() {
         MouseProtocol protocol { MouseProtocol::AnyEvent };
         di::Optional<MousePosition> prev_event_position {};
         MouseScrollProtocol scroll_protocol {};
-        dius::tty::WindowSize window_size {};
+        Size size {};
     };
 
     auto cases = di::Array {
@@ -292,9 +293,8 @@ static void serialize() {
     };
 
     for (auto const& test_case : cases) {
-        auto result =
-            serialize_mouse_event(test_case.event, test_case.protocol, test_case.encoding,
-                                  test_case.prev_event_position, test_case.scroll_protocol, test_case.window_size);
+        auto result = serialize_mouse_event(test_case.event, test_case.protocol, test_case.encoding,
+                                            test_case.prev_event_position, test_case.scroll_protocol, test_case.size);
         ASSERT_EQ(test_case.expected, result);
     }
 }
@@ -305,7 +305,7 @@ static void parse() {
     struct Case {
         CSI csi {};
         di::Optional<MouseEvent> expected {};
-        di::Optional<dius::tty::WindowSize> window_size_if_using_pixels {};
+        di::Optional<Size> size_if_using_pixels {};
     };
 
     auto cases = di::Array {
@@ -360,12 +360,12 @@ static void parse() {
             MouseEvent(MouseEventType::Release, MouseButton::ScrollUp,
                        MousePosition({ 12, 7 }, MouseCoordinate(121, 156)),
                        Modifiers::Shift | Modifiers::Alt | Modifiers::Control),
-            dius::tty::WindowSize { 80, 100, 1000, 1600 },
+            Size { 80, 100, 1000, 1600 },
         },
     };
 
     for (auto const& test_case : cases) {
-        auto result = mouse_event_from_csi(test_case.csi, test_case.window_size_if_using_pixels);
+        auto result = mouse_event_from_csi(test_case.csi, test_case.size_if_using_pixels.transform(di::cref));
         ASSERT_EQ(test_case.expected, result);
     }
 }

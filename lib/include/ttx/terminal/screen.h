@@ -6,6 +6,7 @@
 #include "di/container/tree/tree_map.h"
 #include "di/container/view/cache_last.h"
 #include "ttx/graphics_rendition.h"
+#include "ttx/size.h"
 #include "ttx/terminal/cursor.h"
 #include "ttx/terminal/hyperlink.h"
 #include "ttx/terminal/id_map.h"
@@ -26,10 +27,12 @@ namespace ttx::terminal {
 /// in the scroll back buffer, these can be used to fill the empty lines.
 class Screen {
 public:
-    void resize(u32 width, u32 height);
+    void resize(Size const& size);
 
-    auto max_height() const { return m_max_height; }
-    auto max_width() const { return m_max_width; }
+    auto row_count() const -> u32 { return m_rows.size(); }
+    auto max_height() const { return m_size.rows; }
+    auto max_width() const { return m_size.cols; }
+    auto size() const -> Size { return m_size; }
 
     auto current_graphics_rendition() const -> GraphicsRendition;
     auto current_hyperlink() const -> di::Optional<Hyperlink const&>;
@@ -48,10 +51,27 @@ public:
     void set_cursor_row(u32 row);
     void set_cursor_col(u32 col);
 
+    void insert_blank_characters(u32 count);
+    void insert_blank_lines(u32 count);
+
+    void delete_characters(u32 count);
+    void delete_lines(u32 count);
+
+    void clear();
+    void clear_below_cursor();
+    void clear_above_cursor();
+
+    void clear_row();
+    void clear_row_after_cursor();
+    void clear_row_before_cursor();
+
+    void scroll_down();
     void put_single_cell(di::StringView text);
 
+    void invalidate_all();
+
     auto iterate_row(u32 row) {
-        ASSERT_LT(row, m_max_height);
+        ASSERT_LT(row, max_height());
 
         auto& row_object = get_row(row);
 
@@ -59,15 +79,23 @@ public:
         // cache_last() so that the transform() can can maintain a mutable text offset counter safely, which
         // ensures fetching the text associated with a cell is O(1). cache_last() also ensures we do the map lookups
         // only once for each cell.
-        return row_object.cells | di::transform([this, &row_object, text_offset = 0zu](Cell const& cell) mutable {
-                   auto text_start = row_object.text.iterator_at_offset(text_offset);
-                   text_offset += cell.text_size;
-                   auto text_end = row_object.text.iterator_at_offset(text_offset);
-                   ASSERT(text_start);
-                   ASSERT(text_end);
+        return row_object.cells |
+               di::transform([this, &row_object, text_offset = 0zu, col = 0u](Cell const& cell) mutable {
+                   auto text = [&] {
+                       if (cell.text_size == 0) {
+                           return di::StringView {};
+                       }
 
-                   auto text = row_object.text.substr(text_start.value(), text_end.value());
-                   return di::make_tuple(di::ref(cell), text, di::ref(graphics_rendition(cell.graphics_rendition_id)),
+                       auto text_start = row_object.text.iterator_at_offset(text_offset);
+                       text_offset += cell.text_size;
+                       auto text_end = row_object.text.iterator_at_offset(text_offset);
+                       ASSERT(text_start);
+                       ASSERT(text_end);
+                       return row_object.text.substr(text_start.value(), text_end.value());
+                   }();
+
+                   return di::make_tuple(col++, di::ref(cell), text,
+                                         di::ref(graphics_rendition(cell.graphics_rendition_id)),
                                          maybe_hyperlink(cell.hyperlink_id));
                }) |
                di::cache_last;
@@ -90,8 +118,7 @@ private:
     u16 m_hyperlink_id { 0 };
     GraphicsRendition m_empty_graphics;
 
-    /// Terminal size information.
-    u32 m_max_width { 80 };
-    u32 m_max_height { 25 };
+    // Terminal size information.
+    Size m_size { 25, 80 };
 };
 }

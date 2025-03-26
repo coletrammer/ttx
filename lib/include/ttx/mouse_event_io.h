@@ -1,11 +1,11 @@
 #pragma once
 
 #include "di/reflect/prelude.h"
-#include "dius/tty.h"
 #include "ttx/key_event_io.h"
 #include "ttx/mouse.h"
 #include "ttx/mouse_event.h"
 #include "ttx/params.h"
+#include "ttx/size.h"
 
 // Mouse reference: https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h2-Mouse-Tracking
 namespace ttx {
@@ -66,7 +66,7 @@ struct MouseScrollProtocol {
 
 auto serialize_mouse_event(MouseEvent const& event, MouseProtocol protocol, MouseEncoding encoding,
                            di::Optional<MousePosition> prev_event_position, MouseScrollProtocol const& scroll_protocol,
-                           dius::tty::WindowSize const& window_size) -> di::Optional<di::TransparentString>;
-auto mouse_event_from_csi(CSI const& csi, di::Optional<dius::tty::WindowSize> window_size_if_using_pixels = {})
+                           Size const& size) -> di::Optional<di::TransparentString>;
+auto mouse_event_from_csi(CSI const& csi, di::Optional<Size const&> size_if_using_pixels = {})
     -> di::Optional<MouseEvent>;
 }

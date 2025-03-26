@@ -1,12 +1,12 @@
 #include "di/test/prelude.h"
 #include "dius/print.h"
-#include "dius/tty.h"
 #include "ttx/layout.h"
+#include "ttx/size.h"
 
 namespace layout {
 using namespace ttx;
 
-static auto add_pane(LayoutGroup& root, dius::tty::WindowSize const& size, Pane* reference, Direction direction)
+static auto add_pane(LayoutGroup& root, Size const& size, Pane* reference, Direction direction)
     -> di::Tuple<Pane&, di::Box<LayoutNode>> {
     auto [layout_tree, entry, pane_out] = root.split(size, 0, 0, reference, direction);
     ASSERT(entry);
@@ -17,13 +17,13 @@ static auto add_pane(LayoutGroup& root, dius::tty::WindowSize const& size, Pane*
     return { *pane, di::move(layout_tree) };
 };
 
-static auto validate_layout_for_pane(Pane& pane, LayoutNode& tree, u32 row, u32 col, dius::tty::WindowSize size) {
+static auto validate_layout_for_pane(Pane& pane, LayoutNode& tree, u32 row, u32 col, Size size) {
     auto entry = tree.find_pane(&pane);
     ASSERT(entry);
 
     // Default the pixel widths/heights.
-    size.pixel_height = size.rows * 10;
-    size.pixel_width = size.cols * 10;
+    size.ypixels = size.rows * 10;
+    size.xpixels = size.cols * 10;
 
     ASSERT_EQ(entry->pane, &pane);
     ASSERT_EQ(entry->row, row);
@@ -32,7 +32,7 @@ static auto validate_layout_for_pane(Pane& pane, LayoutNode& tree, u32 row, u32 
 };
 
 static void splits() {
-    constexpr auto size = dius::tty::WindowSize(64, 128, 1280, 640);
+    constexpr auto size = Size(64, 128, 1280, 640);
 
     auto root = LayoutGroup {};
 
@@ -62,7 +62,7 @@ static void splits() {
 }
 
 static void many_splits() {
-    constexpr auto size = dius::tty::WindowSize(1000 + 99, 1000 + 99, 0, 0);
+    constexpr auto size = Size(1000 + 99, 1000 + 99, 0, 0);
 
     auto root = LayoutGroup {};
 
@@ -86,7 +86,7 @@ static void many_splits() {
 }
 
 static void remove_pane() {
-    constexpr auto size = dius::tty::WindowSize(64, 128, 1280, 640);
+    constexpr auto size = Size(64, 128, 1280, 640);
 
     {
         auto root = LayoutGroup {};
@@ -174,7 +174,7 @@ static void remove_pane() {
 }
 
 static void hit_test() {
-    constexpr auto size = dius::tty::WindowSize(64, 128, 1280, 640);
+    constexpr auto size = Size(64, 128, 1280, 640);
 
     auto root = LayoutGroup {};
 
@@ -222,7 +222,7 @@ static void hit_test() {
 }
 
 static void resize() {
-    constexpr auto size = dius::tty::WindowSize(65, 129, 1290, 650);
+    constexpr auto size = Size(65, 129, 1290, 650);
 
     auto root = LayoutGroup {};
 
@@ -302,7 +302,7 @@ static void resize() {
 }
 
 static void resize_to_zero() {
-    constexpr auto size = dius::tty::WindowSize(64, 128, 1280, 640);
+    constexpr auto size = Size(64, 128, 1280, 640);
 
     auto root = LayoutGroup {};
 

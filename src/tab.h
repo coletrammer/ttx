@@ -26,13 +26,13 @@ struct Tab {
 public:
     explicit Tab(di::String name) : m_name(di::move(name)) {}
 
-    void layout(dius::tty::WindowSize const& size, u32 row, u32 col);
+    void layout(Size const& size, u32 row, u32 col);
     void invalidate_all();
 
     // Returns the removed pane, if found.
     auto remove_pane(Pane* pane) -> di::Box<Pane>;
 
-    auto add_pane(dius::tty::WindowSize const& size, u32 row, u32 col, CreatePaneArgs args, Direction direction,
+    auto add_pane(Size const& size, u32 row, u32 col, CreatePaneArgs args, Direction direction,
                   RenderThread& render_thread) -> di::Result<>;
 
     void navigate(NavigateDirection direction);
@@ -64,7 +64,7 @@ public:
     auto is_active() -> bool { return m_is_active; }
 
 private:
-    dius::tty::WindowSize m_size;
+    Size m_size;
     di::String m_name;
     LayoutGroup m_layout_root {};
     di::Box<LayoutNode> m_layout_tree {};

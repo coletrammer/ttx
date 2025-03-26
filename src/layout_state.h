@@ -7,9 +7,9 @@
 namespace ttx {
 class LayoutState {
 public:
-    explicit LayoutState(dius::tty::WindowSize const& size, bool hide_status_bar);
+    explicit LayoutState(Size const& size, bool hide_status_bar);
 
-    void layout(di::Optional<dius::tty::WindowSize> size = {});
+    void layout(di::Optional<Size> size = {});
     auto set_active_tab(Tab* tab) -> bool;
     void remove_tab(Tab& tab);
     auto remove_pane(Tab& tab, Pane* pane) -> di::Box<Pane>;
@@ -27,11 +27,11 @@ public:
     }
 
     auto active_pane() const -> di::Optional<Pane&>;
-    auto size() const -> dius::tty::WindowSize { return m_size; }
+    auto size() const -> Size { return m_size; }
     auto hide_status_bar() const -> bool { return m_hide_status_bar; }
 
 private:
-    dius::tty::WindowSize m_size;
+    Size m_size;
     di::Vector<di::Box<Tab>> m_tabs {};
     Tab* m_active_tab { nullptr };
     bool m_hide_status_bar { false };

@@ -8,7 +8,6 @@
 #include "di/vocab/pointer/box.h"
 #include "di/vocab/variant/get_if.h"
 #include "di/vocab/variant/holds_alternative.h"
-#include "dius/tty.h"
 
 namespace ttx {
 struct FindPaneInLayoutGroup {
@@ -202,8 +201,7 @@ void LayoutGroup::validate_layout() {
     ASSERT_EQ(total_relative_size, max_layout_precision);
 }
 
-auto LayoutGroup::split(dius::tty::WindowSize const& size, u32 row_offset, u32 col_offset, Pane* reference,
-                        Direction direction)
+auto LayoutGroup::split(Size const& size, u32 row_offset, u32 col_offset, Pane* reference, Direction direction)
     -> di::Tuple<di::Box<LayoutNode>, di::Optional<LayoutEntry&>, di::Optional<di::Box<Pane>&>> {
     auto do_final_layout = [&](di::Box<LayoutPane>& child)
         -> di::Tuple<di::Box<LayoutNode>, di::Optional<LayoutEntry&>, di::Optional<di::Box<Pane>&>> {
@@ -363,7 +361,7 @@ auto LayoutGroup::remove_pane(Pane* pane) -> di::Box<Pane> {
     return result;
 }
 
-static void resize_pane(Pane* pane, dius::tty::WindowSize const& size) {
+static void resize_pane(Pane* pane, Size const& size) {
     if (pane) {
         pane->resize(size);
     }
@@ -449,7 +447,7 @@ auto LayoutGroup::resize(LayoutNode& root, Pane* pane, ResizeDirection direction
     return true;
 }
 
-auto LayoutGroup::layout(dius::tty::WindowSize const& size, u32 row_offset, u32 col_offset) -> di::Box<LayoutNode> {
+auto LayoutGroup::layout(Size const& size, u32 row_offset, u32 col_offset) -> di::Box<LayoutNode> {
     auto node = di::make_box<LayoutNode>(row_offset, col_offset, size,
                                          di::Vector<di::Variant<di::Box<LayoutNode>, LayoutEntry>> {}, nullptr, this,
                                          direction());
@@ -468,14 +466,10 @@ auto LayoutGroup::layout(dius::tty::WindowSize const& size, u32 row_offset, u32 
         return node;
     }
 
-    auto const fixed_dimension =
-        m_direction == Direction::Horizontal ? &dius::tty::WindowSize::rows : &dius::tty::WindowSize::cols;
-    auto const fixed_pixels_dimension = m_direction == Direction::Horizontal ? &dius::tty::WindowSize::pixel_height
-                                                                             : &dius::tty::WindowSize::pixel_width;
-    auto const dynamic_dimension =
-        m_direction == Direction::Horizontal ? &dius::tty::WindowSize::cols : &dius::tty::WindowSize::rows;
-    auto const dynamic_pixels_dimension = m_direction == Direction::Horizontal ? &dius::tty::WindowSize::pixel_width
-                                                                               : &dius::tty::WindowSize::pixel_height;
+    auto const fixed_dimension = m_direction == Direction::Horizontal ? &Size::rows : &Size::cols;
+    auto const fixed_pixels_dimension = m_direction == Direction::Horizontal ? &Size::ypixels : &Size::xpixels;
+    auto const dynamic_dimension = m_direction == Direction::Horizontal ? &Size::cols : &Size::rows;
+    auto const dynamic_pixels_dimension = m_direction == Direction::Horizontal ? &Size::xpixels : &Size::ypixels;
 
     // We need at least 1 cell for each child, and N - 1 cells for the box drawing separator between panes.
     auto const min_dynamic_size = m_children.size() * 2 - 1;
@@ -505,7 +499,7 @@ auto LayoutGroup::layout(dius::tty::WindowSize const& size, u32 row_offset, u32 
         auto dynamic_pixels =
             (dynamic_size + 1) * available_size.*dynamic_pixels_dimension / available_size.*dynamic_dimension;
 
-        auto size = dius::tty::WindowSize {
+        auto size = Size {
             m_direction == Direction::Horizontal ? fixed_size : dynamic_size + 1,
             m_direction == Direction::Horizontal ? dynamic_size + 1 : fixed_size,
             m_direction == Direction::Horizontal ? dynamic_pixels : fixed_pixels,

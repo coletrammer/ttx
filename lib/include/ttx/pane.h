@@ -10,12 +10,12 @@
 #include "dius/sync_file.h"
 #include "dius/system/process.h"
 #include "dius/thread.h"
-#include "dius/tty.h"
 #include "ttx/direction.h"
 #include "ttx/key_event.h"
 #include "ttx/mouse.h"
 #include "ttx/paste_event.h"
 #include "ttx/renderer.h"
+#include "ttx/size.h"
 #include "ttx/terminal.h"
 
 namespace ttx {
@@ -28,12 +28,11 @@ struct CreatePaneArgs {
 
 class Pane {
 public:
-    static auto create_from_replay(di::PathView replay_path, di::Optional<di::Path> save_state_path,
-                                   dius::tty::WindowSize size, di::Function<void(Pane&)> did_exit,
-                                   di::Function<void(Pane&)> did_update,
+    static auto create_from_replay(di::PathView replay_path, di::Optional<di::Path> save_state_path, Size const& size,
+                                   di::Function<void(Pane&)> did_exit, di::Function<void(Pane&)> did_update,
                                    di::Function<void(di::Span<byte const>)> did_selection,
                                    di::Function<void(di::StringView)> apc_passthrough) -> di::Result<di::Box<Pane>>;
-    static auto create(CreatePaneArgs args, dius::tty::WindowSize size, di::Function<void(Pane&)> did_exit,
+    static auto create(CreatePaneArgs args, Size const& size, di::Function<void(Pane&)> did_exit,
                        di::Function<void(Pane&)> did_update, di::Function<void(di::Span<byte const>)> did_selection,
                        di::Function<void(di::StringView)> apc_passthrough) -> di::Result<di::Box<Pane>>;
 
@@ -61,7 +60,7 @@ public:
     auto event(PasteEvent const& event) -> bool;
 
     void invalidate_all();
-    void resize(dius::tty::WindowSize const& size);
+    void resize(Size const& size);
     void scroll(Direction direction, i32 amount_in_cells);
     auto save_state(di::PathView path) -> di::Result<>;
     void stop_capture();

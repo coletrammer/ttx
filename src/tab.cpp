@@ -5,7 +5,7 @@
 #include "render.h"
 
 namespace ttx {
-void Tab::layout(dius::tty::WindowSize const& size, u32 row, u32 col) {
+void Tab::layout(Size const& size, u32 row, u32 col) {
     m_size = size;
     m_layout_tree = m_layout_root.layout(size, row, col);
     invalidate_all();
@@ -32,11 +32,11 @@ auto Tab::remove_pane(Pane* pane) -> di::Box<Pane> {
     return m_layout_root.remove_pane(pane);
 }
 
-auto Tab::add_pane(dius::tty::WindowSize const& size, u32 row, u32 col, CreatePaneArgs args, Direction direction,
+auto Tab::add_pane(Size const& size, u32 row, u32 col, CreatePaneArgs args, Direction direction,
                    RenderThread& render_thread) -> di::Result<> {
     auto [new_layout, pane_layout, pane_out] = m_layout_root.split(size, row, col, m_active, direction);
 
-    if (!pane_layout || !pane_out || pane_layout->size == dius::tty::WindowSize {}) {
+    if (!pane_layout || !pane_out || pane_layout->size == Size {}) {
         // NOTE: this happens when the visible terminal size is too small.
         m_layout_root.remove_pane(nullptr);
         return di::Unexpected(di::BasicError::InvalidArgument);

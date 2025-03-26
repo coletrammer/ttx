@@ -62,7 +62,7 @@ void RenderThread::render_thread() {
         // Process any pending events.
         for (auto& event : events) {
             // Pattern matching would be nice here...
-            if (auto ev = di::get_if<dius::tty::WindowSize>(event)) {
+            if (auto ev = di::get_if<Size>(event)) {
                 // Do layout.
                 m_layout_state.lock()->layout(ev.value());
             } else if (auto ev = di::get_if<PaneExited>(event)) {
@@ -92,11 +92,11 @@ void RenderThread::render_thread() {
 }
 
 struct PositionAndSize {
-    static auto operator()(di::Box<LayoutNode> const& node) -> di::Tuple<u32, u32, dius::tty::WindowSize> {
+    static auto operator()(di::Box<LayoutNode> const& node) -> di::Tuple<u32, u32, Size> {
         return { node->row, node->col, node->size };
     }
 
-    static auto operator()(LayoutEntry const& entry) -> di::Tuple<u32, u32, dius::tty::WindowSize> {
+    static auto operator()(LayoutEntry const& entry) -> di::Tuple<u32, u32, Size> {
         return { entry.row, entry.col, entry.size };
     }
 };

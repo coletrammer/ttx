@@ -3,15 +3,15 @@
 #include "di/container/ring/ring.h"
 #include "di/io/vector_writer.h"
 #include "dius/sync_file.h"
-#include "dius/tty.h"
 #include "ttx/cursor_style.h"
 #include "ttx/escape_sequence_parser.h"
 #include "ttx/focus_event_io.h"
-#include "ttx/graphics_rendition.h"
 #include "ttx/key_event_io.h"
 #include "ttx/mouse_event_io.h"
 #include "ttx/params.h"
 #include "ttx/paste_event_io.h"
+#include "ttx/size.h"
+#include "ttx/terminal/screen.h"
 
 namespace ttx {
 struct SetClipboard {
@@ -21,66 +21,13 @@ struct SetClipboard {
 using TerminalEvent = di::Variant<SetClipboard>;
 
 class Terminal {
-public:
-    struct Cell {
-        c32 ch { ' ' };
-        GraphicsRendition graphics_rendition;
-        mutable bool dirty : 1 { true };
+    struct ScreenState {
+        terminal::Screen screen;
+        CursorStyle cursor_style { CursorStyle::SteadyBar };
     };
 
-    using Row = di::Vector<Cell>;
-
+public:
     explicit Terminal(dius::SyncFile& psuedo_terminal) : m_psuedo_terminal(psuedo_terminal) {}
-
-    auto clone() const -> Terminal {
-        auto result = Terminal(m_psuedo_terminal);
-        result.m_rows = di::clone(m_rows);
-        result.m_row_count = m_row_count;
-        result.m_col_count = m_col_count;
-        result.m_xpixels = m_xpixels;
-        result.m_ypixels = m_ypixels;
-        result.m_col_count = m_col_count;
-        result.m_available_rows_in_display = m_available_rows_in_display;
-        result.m_available_cols_in_display = m_available_cols_in_display;
-        result.m_available_xpixels_in_display = m_available_xpixels_in_display;
-        result.m_available_ypixels_in_display = m_available_ypixels_in_display;
-        result.m_80_col_mode = m_80_col_mode;
-        result.m_132_col_mode = m_132_col_mode;
-        result.m_allow_80_132_col_mode = m_allow_80_132_col_mode;
-        result.m_force_terminal_size = m_force_terminal_size;
-        result.m_allow_force_terminal_size = m_allow_force_terminal_size;
-
-        result.m_tab_stops = di::clone(m_tab_stops);
-        result.m_cursor_row = m_cursor_row;
-        result.m_cursor_col = m_cursor_col;
-        result.m_cursor_style = m_cursor_style;
-        result.m_saved_cursor_row = m_saved_cursor_row;
-        result.m_saved_cursor_col = m_saved_cursor_col;
-        result.m_cursor_hidden = m_cursor_hidden;
-        result.m_disable_drawing = m_disable_drawing;
-        result.m_autowrap_mode = m_autowrap_mode;
-        result.m_x_overflow = m_x_overflow;
-        result.m_origin_mode = m_origin_mode;
-
-        result.m_application_cursor_keys_mode = m_application_cursor_keys_mode;
-        result.m_key_reporting_flags = m_key_reporting_flags;
-        result.m_key_reporting_flags_stack = di::clone(m_key_reporting_flags_stack);
-
-        result.m_alternate_scroll_mode = m_alternate_scroll_mode;
-        result.m_mouse_protocol = m_mouse_protocol;
-        result.m_mouse_encoding = m_mouse_encoding;
-        result.m_focus_event_mode = m_focus_event_mode;
-
-        result.m_bracketed_paste_mode = m_bracketed_paste_mode;
-
-        result.m_current_graphics_rendition = m_current_graphics_rendition;
-
-        result.m_rows_below = di::clone(m_rows_below);
-        result.m_rows_above = di::clone(m_rows_above);
-        result.m_scroll_start = m_scroll_start;
-        result.m_scroll_end = m_scroll_end;
-        return result;
-    }
 
     // Return a string which when replayed will result in the terminal
     // having state identical to the current state.
@@ -88,12 +35,15 @@ public:
 
     void on_parser_results(di::Span<ParserResult const> results);
 
-    auto cursor_row() const -> u32 { return m_cursor_row; }
-    auto cursor_col() const -> u32 { return m_cursor_col; }
+    auto active_screen() const -> ScreenState const&;
+    auto active_screen() -> ScreenState& {
+        return const_cast<ScreenState&>(const_cast<Terminal const&>(*this).active_screen());
+    }
+
+    auto cursor_row() const -> u32 { return active_screen().screen.cursor().row; }
+    auto cursor_col() const -> u32 { return active_screen().screen.cursor().col; }
     auto cursor_hidden() const -> bool { return m_cursor_hidden; }
-    auto should_display_cursor_at_position(u32 r, u32 c) const -> bool;
-    auto cursor_style() const -> CursorStyle { return m_cursor_style; }
-    auto scroll_relative_offset(u32 display_row) const -> u32;
+    auto cursor_style() const -> CursorStyle { return active_screen().cursor_style; }
 
     auto allowed_to_draw() const -> bool { return !m_disable_drawing; }
 
@@ -101,20 +51,16 @@ public:
     void scroll_up();
     void scroll_down();
 
-    auto total_rows() const -> u32 { return m_rows_above.size() + m_rows.size() + m_rows_below.size(); }
-    auto row_offset() const -> u32 { return m_rows_above.size(); }
-    auto row_count() const -> u32 { return m_row_count; }
-    auto col_count() const -> u32 { return m_col_count; }
-    auto size() const -> dius::tty::WindowSize { return { m_row_count, m_col_count, m_xpixels, m_ypixels }; }
+    // TODO: scroll back
+    auto total_rows() const -> u32 { return row_count(); }
+    auto row_offset() const -> u32 { return 0; }
 
-    void set_visible_size(dius::tty::WindowSize const& window_size);
-    auto visible_size() const -> dius::tty::WindowSize {
-        return { m_available_rows_in_display, m_available_cols_in_display, m_available_xpixels_in_display,
-                 m_available_ypixels_in_display };
-    }
+    auto row_count() const -> u32 { return active_screen().screen.max_height(); }
+    auto col_count() const -> u32 { return active_screen().screen.max_width(); }
+    auto size() const -> Size { return active_screen().screen.size(); }
 
-    void scroll_down_if_needed();
-    void scroll_up_if_needed();
+    void set_visible_size(Size const& size);
+    auto visible_size() const -> Size { return m_available_size; }
 
     auto application_cursor_keys_mode() const -> ApplicationCursorKeysMode { return m_application_cursor_keys_mode; }
     auto key_reporting_flags() const -> KeyReportingFlags { return m_key_reporting_flags; }
@@ -122,15 +68,12 @@ public:
     auto alternate_scroll_mode() const -> AlternateScrollMode { return m_alternate_scroll_mode; }
     auto mouse_protocol() const -> MouseProtocol { return m_mouse_protocol; }
     auto mouse_encoding() const -> MouseEncoding { return m_mouse_encoding; }
-    auto in_alternate_screen_buffer() const -> bool { return !!m_save_state; }
+    auto in_alternate_screen_buffer() const -> bool { return !!m_alternate_screen; }
     auto focus_event_mode() const -> FocusEventMode { return m_focus_event_mode; }
 
     void reset_mouse_reporting() { m_mouse_protocol = MouseProtocol::None; }
 
     auto bracked_paste_mode() const -> BracketedPasteMode { return m_bracketed_paste_mode; }
-
-    auto rows() const -> di::Vector<Row> const& { return m_rows; }
-    auto row_at_scroll_relative_offset(u32 offset) const -> Row const&;
 
     void invalidate_all();
 
@@ -147,54 +90,18 @@ private:
     void on_parser_result(Escape const& escape);
     void on_parser_result(ControlCharacter const& control);
 
-    void resize(dius::tty::WindowSize const& window_size);
+    void resize(Size const& size);
 
-    void put_char(u32 row, u32 col, c32 c);
     void put_char(c32 c);
 
-    void save_pos() {
-        m_saved_cursor_row = m_cursor_row;
-        m_saved_cursor_col = m_cursor_col;
-    }
-    void restore_pos() {
-        m_cursor_row = m_saved_cursor_row;
-        m_cursor_col = m_saved_cursor_col;
-    }
-
-    void set_cursor(u32 row, u32 col);
-
-    auto min_row_inclusive() const -> u32 {
-        if (m_origin_mode) {
-            return m_scroll_start;
-        }
-        return 0;
-    }
+    // TODO: vertical and horizontal scrolling regions.
+    auto min_row_inclusive() const -> u32 { return 0; }
     auto min_col_inclusive() const -> u32 { return 0; }
 
-    auto max_row_inclusive() const -> u32 {
-        if (m_origin_mode) {
-            return m_scroll_end;
-        }
-        return m_row_count - 1;
-    }
-    auto max_col_inclusive() const -> u32 { return m_col_count - 1; }
+    auto max_row_inclusive() const -> u32 { return row_count() - 1; }
+    auto max_col_inclusive() const -> u32 { return col_count() - 1; }
 
-    auto translate_row(u32 row) const -> u32 {
-        if (m_origin_mode) {
-            return row + m_scroll_start - 1;
-        }
-        return row - 1;
-    }
-    auto translate_col(u32 col) const -> u32 { return col - 1; }
-
-    void clear_below_cursor(char ch = ' ');
-    void clear_above_cursor(char ch = ' ');
-    void clear(char ch = ' ');
-    void clear_row(u32 row, char ch = ' ');
-    void clear_row_until(u32 row, u32 end_col, char ch = ' ');
-    void clear_row_to_end(u32 row, u32 start_col, char ch = ' ');
-
-    auto state_as_escape_sequences_internal(di::VectorWriter<>& writer) const;
+    void clear();
 
     void set_use_alternate_screen_buffer(bool b);
 
@@ -256,15 +163,10 @@ private:
     void csi_push_key_reporting_flags(Params const& params);
     void csi_pop_key_reporting_flags(Params const& params);
 
-    di::Vector<Row> m_rows;
-    u32 m_row_count { 0 };
-    u32 m_col_count { 0 };
-    u32 m_xpixels { 0 };
-    u32 m_ypixels { 0 };
-    u32 m_available_rows_in_display { 0 };
-    u32 m_available_cols_in_display { 0 };
-    u32 m_available_xpixels_in_display { 0 };
-    u32 m_available_ypixels_in_display { 0 };
+    ScreenState m_primary_screen;
+    di::Box<ScreenState> m_alternate_screen;
+
+    Size m_available_size;
     bool m_80_col_mode { false };
     bool m_132_col_mode { false };
     bool m_allow_80_132_col_mode { false };
@@ -272,15 +174,9 @@ private:
     bool m_allow_force_terminal_size { false };
 
     di::Vector<u32> m_tab_stops;
-    u32 m_cursor_row { 0 };
-    u32 m_cursor_col { 0 };
-    u32 m_saved_cursor_row { 0 };
-    u32 m_saved_cursor_col { 0 };
-    CursorStyle m_cursor_style { CursorStyle::SteadyBlock };
     bool m_cursor_hidden { false };
     bool m_disable_drawing { false };
     bool m_autowrap_mode { true };
-    bool m_x_overflow { false };
     bool m_origin_mode { false };
 
     ApplicationCursorKeysMode m_application_cursor_keys_mode { ApplicationCursorKeysMode::Disabled };
@@ -294,16 +190,7 @@ private:
 
     BracketedPasteMode m_bracketed_paste_mode { false };
 
-    GraphicsRendition m_current_graphics_rendition;
-
-    di::Vector<Row> m_rows_below;
-    di::Vector<Row> m_rows_above;
-    u32 m_scroll_start { 0 };
-    u32 m_scroll_end { 0 };
-
     di::Vector<TerminalEvent> m_outgoing_events;
-
-    di::Box<Terminal> m_save_state;
 
     dius::SyncFile& m_psuedo_terminal;
 };

@@ -18,8 +18,8 @@
 #include "ttx/utf8_stream_decoder.h"
 
 namespace ttx {
-static auto spawn_child(di::Vector<di::TransparentStringView> command, dius::SyncFile& pty,
-                        dius::tty::WindowSize const& size) -> di::Result<dius::system::ProcessHandle> {
+static auto spawn_child(di::Vector<di::TransparentStringView> command, dius::SyncFile& pty, Size const& size)
+    -> di::Result<dius::system::ProcessHandle> {
     auto tty_path = TRY(pty.get_psuedo_terminal_path());
 
 #ifdef __linux__
@@ -27,7 +27,7 @@ static auto spawn_child(di::Vector<di::TransparentStringView> command, dius::Syn
     // the child. Doing so requires using fork() instead of posix_spawn() when spawning the process, so
     // we try to avoid it. Additionally, opening the psudeo terminal implicitly will make it the controlling
     // terminal, so there's no need to call ioctl(TIOCSCTTY).
-    TRY(pty.set_tty_window_size(size));
+    TRY(pty.set_tty_window_size(size.as_window_size()));
 #endif
 
     return dius::system::Process(command | di::transform(di::to_owned) | di::to<di::Vector>())
@@ -44,9 +44,8 @@ static auto spawn_child(di::Vector<di::TransparentStringView> command, dius::Syn
         .spawn();
 }
 
-auto Pane::create_from_replay(di::PathView replay_path, di::Optional<di::Path> save_state_path,
-                              dius::tty::WindowSize size, di::Function<void(Pane&)> did_exit,
-                              di::Function<void(Pane&)> did_update,
+auto Pane::create_from_replay(di::PathView replay_path, di::Optional<di::Path> save_state_path, Size const& size,
+                              di::Function<void(Pane&)> did_exit, di::Function<void(Pane&)> did_update,
                               di::Function<void(di::Span<byte const>)> did_selection,
                               di::Function<void(di::StringView)> apc_passthrough) -> di::Result<di::Box<Pane>> {
     auto replay_file = TRY(dius::open_sync(replay_path, dius::OpenMode::Readonly));
@@ -115,7 +114,7 @@ auto Pane::create_from_replay(di::PathView replay_path, di::Optional<di::Path> s
     return pane;
 }
 
-auto Pane::create(CreatePaneArgs args, dius::tty::WindowSize size, di::Function<void(Pane&)> did_exit,
+auto Pane::create(CreatePaneArgs args, Size const& size, di::Function<void(Pane&)> did_exit,
                   di::Function<void(Pane&)> did_update, di::Function<void(di::Span<byte const>)> did_selection,
                   di::Function<void(di::StringView)> apc_passthrough) -> di::Result<di::Box<Pane>> {
     if (args.replay_path) {
@@ -128,8 +127,7 @@ auto Pane::create(CreatePaneArgs args, dius::tty::WindowSize size, di::Function<
         capture_file = TRY(dius::open_sync(args.capture_command_output_path.value(), dius::OpenMode::WriteClobber));
 
         // Write out inital terminal size information.
-        di::writer_print<di::String::Encoding>(capture_file.value(), "\033[4;{};{}t"_sv, size.pixel_height,
-                                               size.pixel_width);
+        di::writer_print<di::String::Encoding>(capture_file.value(), "\033[4;{};{}t"_sv, size.ypixels, size.xpixels);
         di::writer_print<di::String::Encoding>(capture_file.value(), "\033[8;{};{}t"_sv, size.rows, size.cols);
     }
 
@@ -228,20 +226,20 @@ Pane::~Pane() {
 auto Pane::draw(Renderer& renderer) -> RenderedCursor {
     return m_terminal.with_lock([&](Terminal& terminal) {
         if (terminal.allowed_to_draw()) {
-            for (auto const& [r, row] : di::enumerate(terminal.rows())) {
-                for (auto const& [c, cell] : di::enumerate(row)) {
+            auto& screen = terminal.active_screen().screen;
+            for (auto r : di::range(di::min(screen.max_height(), screen.row_count()))) {
+                for (auto [c, cell, text, graphics, hyperlink] : screen.iterate_row(r)) {
                     if (r < m_vertical_scroll_offset || c < m_horizontal_scroll_offset) {
                         continue;
                     }
-                    auto selected = in_selection({ u32(c), u32(r) + terminal.row_offset() });
-                    if (cell.dirty || selected) {
-                        cell.dirty = selected;
 
-                        auto sgr = cell.graphics_rendition;
-                        if (selected) {
-                            sgr.inverted = !sgr.inverted;
-                        }
-                        renderer.put_text(cell.ch, r - m_vertical_scroll_offset, c - m_horizontal_scroll_offset, sgr);
+                    if (text.empty()) {
+                        text = " "_sv;
+                    }
+
+                    if (cell.dirty) {
+                        // TODO: selection
+                        renderer.put_text(text, r, c, graphics);
                     }
                 }
             }
@@ -374,7 +372,7 @@ void Pane::invalidate_all() {
     });
 }
 
-void Pane::resize(dius::tty::WindowSize const& size) {
+void Pane::resize(Size const& size) {
     clear_selection();
     reset_scroll();
     m_terminal.with_lock([&](Terminal& terminal) {
@@ -483,24 +481,25 @@ auto Pane::selection_text() -> di::String {
 
     return m_terminal.with_lock([&](Terminal& terminal) -> di::String {
         auto text = ""_s;
-        for (auto r = start.y(); r <= end.y(); r++) {
-            auto row_text = ""_s;
-            auto iter_start_col = r == start.y() ? start.x() : 0;
-            auto iter_end_col = r == end.y() ? end.x() : terminal.col_count();
+        // TODO: selection text with scroll back
+        // for (auto r = start.y(); r <= end.y(); r++) {
+        //     auto row_text = ""_s;
+        //     auto iter_start_col = r == start.y() ? start.x() : 0;
+        //     auto iter_end_col = r == end.y() ? end.x() : terminal.col_count();
+        //
+        // for (auto c = iter_start_col; c < iter_end_col; c++) {
+        //     row_text.push_back(terminal.row_at_scroll_relative_offset(r)[c].ch);
+        // }
 
-            for (auto c = iter_start_col; c < iter_end_col; c++) {
-                row_text.push_back(terminal.row_at_scroll_relative_offset(r)[c].ch);
-            }
-
-            while (!row_text.empty() && *row_text.back() == ' ') {
-                row_text.pop_back();
-            }
-
-            text += row_text;
-            if (iter_end_col == terminal.col_count()) {
-                text.push_back('\n');
-            }
-        }
+        //     while (!row_text.empty() && *row_text.back() == ' ') {
+        //         row_text.pop_back();
+        //     }
+        //
+        //     text += row_text;
+        //     if (iter_end_col == terminal.col_count()) {
+        //         text.push_back('\n');
+        //     }
+        // }
         return text;
     });
 }

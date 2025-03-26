@@ -26,7 +26,7 @@ struct WriteString {
     di::String string;
 };
 
-using RenderEvent = di::Variant<dius::tty::WindowSize, PaneExited, InputStatus, WriteString, DoRender, Exit>;
+using RenderEvent = di::Variant<Size, PaneExited, InputStatus, WriteString, DoRender, Exit>;
 
 class RenderThread {
 public:

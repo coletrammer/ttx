@@ -4,11 +4,11 @@
 #include "di/meta/constexpr.h"
 #include "dius/print.h"
 #include "dius/sync_file.h"
-#include "dius/tty.h"
 #include "ttx/graphics_rendition.h"
+#include "ttx/size.h"
 
 namespace ttx {
-void Renderer::start(dius::tty::WindowSize size) {
+void Renderer::start(Size const& size) {
     m_buffer = {};
     m_size = size;
     m_row_offset = 0;

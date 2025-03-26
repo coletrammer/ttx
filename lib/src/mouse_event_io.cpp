@@ -9,6 +9,7 @@
 #include "ttx/modifiers.h"
 #include "ttx/mouse.h"
 #include "ttx/mouse_event.h"
+#include "ttx/size.h"
 
 namespace ttx {
 struct ButtonMapping {
@@ -138,7 +139,7 @@ static auto serialize_as_sgr(MouseEventType type, MouseButton button, MouseCoord
 
 auto serialize_mouse_event(MouseEvent const& event, MouseProtocol protocol, MouseEncoding encoding,
                            di::Optional<MousePosition> prev_event_position, MouseScrollProtocol const& scroll_protocol,
-                           dius::tty::WindowSize const& window_size) -> di::Optional<di::TransparentString> {
+                           Size const& size) -> di::Optional<di::TransparentString> {
     // Check if mouse scroll protocol applies. This means the base mouse protocol woulnt't report the scroll event.
     if ((protocol == MouseProtocol::None || protocol == MouseProtocol::X10) && event.is_vertical_scroll() &&
         event.type() == MouseEventType::Press) {
@@ -189,9 +190,9 @@ auto serialize_mouse_event(MouseEvent const& event, MouseProtocol protocol, Mous
 
     // SGR pixel mode uses pixels as the position.
     if (encoding == MouseEncoding::SGRPixels) {
-        position = event.position().in_pixels_with_fallback(window_size);
+        position = event.position().in_pixels_with_fallback(size);
         prev_position = prev_event_position.transform([&](MousePosition const& position) {
-            return position.in_pixels_with_fallback(window_size);
+            return position.in_pixels_with_fallback(size);
         });
     }
 
@@ -216,8 +217,7 @@ auto serialize_mouse_event(MouseEvent const& event, MouseProtocol protocol, Mous
     return {};
 }
 
-auto mouse_event_from_csi(CSI const& csi, di::Optional<dius::tty::WindowSize> window_size_if_using_pixels)
-    -> di::Optional<MouseEvent> {
+auto mouse_event_from_csi(CSI const& csi, di::Optional<Size const&> size_if_using_pixels) -> di::Optional<MouseEvent> {
     constexpr auto flags = u32(4 | 8 | 16 | 32);
 
     // For now, only the SGR format is supported. This looks like:
@@ -231,7 +231,7 @@ auto mouse_event_from_csi(CSI const& csi, di::Optional<dius::tty::WindowSize> wi
     auto button_code = params.get(0);
     auto x = params.get(1, 1);
     auto y = params.get(2, 1);
-    if (!window_size_if_using_pixels.has_value()) {
+    if (!size_if_using_pixels.has_value()) {
         // Prevent underflow if the terminal mistakenly sent 0 (the coordinates are 1 indexed).
         if (x != 0) {
             x--;
@@ -269,8 +269,8 @@ auto mouse_event_from_csi(CSI const& csi, di::Optional<dius::tty::WindowSize> wi
         return {};
     }
 
-    auto position = window_size_if_using_pixels.has_value()
-                        ? MousePosition::from_pixels({ x, y }, window_size_if_using_pixels.value())
+    auto position = size_if_using_pixels.has_value()
+                        ? MousePosition::from_pixels({ x, y }, size_if_using_pixels.value())
                         : MousePosition({ x, y });
     return MouseEvent(type, button.value(), position, modifiers);
 }

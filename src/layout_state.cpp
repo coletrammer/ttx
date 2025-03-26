@@ -1,10 +1,9 @@
 #include "layout_state.h"
 
 namespace ttx {
-LayoutState::LayoutState(dius::tty::WindowSize const& size, bool hide_status_bar)
-    : m_size(size), m_hide_status_bar(hide_status_bar) {}
+LayoutState::LayoutState(Size const& size, bool hide_status_bar) : m_size(size), m_hide_status_bar(hide_status_bar) {}
 
-void LayoutState::layout(di::Optional<dius::tty::WindowSize> size) {
+void LayoutState::layout(di::Optional<Size> size) {
     if (!size) {
         size = m_size;
     } else {

@@ -4,8 +4,8 @@
 #include "di/reflect/prelude.h"
 #include "di/vocab/pointer/box.h"
 #include "direction.h"
-#include "dius/tty.h"
 #include "ttx/pane.h"
+#include "ttx/size.h"
 
 namespace ttx {
 struct LayoutNode;
@@ -16,7 +16,7 @@ class LayoutGroup;
 struct LayoutEntry {
     u32 row { 0 };
     u32 col { 0 };
-    dius::tty::WindowSize size;
+    Size size;
     LayoutNode* parent { nullptr };
     Pane* pane { nullptr };
 
@@ -35,7 +35,7 @@ struct LayoutEntry {
 struct LayoutNode {
     u32 row { 0 };
     u32 col { 0 };
-    dius::tty::WindowSize size;
+    Size size;
     di::Vector<di::Variant<di::Box<LayoutNode>, LayoutEntry>> children;
     LayoutNode* parent { nullptr };
     LayoutGroup* group { nullptr };
@@ -92,7 +92,7 @@ public:
     // NOTE: this method returns the correct size for the new pane, and a lvalue reference where
     // the caller should store its newly created Pane. We need this akward API so that we can
     // create a Pane with a sane initial size.
-    auto split(dius::tty::WindowSize const& size, u32 row_offset, u32 col_offset, Pane* reference, Direction direction)
+    auto split(Size const& size, u32 row_offset, u32 col_offset, Pane* reference, Direction direction)
         -> di::Tuple<di::Box<LayoutNode>, di::Optional<LayoutEntry&>, di::Optional<di::Box<Pane>&>>;
 
     // NOTE: after removing a pane, calling layout() is necessary as any previous LayoutNode's may become invalid.
@@ -104,7 +104,7 @@ public:
 
     // NOTE: in addition to computing the layout tree, Pane::resize() is called to inform each Pane of its (potentially)
     // new size.
-    auto layout(dius::tty::WindowSize const& size, u32 row_offset, u32 col_offset) -> di::Box<LayoutNode>;
+    auto layout(Size const& size, u32 row_offset, u32 col_offset) -> di::Box<LayoutNode>;
 
 private:
     friend struct FindPaneInLayoutGroup;

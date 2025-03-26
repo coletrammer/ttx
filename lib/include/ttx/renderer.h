@@ -3,9 +3,9 @@
 #include "di/container/string/string_view.h"
 #include "di/io/vector_writer.h"
 #include "dius/sync_file.h"
-#include "dius/tty.h"
 #include "ttx/cursor_style.h"
 #include "ttx/graphics_rendition.h"
+#include "ttx/size.h"
 
 namespace ttx {
 struct RenderedCursor {
@@ -17,7 +17,7 @@ struct RenderedCursor {
 
 class Renderer {
 public:
-    void start(dius::tty::WindowSize size);
+    void start(Size const& size);
     auto finish(dius::SyncFile& output, RenderedCursor const& cursor) -> di::Result<>;
 
     void put_text(di::StringView text, u32 row, u32 col, GraphicsRendition const& graphics_rendition = {});
@@ -29,7 +29,7 @@ public:
 
 private:
     di::VectorWriter<> m_buffer;
-    dius::tty::WindowSize m_size;
+    Size m_size;
 
     GraphicsRendition m_last_graphics_rendition;
     u32 m_last_cursor_row { 0 };

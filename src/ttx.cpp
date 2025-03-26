@@ -79,8 +79,8 @@ static auto main(Args& args) -> di::Result<void> {
     }
 
     // Setup - initial state and terminal size.
-    auto initial_size =
-        args.headless ? dius::tty::WindowSize { 25, 80, 25 * 16, 80 * 16 } : TRY(dius::stdin.get_tty_window_size());
+    auto initial_size = args.headless ? Size { 25, 80, 25 * 16, 80 * 16 }
+                                      : Size::from_window_size(TRY(dius::stdin.get_tty_window_size()));
     auto layout_state = di::Synchronized(LayoutState(initial_size, args.hide_status_bar));
 
     // Setup - raw mode
@@ -212,7 +212,7 @@ static auto main(Args& args) -> di::Result<void> {
             continue;
         }
 
-        render_thread->push_event(size.value());
+        render_thread->push_event(Size::from_window_size(size.value()));
     }
 
     return {};
