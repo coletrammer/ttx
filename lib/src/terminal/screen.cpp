@@ -33,21 +33,7 @@ void Screen::resize(Size const& size) {
             auto text_bytes_to_delete = 0zu;
             while (row.cells.size() > size.cols) {
                 auto cell = *row.cells.pop_back();
-                if (cell.graphics_rendition_id) {
-                    m_graphics_renditions.drop_id(cell.graphics_rendition_id);
-                    cell.graphics_rendition_id = 0;
-                }
-
-                if (cell.hyperlink_id) {
-                    m_hyperlinks.drop_id(cell.hyperlink_id);
-                    cell.hyperlink_id = 0;
-                }
-
-                // TODO: clear the whole multi cell here.
-                if (cell.multicell_id) {
-                    m_multi_cell_info.drop_id(cell.multicell_id);
-                    cell.multicell_id = 0;
-                }
+                drop_cell(cell);
 
                 text_bytes_to_delete += cell.text_size;
             }
@@ -208,17 +194,122 @@ void Screen::delete_characters(u32 count) {}
 
 void Screen::delete_lines(u32 count) {}
 
-void Screen::clear() {}
+void Screen::clear() {
+    // NOTE: to properly implement "bce", we'd have to actually
+    // apply the current background color to all cells. For now, just
+    // delete everything. We may choose to never support bce properly
+    // like kitty, since it allows us to optimize clearing by fully
+    // deleting all cells.
 
-void Screen::clear_below_cursor() {}
+    for (auto& row : m_rows) {
+        for (auto& cell : row.cells) {
+            drop_cell(cell);
+            cell.text_size = 0;
+        }
+        row.text.clear();
+        row.overflow = false;
+    }
+    m_rows.clear();
 
-void Screen::clear_above_cursor() {}
+    // After clearing, there is no text.
+    m_cursor.text_offset = 0;
+}
 
-void Screen::clear_row() {}
+void Screen::clear_after_cursor() {
+    // First, clear the current cursor row.
+    clear_row_after_cursor();
 
-void Screen::clear_row_after_cursor() {}
+    // Now we just need to delete all lines below the cursor. As above, implementing
+    // "bce" would require more work.
+    if (m_cursor.row + 1 == max_height()) {
+        return;
+    }
+    for (auto r = row_index(m_cursor.row + 1); r < m_rows.size(); r++) {
+        auto& row = m_rows[r];
+        for (auto& cell : row.cells) {
+            drop_cell(cell);
+            cell.text_size = 0;
+        }
+        row.text.clear();
+        row.overflow = false;
+    }
+    m_rows.erase(row_iterator(m_cursor.row + 1), m_rows.end());
+}
 
-void Screen::clear_row_before_cursor() {}
+void Screen::clear_before_cursor() {
+    // First, clear the current cursor row.
+    clear_row_before_cursor();
+
+    // Now delete all lines before the cursor. As above, implementing
+    // "bce" would require more work. However, we don't actually delete
+    // the rows here because rows are always assumed to start at the top
+    // of the screen.
+    if (m_cursor.row == 0) {
+        return;
+    }
+    for (auto r = 0zu; r < row_index(m_cursor.row); r++) {
+        auto& row = m_rows[r];
+        for (auto& cell : row.cells) {
+            drop_cell(cell);
+            cell.text_size = 0;
+        }
+        row.text.clear();
+        row.overflow = false;
+    }
+}
+
+void Screen::clear_row() {
+    auto it = row_iterator(m_cursor.row);
+    if (it == m_rows.end()) {
+        return;
+    }
+
+    auto& row = *it;
+    for (auto& cell : row.cells) {
+        drop_cell(cell);
+        cell.text_size = 0;
+    }
+    row.text.clear();
+    row.overflow = false;
+
+    // We deleted all the text on the cursor's row.
+    m_cursor.text_offset = 0;
+}
+
+void Screen::clear_row_after_cursor() {
+    auto it = row_iterator(m_cursor.row);
+    if (it == m_rows.end()) {
+        return;
+    }
+
+    auto& row = *it;
+    for (auto& cell : row.cells | di::drop(m_cursor.col)) {
+        drop_cell(cell);
+        cell.text_size = 0;
+    }
+    row.overflow = false;
+}
+
+void Screen::clear_row_before_cursor() {
+    auto it = row_iterator(m_cursor.row);
+    if (it == m_rows.end()) {
+        return;
+    }
+
+    auto& row = *it;
+    for (auto& cell : row.cells | di::take(m_cursor.col)) {
+        drop_cell(cell);
+        cell.text_size = 0;
+    }
+
+    // Delete all text before the cursor.
+    auto text_end = row.text.iterator_at_offset(m_cursor.text_offset);
+    ASSERT(text_end);
+    row.text.erase(row.text.begin(), text_end.value());
+
+    // We deleted all the text before the cursor.
+    m_cursor.text_offset = 0;
+}
 
 void Screen::scroll_down() {
     ASSERT_EQ(m_cursor.row + 1, max_height());
@@ -255,28 +346,15 @@ void Screen::put_single_cell(di::StringView text) {
         return;
     }
 
-    // Modify the cell with the new attributes.
+    // Modify the cell with the new attributes, starting by clearing the old attributes.
     auto& cell = row.cells[m_cursor.col];
-    if (cell.graphics_rendition_id) {
-        m_graphics_renditions.drop_id(cell.graphics_rendition_id);
-        cell.graphics_rendition_id = 0;
-    }
+    drop_cell(cell);
+
     if (m_graphics_id) {
         cell.graphics_rendition_id = m_graphics_renditions.use_id(m_graphics_id);
     }
-
-    if (cell.hyperlink_id) {
-        m_hyperlinks.drop_id(cell.hyperlink_id);
-        cell.hyperlink_id = 0;
-    }
     if (m_hyperlink_id) {
         cell.hyperlink_id = m_hyperlinks.use_id(m_hyperlink_id);
-    }
-
-    // TODO: clear the entire multi cell if there was one.
-    if (cell.multicell_id) {
-        m_multi_cell_info.drop_id(cell.multicell_id);
-        cell.multicell_id = 0;
     }
 
     // Insert the text. We can safely assert the iterator is valid because we compute the text offset in all cases
@@ -290,7 +368,7 @@ void Screen::put_single_cell(di::StringView text) {
     cell.text_size = text.size_bytes();
 
     // Mark cell as dirty.
-    cell.dirty = true;
+    cell.stale = false;
 
     // Advance the cursor 1 cell.
     auto new_cursor = m_cursor;
@@ -306,9 +384,18 @@ void Screen::put_single_cell(di::StringView text) {
 void Screen::invalidate_all() {
     for (auto& row : m_rows) {
         for (auto& cell : row.cells) {
-            cell.dirty = true;
+            cell.stale = false;
         }
     }
+}
+
+auto Screen::row_index(u32 row) const -> usize {
+    ASSERT_LT(row, max_height());
+
+    if (m_rows.size() > max_height()) {
+        return row + (m_rows.size() - max_height());
+    }
+    return row;
 }
 
 auto Screen::get_row(u32 row) -> Row& {
@@ -342,5 +429,29 @@ void Screen::drop_graphics_id(u16& id) {
         m_graphics_renditions.drop_id(id);
         id = 0;
     }
+}
+
+void Screen::drop_hyperlink_id(u16& id) {
+    if (id) {
+        m_hyperlinks.drop_id(id);
+        id = 0;
+    }
+}
+
+void Screen::drop_multi_cell_id(u16& id) {
+    if (id) {
+        m_multi_cell_info.drop_id(id);
+        id = 0;
+    }
+}
+
+void Screen::drop_cell(Cell& cell) {
+    drop_graphics_id(cell.graphics_rendition_id);
+    drop_hyperlink_id(cell.hyperlink_id);
+
+    // TODO: clear the whole multi cell here.
+    drop_multi_cell_id(cell.multicell_id);
+
+    cell.stale = false;
 }
 }

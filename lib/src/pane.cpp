@@ -227,7 +227,8 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
     return m_terminal.with_lock([&](Terminal& terminal) {
         if (terminal.allowed_to_draw()) {
             auto& screen = terminal.active_screen().screen;
-            for (auto r : di::range(di::min(screen.max_height(), screen.row_count()))) {
+            auto rows_to_draw = di::min(screen.max_height(), screen.row_count());
+            for (auto r : di::range(rows_to_draw)) {
                 for (auto [c, cell, text, graphics, hyperlink] : screen.iterate_row(r)) {
                     if (r < m_vertical_scroll_offset || c < m_horizontal_scroll_offset) {
                         continue;
@@ -237,11 +238,16 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
                         text = " "_sv;
                     }
 
-                    if (cell.dirty) {
+                    if (!cell.stale) {
                         // TODO: selection
                         renderer.put_text(text, r, c, graphics);
+                        cell.stale = true;
                     }
                 }
+            }
+            // Clear any blank rows after the terminal.
+            for (auto r : di::range(rows_to_draw, terminal.visible_size().rows)) {
+                renderer.clear_row(r);
             }
         }
         return RenderedCursor {

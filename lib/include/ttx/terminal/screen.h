@@ -58,8 +58,8 @@ public:
     void delete_lines(u32 count);
 
     void clear();
-    void clear_below_cursor();
-    void clear_above_cursor();
+    void clear_after_cursor();
+    void clear_before_cursor();
 
     void clear_row();
     void clear_row_after_cursor();
@@ -102,9 +102,27 @@ public:
     }
 
 private:
+    auto row_iterator(u32 row) {
+        ASSERT_LT(row, max_height());
+
+        if (row >= m_rows.size()) {
+            return m_rows.end();
+        }
+        if (m_rows.size() > max_height()) {
+            return m_rows.begin() + row + (m_rows.size() - max_height());
+        }
+        return m_rows.begin() + row;
+    }
+    auto row_index(u32 row) const -> usize;
     auto get_row(u32 row) -> Row&;
 
     void drop_graphics_id(u16& id);
+    void drop_hyperlink_id(u16& id);
+    void drop_multi_cell_id(u16& id);
+
+    /// This function does not remove the text associated with the cell, as the caller typically has enough
+    /// context to do this more efficiently (because they are erasing multiple cells).
+    void drop_cell(Cell& cell);
 
     // Screen state.
     di::Ring<Row> m_rows;

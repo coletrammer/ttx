@@ -20,8 +20,8 @@ public:
     void start(Size const& size);
     auto finish(dius::SyncFile& output, RenderedCursor const& cursor) -> di::Result<>;
 
-    void put_text(di::StringView text, u32 row, u32 col, GraphicsRendition const& graphics_rendition = {});
-    void put_text(c32 text, u32 row, u32 col, GraphicsRendition const& graphics_rendition = {});
+    void put_text(di::StringView text, u32 row, u32 col, GraphicsRendition const& rendition = {});
+    void put_text(c32 text, u32 row, u32 col, GraphicsRendition const& rendition = {});
 
     void clear_row(u32 row, GraphicsRendition const& graphics_rendition = {});
 

@@ -514,11 +514,11 @@ void Terminal::csi_cha(Params const& params) {
 void Terminal::csi_ed(Params const& params) {
     switch (params.get(0, 0)) {
         case 0: {
-            active_screen().screen.clear_below_cursor();
+            active_screen().screen.clear_after_cursor();
             return;
         }
         case 1: {
-            active_screen().screen.clear_above_cursor();
+            active_screen().screen.clear_before_cursor();
             return;
         }
         case 2: {
@@ -1033,8 +1033,9 @@ void Terminal::set_use_alternate_screen_buffer(bool b) {
     }
 
     if (b) {
+        auto current_size = size();
         m_alternate_screen = di::make_box<ScreenState>();
-        m_alternate_screen->screen.resize(size());
+        m_alternate_screen->screen.resize(current_size);
     } else {
         ASSERT(m_alternate_screen);
         m_alternate_screen = {};
