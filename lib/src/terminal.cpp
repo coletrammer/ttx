@@ -1022,9 +1022,7 @@ void Terminal::clear() {
 }
 
 void Terminal::put_char(c32 c) {
-    auto code_units = di::encoding::convert_to_code_units(di::String::Encoding(), c);
-    auto view = di::StringView(di::encoding::assume_valid, code_units.begin(), code_units.end());
-    active_screen().screen.put_single_cell(view);
+    active_screen().screen.put_code_point(c);
 }
 
 void Terminal::set_use_alternate_screen_buffer(bool b) {

@@ -23,11 +23,16 @@ public:
     void put_text(di::StringView text, u32 row, u32 col, GraphicsRendition const& rendition = {});
     void put_text(c32 text, u32 row, u32 col, GraphicsRendition const& rendition = {});
 
+    void put_cell(di::StringView text, u32 row, u32 col, GraphicsRendition const& rendition = {});
+
     void clear_row(u32 row, GraphicsRendition const& graphics_rendition = {});
 
     void set_bound(u32 row, u32 col, u32 width, u32 height);
 
 private:
+    void move_cursor_to(u32 row, u32 col);
+    void set_graphics_rendition(GraphicsRendition const& rendition);
+
     di::VectorWriter<> m_buffer;
     Size m_size;
 

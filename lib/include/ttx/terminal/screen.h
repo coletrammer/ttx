@@ -66,7 +66,7 @@ public:
     void clear_row_before_cursor();
 
     void scroll_down();
-    void put_single_cell(di::StringView text);
+    void put_code_point(c32 code_point);
 
     void invalidate_all();
 
@@ -102,6 +102,8 @@ public:
     }
 
 private:
+    void put_single_cell(di::StringView text);
+
     auto row_iterator(u32 row) {
         ASSERT_LT(row, max_height());
 

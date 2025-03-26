@@ -240,7 +240,7 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
 
                     if (!cell.stale) {
                         // TODO: selection
-                        renderer.put_text(text, r, c, graphics);
+                        renderer.put_cell(text, r, c, graphics);
                         cell.stale = true;
                     }
                 }

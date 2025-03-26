@@ -54,20 +54,8 @@ void Renderer::put_text(di::StringView text, u32 row, u32 col, GraphicsRendition
 
     row += m_row_offset;
     col += m_col_offset;
-
-    if (m_last_cursor_row != row || m_last_cursor_col != col) {
-        m_last_cursor_row = row;
-        m_last_cursor_col = col;
-        di::writer_print<di::String::Encoding>(m_buffer, "\033[{};{}H"_sv, row + 1, col + 1);
-    }
-
-    if (m_last_graphics_rendition != rendition) {
-        m_last_graphics_rendition = rendition;
-
-        for (auto& params : rendition.as_csi_params()) {
-            di::writer_print<di::String::Encoding>(m_buffer, "\033[{}m"_sv, params);
-        }
-    }
+    move_cursor_to(row, col);
+    set_graphics_rendition(rendition);
 
     for (auto code_point : truncated_text) {
         di::writer_print<di::String::Encoding>(m_buffer, "{}"_sv, code_point);
@@ -81,6 +69,21 @@ void Renderer::put_text(c32 text, u32 row, u32 col, GraphicsRendition const& ren
     put_text(string.view(), row, col, rendition);
 }
 
+void Renderer::put_cell(di::StringView text, u32 row, u32 col, GraphicsRendition const& rendition) {
+    if (col >= m_bound_width || row >= m_bound_height) {
+        return;
+    }
+
+    row += m_row_offset;
+    col += m_col_offset;
+    move_cursor_to(row, col);
+    set_graphics_rendition(rendition);
+
+    // NOTE: this assumes the text fits in a single cell., which may not be accurate...
+    di::writer_print<di::String::Encoding>(m_buffer, "{}"_sv, text);
+    m_last_cursor_col++;
+}
+
 void Renderer::clear_row(u32 row, GraphicsRendition const& rendition) {
     if (row >= m_bound_height) {
         return;
@@ -88,6 +91,24 @@ void Renderer::clear_row(u32 row, GraphicsRendition const& rendition) {
 
     for (auto c : di::range(m_bound_width)) {
         put_text(U' ', row, c, rendition);
+    }
+}
+
+void Renderer::move_cursor_to(u32 row, u32 col) {
+    if (m_last_cursor_row != row || m_last_cursor_col != col) {
+        m_last_cursor_row = row;
+        m_last_cursor_col = col;
+        di::writer_print<di::String::Encoding>(m_buffer, "\033[{};{}H"_sv, row + 1, col + 1);
+    }
+}
+
+void Renderer::set_graphics_rendition(GraphicsRendition const& rendition) {
+    if (m_last_graphics_rendition != rendition) {
+        m_last_graphics_rendition = rendition;
+
+        for (auto& params : rendition.as_csi_params()) {
+            di::writer_print<di::String::Encoding>(m_buffer, "\033[{}m"_sv, params);
+        }
     }
 }
 
