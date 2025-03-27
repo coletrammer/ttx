@@ -23,6 +23,7 @@ using TerminalEvent = di::Variant<SetClipboard>;
 class Terminal {
     struct ScreenState {
         terminal::Screen screen;
+        di::Optional<terminal::SavedCursor> saved_cursor;
         CursorStyle cursor_style { CursorStyle::SteadyBar };
     };
 

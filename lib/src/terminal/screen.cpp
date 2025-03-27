@@ -3,6 +3,7 @@
 #include "di/util/scope_exit.h"
 #include "dius/print.h"
 #include "ttx/graphics_rendition.h"
+#include "ttx/terminal/cell.h"
 #include "ttx/terminal/cursor.h"
 
 namespace ttx::terminal {
@@ -123,6 +124,22 @@ auto Screen::text_at_cursor() -> di::StringView {
     return row.text.substr(text_start.value(), text_end.value());
 }
 
+auto Screen::save_cursor() const -> SavedCursor {
+    return {
+        .row = m_cursor.row,
+        .col = m_cursor.col,
+        .overflow_pending = m_cursor.overflow_pending,
+    };
+}
+
+void Screen::restore_cursor(SavedCursor const& cursor) {
+    set_cursor(cursor.row, cursor.col);
+
+    // This is restored even if the terminal has been resized such that
+    // the cursor is no longer at the end of the row.
+    m_cursor.overflow_pending = cursor.overflow_pending;
+}
+
 void Screen::set_cursor(u32 row, u32 col) {
     // Setting the cursor always clears the overflow pending flag.
     m_cursor.overflow_pending = false;
@@ -188,15 +205,53 @@ void Screen::set_cursor_col(u32 col) {
     m_cursor.col = col;
 }
 
-void Screen::insert_blank_characters(u32 count) {}
+void Screen::insert_blank_characters(u32 count) {
+    m_cursor.overflow_pending = false;
 
-void Screen::insert_blank_lines(u32 count) {}
+    auto it = row_iterator(m_cursor.row);
+    if (it == m_rows.end()) {
+        return;
+    }
 
-void Screen::delete_characters(u32 count) {}
+    // TODO: horizontal scrolling region
 
-void Screen::delete_lines(u32 count) {}
+    // Start by dropping the correct number of cells, based on how many new ones we need
+    // to insert.
+    auto& row = *it;
+    auto max_to_insert = di::min(count, max_width() - m_cursor.col);
+    auto text_size_to_remove = 0zu;
+    for (auto& cell : row.cells | di::drop(max_width() - max_to_insert)) {
+        drop_cell(cell);
+        text_size_to_remove += cell.text_size;
+        cell.text_size = 0;
+    }
+    row.cells.erase(row.cells.end() - max_to_insert, row.cells.end());
+
+    // Erase the text of the deleted cells.
+    auto text_start = row.text.iterator_at_offset(row.text.size_bytes() - text_size_to_remove);
+    ASSERT(text_start);
+    row.text.erase(text_start.value(), row.text.end());
+
+    // Finally, insert the blank cells. The cursor position is unchanged, as is
+    // the cursor byte offset.
+    row.cells.insert_container(row.cells.begin() + m_cursor.col, di::repeat(Cell(), max_to_insert));
+}
+
+void Screen::insert_blank_lines(u32 count) {
+    // TODO: vertical scrolling region
+}
+
+void Screen::delete_characters(u32 count) {
+    // TODO: horizontal scrolling region
+}
+
+void Screen::delete_lines(u32 count) {
+    // TODO: vertical scrolling region
+}
 
 void Screen::clear() {
+    m_cursor.overflow_pending = false;
+
     // NOTE: to properly implement "bce", we'd have to actually
     // apply the current background color to all cells. For now, just
     // delete everything. We may choose to never support bce properly
@@ -220,6 +275,7 @@ void Screen::clear() {
 void Screen::clear_after_cursor() {
     // First, clear the current cursor row.
     clear_row_after_cursor();
+    ASSERT(!m_cursor.overflow_pending);
 
     // Now we just need to delete all lines below the cursor. As above, implementing
     // "bce" would require more work.
@@ -241,6 +297,7 @@ void Screen::clear_after_cursor() {
 void Screen::clear_before_cursor() {
     // First, clear the current cursor row.
     clear_row_before_cursor();
+    ASSERT(!m_cursor.overflow_pending);
 
     // Now delete all lines before the cursor. As above, implementing
     // "bce" would require more work. However, we don't actually delete
@@ -261,6 +318,8 @@ void Screen::clear_before_cursor() {
 }
 
 void Screen::clear_row() {
+    m_cursor.overflow_pending = false;
+
     auto it = row_iterator(m_cursor.row);
     if (it == m_rows.end()) {
         return;
@@ -279,6 +338,8 @@ void Screen::clear_row() {
 }
 
 void Screen::clear_row_after_cursor() {
+    m_cursor.overflow_pending = false;
+
     auto it = row_iterator(m_cursor.row);
     if (it == m_rows.end()) {
         return;
@@ -293,6 +354,8 @@ void Screen::clear_row_after_cursor() {
 }
 
 void Screen::clear_row_before_cursor() {
+    m_cursor.overflow_pending = false;
+
     auto it = row_iterator(m_cursor.row);
     if (it == m_rows.end()) {
         return;

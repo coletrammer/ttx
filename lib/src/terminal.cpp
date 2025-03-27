@@ -454,13 +454,17 @@ void Terminal::esc_decaln() {
 
 // DEC Save Cursor - https://vt100.net/docs/vt510-rm/DECSC.html
 void Terminal::esc_decsc() {
-    // TODO: cursor save/restore
-    // save_pos();
+    auto& screen_state = active_screen();
+    screen_state.saved_cursor = screen_state.screen.save_cursor();
 }
 
 // DEC Restore Cursor - https://vt100.net/docs/vt510-rm/DECRC.html
 void Terminal::esc_decrc() {
-    // restore_pos();
+    auto& screen_state = active_screen();
+    if (screen_state.saved_cursor) {
+        screen_state.screen.restore_cursor(screen_state.saved_cursor.value());
+        screen_state.saved_cursor = {};
+    }
 }
 
 // Insert Character - https://vt100.net/docs/vt510-rm/ICH.html
@@ -869,12 +873,14 @@ void Terminal::csi_decstbm(Params const& params) {
 
 // Save Current Cursor Position - https://vt100.net/docs/vt510-rm/SCOSC.html
 void Terminal::csi_scosc(Params const&) {
-    // TODO: save/restore cursor
+    // Equivalent to DECSC (set cursor)
+    esc_decsc();
 }
 
 // Restore Saved Cursor Position - https://vt100.net/docs/vt510-rm/SCORC.html
 void Terminal::csi_scorc(Params const&) {
-    // TODO: save/restore cursor
+    // Equivalent to DECRC (restore cursor)
+    esc_decrc();
 }
 
 // Window manipulation -

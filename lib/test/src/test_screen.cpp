@@ -149,6 +149,14 @@ static void cursor_movement() {
     screen.set_cursor(1000, 1000);
     expected = { .row = 4, .col = 4, .text_offset = 4 };
     ASSERT_EQ(screen.cursor(), expected);
+
+    screen.restore_cursor({ 4, 4, true });
+    expected = { .row = 4, .col = 4, .text_offset = 4, .overflow_pending = true };
+    ASSERT_EQ(screen.cursor(), expected);
+
+    screen.set_cursor(4, 4);
+    expected = { .row = 4, .col = 4, .text_offset = 4 };
+    ASSERT_EQ(screen.cursor(), expected);
 }
 
 static void clear_row() {
@@ -161,17 +169,20 @@ static void clear_row() {
                      u8"pqrst"
                      u8"uvwxy"_sv);
 
-    screen.set_cursor(0, 2);
+    screen.restore_cursor({ 0, 2, true });
     screen.clear_row_after_cursor();
     ASSERT_EQ(screen.cursor().text_offset, 2);
+    ASSERT_EQ(screen.cursor().overflow_pending, false);
 
-    screen.set_cursor(1, 2);
+    screen.restore_cursor({ 1, 2, true });
     screen.clear_row_before_cursor();
     ASSERT_EQ(screen.cursor().text_offset, 0);
+    ASSERT_EQ(screen.cursor().overflow_pending, false);
 
-    screen.set_cursor(2, 2);
+    screen.restore_cursor({ 2, 4, true });
     screen.clear_row();
     ASSERT_EQ(screen.cursor().text_offset, 0);
+    ASSERT_EQ(screen.cursor().overflow_pending, false);
 
     validate_text(screen, "ab   \n"
                           "  hij\n"
@@ -190,13 +201,15 @@ static void clear_screen() {
                      u8"pqrst"
                      u8"uvwxy"_sv);
 
-    screen.set_cursor(2, 2);
+    screen.restore_cursor({ 2, 2, true });
     screen.clear_before_cursor();
     ASSERT_EQ(screen.cursor().text_offset, 0);
+    ASSERT_EQ(screen.cursor().overflow_pending, false);
 
-    screen.set_cursor(3, 1);
+    screen.restore_cursor({ 3, 1, true });
     screen.clear_after_cursor();
     ASSERT_EQ(screen.cursor().text_offset, 1);
+    ASSERT_EQ(screen.cursor().overflow_pending, false);
 
     validate_text(screen, u8"     \n"
                           u8"     \n"
@@ -215,9 +228,10 @@ static void clear_all() {
                      u8"pqrst"
                      u8"uvwxy"_sv);
 
-    screen.set_cursor(2, 2);
+    screen.restore_cursor({ 2, 2, true });
     screen.clear();
     ASSERT_EQ(screen.cursor().text_offset, 0);
+    ASSERT_EQ(screen.cursor().overflow_pending, false);
 
     validate_text(screen, "     \n"
                           "     \n"
@@ -226,10 +240,45 @@ static void clear_all() {
                           "     "_sv);
 }
 
+static void insert_blank_characters() {
+    auto screen = Screen {};
+    screen.resize({ 5, 5 });
+
+    put_text(screen, u8"abcde"
+                     u8"fghij"
+                     u8"$¢€𐍈x"
+                     u8"pqrst"
+                     u8"uvwxy"_sv);
+
+    auto expected = Cursor {};
+    screen.restore_cursor({ 0, 0, true });
+    screen.insert_blank_characters(0); // No-op, but clears cursor overflow pending.
+    ASSERT_EQ(screen.cursor(), expected);
+    screen.insert_blank_characters(1);
+    ASSERT_EQ(screen.cursor(), expected);
+
+    screen.set_cursor(1, 1);
+    screen.insert_blank_characters(2000000);
+    expected = { .row = 1, .col = 1, .text_offset = 1 };
+    ASSERT_EQ(screen.cursor(), expected);
+
+    screen.set_cursor(2, 2);
+    screen.insert_blank_characters(2);
+    expected = { .row = 2, .col = 2, .text_offset = 3 };
+    ASSERT_EQ(screen.cursor(), expected);
+
+    validate_text(screen, u8" abcd\n"
+                          u8"f    \n"
+                          u8"$¢  €\n"
+                          u8"pqrst\n"
+                          u8"uvwxy"_sv);
+}
+
 TEST(screen, put_text_basic)
 TEST(screen, put_text_unicode)
 TEST(screen, cursor_movement)
 TEST(screen, clear_row)
 TEST(screen, clear_screen)
 TEST(screen, clear_all)
+TEST(screen, insert_blank_characters)
 }

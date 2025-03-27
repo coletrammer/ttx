@@ -47,6 +47,9 @@ public:
     auto cursor() const -> Cursor { return m_cursor; }
     auto text_at_cursor() -> di::StringView;
 
+    auto save_cursor() const -> SavedCursor;
+    void restore_cursor(SavedCursor const& cursor);
+
     void set_cursor(u32 row, u32 col);
     void set_cursor_row(u32 row);
     void set_cursor_col(u32 col);
