@@ -232,21 +232,122 @@ void Screen::insert_blank_characters(u32 count) {
     ASSERT(text_start);
     row.text.erase(text_start.value(), row.text.end());
 
-    // Finally, insert the blank cells. The cursor position is unchanged, as is
+    // Finally, insert the blank cells. Note that to implement bce this would need to
+    // preserve the background color. The cursor position is unchanged, as is
     // the cursor byte offset.
     row.cells.insert_container(row.cells.begin() + m_cursor.col, di::repeat(Cell(), max_to_insert));
+    row.overflow = false;
 }
 
 void Screen::insert_blank_lines(u32 count) {
     // TODO: vertical scrolling region
+
+    // Start by dropping the correct number of rows. We're deleting rows at the end
+    // of the screen.
+    auto max_to_insert = di::min(count, max_height() - m_cursor.row);
+    auto delete_row_it = row_iterator(max_height() - max_to_insert);
+    for (auto it = delete_row_it; it != m_rows.end(); ++it) {
+        auto& row = *it;
+        for (auto& cell : row.cells) {
+            drop_cell(cell);
+            cell.text_size = 0;
+        }
+        row.text.clear();
+        row.overflow = false;
+    }
+    m_rows.erase(delete_row_it, m_rows.end());
+
+    if (m_cursor.row > 0) {
+        get_row(m_cursor.row - 1); // Ensure the rows have been fully populated. TODO: remove
+    }
+    // Now insert the blank lines. To implement bce we'd need to copy the background color.
+    // TODO: use di::Ring::insert_container() instead of this loop (once implemented in di).
+    auto insert_row_it = row_iterator(m_cursor.row);
+    for (auto _ : di::range(max_to_insert)) {
+        insert_row_it = m_rows.emplace(insert_row_it);
+        insert_row_it->cells.resize(max_width());
+    }
+
+    // Now set the cursor to the left margin.
+    m_cursor.text_offset = 0;
+    m_cursor.col = 0;
+    m_cursor.overflow_pending = false;
+
+    // TODO: optimize!
+    invalidate_all();
 }
 
 void Screen::delete_characters(u32 count) {
-    // TODO: horizontal scrolling region
+    m_cursor.overflow_pending = false;
+
+    auto it = row_iterator(m_cursor.row);
+    if (it == m_rows.end()) {
+        return;
+    }
+
+    // TODO: vertical scrolling region
+
+    // Start by dropping the correct number of cells, based on how many new ones we need
+    // to insert.
+    auto& row = *it;
+    auto max_to_delete = di::min(count, max_width() - m_cursor.col);
+    auto text_size_to_remove = 0zu;
+    for (auto& cell : row.cells | di::drop(m_cursor.col) | di::take(max_to_delete)) {
+        drop_cell(cell);
+        text_size_to_remove += cell.text_size;
+        cell.text_size = 0;
+    }
+    row.cells.erase(row.cells.begin() + m_cursor.col, row.cells.begin() + m_cursor.col + max_to_delete);
+
+    // Erase the text of the deleted cells.
+    auto text_start = row.text.iterator_at_offset(m_cursor.text_offset);
+    auto text_end = row.text.iterator_at_offset(m_cursor.text_offset + text_size_to_remove);
+    ASSERT(text_start);
+    ASSERT(text_end);
+    row.text.erase(text_start.value(), text_end.value());
+
+    // Insert blank cells at the end of the row. Note that to implement bce this would need to
+    // preserve the background color. The cursor position is unchanged, as is the cursor byte offset.
+    row.cells.resize(max_width());
+    row.overflow = false;
 }
 
 void Screen::delete_lines(u32 count) {
     // TODO: vertical scrolling region
+
+    // Start by dropping the correct number of rows. We're deleting starting from
+    // the cursor row.
+    auto max_to_delete = di::min(count, max_height() - m_cursor.row);
+    auto delete_row_it = row_iterator(m_cursor.row);
+    auto delete_row_end = di::next(delete_row_it, max_to_delete, m_rows.end());
+    for (auto it = delete_row_it; it != delete_row_end; ++it) {
+        auto& row = *it;
+        for (auto& cell : row.cells) {
+            drop_cell(cell);
+            cell.text_size = 0;
+        }
+        row.text.clear();
+        row.overflow = false;
+    }
+    m_rows.erase(delete_row_it, delete_row_end);
+
+    // Add blank lines to the end of the screen. If we supported bce we'd need to copy the
+    // background color.
+    // TODO: use di::Ring::insert_container() instead of this loop (once implemented in di).
+    auto insert_row_it = m_rows.end();
+    ;
+    for (auto _ : di::range(max_to_delete)) {
+        insert_row_it = m_rows.emplace(insert_row_it);
+        insert_row_it->cells.resize(max_width());
+    }
+
+    // Now set the cursor to the left margin.
+    m_cursor.text_offset = 0;
+    m_cursor.col = 0;
+    m_cursor.overflow_pending = false;
+
+    // TODO: optimize!
+    invalidate_all();
 }
 
 void Screen::clear() {

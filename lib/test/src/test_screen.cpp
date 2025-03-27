@@ -1,4 +1,5 @@
 #include "di/test/prelude.h"
+#include "dius/print.h"
 #include "ttx/terminal/screen.h"
 
 namespace screen {
@@ -7,6 +8,20 @@ using namespace ttx::terminal;
 static void put_text(Screen& screen, di::StringView text) {
     for (auto code_point : text) {
         screen.put_code_point(code_point);
+    }
+}
+
+[[maybe_unused]] static void print_text(Screen& screen) {
+    for (auto i : di::range(screen.max_height())) {
+        dius::print("\""_sv);
+        for (auto row : screen.iterate_row(i)) {
+            auto [_, _, text, _, _] = row;
+            if (text.empty()) {
+                text = " "_sv;
+            }
+            dius::print("{}"_sv, text);
+        }
+        dius::println("\""_sv);
     }
 }
 
@@ -274,6 +289,98 @@ static void insert_blank_characters() {
                           u8"uvwxy"_sv);
 }
 
+static void delete_characters() {
+    auto screen = Screen {};
+    screen.resize({ 5, 5 });
+
+    put_text(screen, u8"abcde"
+                     u8"fghij"
+                     u8"$¢€𐍈x"
+                     u8"pqrst"
+                     u8"uvwxy"_sv);
+
+    auto expected = Cursor {};
+    screen.restore_cursor({ 0, 0, true });
+    screen.delete_characters(0); // No-op, but clears cursor overflow pending.
+    ASSERT_EQ(screen.cursor(), expected);
+    screen.delete_characters(1);
+    ASSERT_EQ(screen.cursor(), expected);
+
+    screen.set_cursor(1, 1);
+    screen.delete_characters(2000000);
+    expected = { .row = 1, .col = 1, .text_offset = 1 };
+    ASSERT_EQ(screen.cursor(), expected);
+
+    screen.set_cursor(2, 2);
+    screen.delete_characters(2);
+    expected = { .row = 2, .col = 2, .text_offset = 3 };
+    ASSERT_EQ(screen.cursor(), expected);
+
+    validate_text(screen, u8"bcde \n"
+                          u8"f    \n"
+                          u8"$¢x  \n"
+                          u8"pqrst\n"
+                          u8"uvwxy"_sv);
+}
+
+static void insert_blank_lines() {
+    auto screen = Screen {};
+    screen.resize({ 5, 5 });
+
+    put_text(screen, u8"abcde"
+                     u8"fghij"
+                     u8"$¢€𐍈x"
+                     u8"pqrst"
+                     u8"uvwxy"_sv);
+
+    auto expected = Cursor {};
+    screen.restore_cursor({ 0, 4, true });
+    screen.insert_blank_lines(0); // No-op, but sets the cursor the left margin.
+    ASSERT_EQ(screen.cursor(), expected);
+    screen.insert_blank_lines(1);
+    ASSERT_EQ(screen.cursor(), expected);
+
+    screen.set_cursor(3, 1);
+    screen.insert_blank_lines(200000);
+    expected = { .row = 3 };
+    ASSERT_EQ(screen.cursor(), expected);
+
+    validate_text(screen, u8"     \n"
+                          u8"abcde\n"
+                          u8"fghij\n"
+                          u8"     \n"
+                          u8"     "_sv);
+}
+
+static void delete_lines() {
+    auto screen = Screen {};
+    screen.resize({ 5, 5 });
+
+    put_text(screen, u8"abcde"
+                     u8"fghij"
+                     u8"$¢€𐍈x"
+                     u8"pqrst"
+                     u8"uvwxy"_sv);
+
+    auto expected = Cursor {};
+    screen.restore_cursor({ 0, 4, true });
+    screen.delete_lines(0); // No-op, but sets the cursor the left margin.
+    ASSERT_EQ(screen.cursor(), expected);
+    screen.delete_lines(1);
+    ASSERT_EQ(screen.cursor(), expected);
+
+    screen.set_cursor(3, 1);
+    screen.delete_lines(200000);
+    expected = { .row = 3 };
+    ASSERT_EQ(screen.cursor(), expected);
+
+    validate_text(screen, u8"fghij\n"
+                          u8"$¢€𐍈x\n"
+                          u8"pqrst\n"
+                          u8"     \n"
+                          u8"     "_sv);
+}
+
 TEST(screen, put_text_basic)
 TEST(screen, put_text_unicode)
 TEST(screen, cursor_movement)
@@ -281,4 +388,7 @@ TEST(screen, clear_row)
 TEST(screen, clear_screen)
 TEST(screen, clear_all)
 TEST(screen, insert_blank_characters)
+TEST(screen, delete_characters)
+TEST(screen, insert_blank_lines)
+TEST(screen, delete_lines)
 }

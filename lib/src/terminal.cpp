@@ -403,7 +403,8 @@ void Terminal::c1_hts() {
 // Reverse Index - https://www.vt100.net/docs/vt100-ug/chapter3.html#RI
 void Terminal::c1_ri() {
     if (cursor_row() == 0) {
-        // Insert line at position 0.
+        // Scroll down.
+        csi_sd({});
         return;
     }
 
@@ -578,15 +579,36 @@ void Terminal::csi_dch(Params const& params) {
 
 // Pan Down - https://vt100.net/docs/vt510-rm/SU.html
 void Terminal::csi_su(Params const& params) {
-    // Pan down (scroll up) is equivalent to delete lines, except the cursor is preserved.
+    // Pan down (scroll up) is equivalent to delete lines when the cursor is at the top
+    // left of the scroll region, and the cursor is fully preserved.
     u32 to_scroll = params.get(0, 1);
-    // TODO: xxx
+
+    auto& screen = active_screen().screen;
+    auto save = screen.save_cursor();
+    auto _ = di::ScopeExit([&] {
+        screen.restore_cursor(save);
+    });
+
+    // TODO: scroll regions.
+    screen.set_cursor(0, 0);
+    screen.delete_lines(to_scroll);
 }
 
 // Pan Up - https://vt100.net/docs/vt510-rm/SD.html
 void Terminal::csi_sd(Params const& params) {
-    // Pan up (scroll down) is equivalent to insert lines, except the cursor is preserved.
-    // TODO: xxx
+    // Pan up (scroll down) is equivalent to insert lines when the cursor is at the top
+    // left of the scroll region, and the cursor is fully preserved.
+    u32 to_scroll = params.get(0, 1);
+
+    auto& screen = active_screen().screen;
+    auto save = screen.save_cursor();
+    auto _ = di::ScopeExit([&] {
+        screen.restore_cursor(save);
+    });
+
+    // TODO: scroll regions.
+    screen.set_cursor(0, 0);
+    screen.insert_blank_lines(to_scroll);
 }
 
 // Erase Character - https://vt100.net/docs/vt510-rm/ECH.html

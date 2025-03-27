@@ -108,7 +108,7 @@ private:
     void put_single_cell(di::StringView text);
 
     auto row_iterator(u32 row) {
-        ASSERT_LT(row, max_height());
+        ASSERT_LT_EQ(row, max_height());
 
         if (row >= m_rows.size()) {
             return m_rows.end();
