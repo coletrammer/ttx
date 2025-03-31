@@ -22,13 +22,16 @@ using TerminalEvent = di::Variant<SetClipboard>;
 
 class Terminal {
     struct ScreenState {
+        explicit ScreenState(Size const& size, terminal::Screen::ScrollBackEnabled scroll_back_enabled)
+            : screen(size, scroll_back_enabled) {}
+
         terminal::Screen screen;
         di::Optional<terminal::SavedCursor> saved_cursor;
         CursorStyle cursor_style { CursorStyle::SteadyBar };
     };
 
 public:
-    explicit Terminal(dius::SyncFile& psuedo_terminal) : m_psuedo_terminal(psuedo_terminal) {}
+    explicit Terminal(dius::SyncFile& psuedo_terminal, Size const& size);
 
     // Return a string which when replayed will result in the terminal
     // having state identical to the current state.

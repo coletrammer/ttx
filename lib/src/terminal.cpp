@@ -14,6 +14,9 @@
 #include "ttx/paste_event_io.h"
 
 namespace ttx {
+Terminal::Terminal(dius::SyncFile& psuedo_terminal, Size const& size)
+    : m_primary_screen(size, terminal::Screen::ScrollBackEnabled::No), m_psuedo_terminal(psuedo_terminal) {}
+
 void Terminal::on_parser_results(di::Span<ParserResult const> results) {
     for (auto const& result : results) {
         di::visit(
@@ -1059,9 +1062,7 @@ void Terminal::set_use_alternate_screen_buffer(bool b) {
     }
 
     if (b) {
-        auto current_size = size();
-        m_alternate_screen = di::make_box<ScreenState>();
-        m_alternate_screen->screen.resize(current_size);
+        m_alternate_screen = di::make_box<ScreenState>(size(), terminal::Screen::ScrollBackEnabled::No);
     } else {
         ASSERT(m_alternate_screen);
         m_alternate_screen = {};

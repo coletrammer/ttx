@@ -51,14 +51,11 @@ auto Pane::create_from_replay(di::PathView replay_path, di::Optional<di::Path> s
     auto replay_file = TRY(dius::open_sync(replay_path, dius::OpenMode::Readonly));
 
     // When replaying content, there is no need for any threads, a psudeo terminal or a sub-process.
-    auto pane = di::make_box<Pane>(dius::SyncFile(), dius::system::ProcessHandle(), di::move(did_exit),
+    auto pane = di::make_box<Pane>(dius::SyncFile(), size, dius::system::ProcessHandle(), di::move(did_exit),
                                    di::move(did_update), di::move(did_selection), di::move(apc_passthrough));
 
-    // Typically, the capture file should immediately set the window size using CSI 8; height; width t, so this is
-    // just to be safe. Not initially the terminal size currently causes the terminal to misbehave.
-    pane->m_terminal.get_assuming_no_concurrent_accesses().set_visible_size(size);
-
-    // Allow the terminal to use CSI 8; height; width; t. Normally this would be ignored as it.
+    // Allow the terminal to use CSI 8; height; width; t. Normally this would be ignored since application
+    // shouldn't control this.
     pane->m_terminal.get_assuming_no_concurrent_accesses().set_allow_force_terminal_size();
 
     // Now read the replay file and play it back directly into the terminal. By doing this synchronously any test system
@@ -133,9 +130,8 @@ auto Pane::create(CreatePaneArgs args, Size const& size, di::Function<void(Pane&
 
     auto pty_controller = TRY(dius::open_psuedo_terminal_controller(dius::OpenMode::ReadWrite));
     auto process = TRY(spawn_child(di::move(args.command), pty_controller, size));
-    auto pane = di::make_box<Pane>(di::move(pty_controller), process, di::move(did_exit), di::move(did_update),
+    auto pane = di::make_box<Pane>(di::move(pty_controller), size, process, di::move(did_exit), di::move(did_update),
                                    di::move(did_selection), di::move(apc_passthrough));
-    pane->m_terminal.get_assuming_no_concurrent_accesses().set_visible_size(size);
 
     pane->m_process_thread = TRY(dius::Thread::create([&pane = *pane] mutable {
         auto guard = di::ScopeExit([&] {
@@ -212,8 +208,8 @@ auto Pane::create(CreatePaneArgs args, Size const& size, di::Function<void(Pane&
 
 auto Pane::create_mock() -> di::Box<Pane> {
     auto fake_psuedo_terminal = dius::SyncFile();
-    return di::make_box<Pane>(di::move(fake_psuedo_terminal), dius::system::ProcessHandle(), nullptr, nullptr, nullptr,
-                              nullptr);
+    return di::make_box<Pane>(di::move(fake_psuedo_terminal), Size(1, 1), dius::system::ProcessHandle(), nullptr,
+                              nullptr, nullptr, nullptr);
 }
 
 Pane::~Pane() {

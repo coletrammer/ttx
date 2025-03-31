@@ -1,9 +1,7 @@
 #pragma once
 
 #include "di/bit/bitset/prelude.h"
-#include "di/container/ring/prelude.h"
 #include "di/container/string/string_view.h"
-#include "di/container/tree/tree_map.h"
 #include "di/container/view/cache_last.h"
 #include "ttx/graphics_rendition.h"
 #include "ttx/size.h"
@@ -20,13 +18,15 @@ namespace ttx::terminal {
 /// the graphics rendition, hyperlink, and multi cell info indirectly referenced by the
 /// Cell class.
 ///
-/// The ring buffer of rows can exceed the maximum height in cases where overflow occurs.
-/// In this case, the caller should commit the extra rows to the scroll back buffer, or
-/// drop the rows entirely. Additionally, the actual number of rows can be smaller than
-/// the maximum height, when rows at the bottom of the screen are empty. If there is rows
-/// in the scroll back buffer, these can be used to fill the empty lines.
+/// When the screen scrolls due to autowrapping, when scroll back is enabled scrolled
+/// rows will be moved to a separate vector of rows. The caller is expected to
+/// evenually migrate these rows into a different storage location.
 class Screen {
 public:
+    enum class ScrollBackEnabled { No, Yes };
+
+    explicit Screen(Size const& size, ScrollBackEnabled scroll_back_enabled);
+
     void resize(Size const& size);
 
     auto row_count() const -> u32 { return m_rows.size(); }
@@ -76,7 +76,7 @@ public:
     auto iterate_row(u32 row) {
         ASSERT_LT(row, max_height());
 
-        auto& row_object = get_row(row);
+        auto& row_object = m_rows[row];
 
         // Fetch the indirect data fields for every cell in the row (text, graphics, and hyperlink). This uses
         // cache_last() so that the transform() can can maintain a mutable text offset counter safely, which
@@ -107,20 +107,6 @@ public:
 private:
     void put_single_cell(di::StringView text);
 
-    auto row_iterator(u32 row) {
-        ASSERT_LT_EQ(row, max_height());
-
-        if (row >= m_rows.size()) {
-            return m_rows.end();
-        }
-        if (m_rows.size() > max_height()) {
-            return m_rows.begin() + row + (m_rows.size() - max_height());
-        }
-        return m_rows.begin() + row;
-    }
-    auto row_index(u32 row) const -> usize;
-    auto get_row(u32 row) -> Row&;
-
     void drop_graphics_id(u16& id);
     void drop_hyperlink_id(u16& id);
     void drop_multi_cell_id(u16& id);
@@ -130,10 +116,16 @@ private:
     void drop_cell(Cell& cell);
 
     // Screen state.
-    di::Ring<Row> m_rows;
+    di::Vector<Row> m_rows;
     IdMap<GraphicsRendition> m_graphics_renditions;
     IdMap<Hyperlink> m_hyperlinks;
     IdMap<MultiCellInfo> m_multi_cell_info;
+
+    // Pending scroll back. Users of the screen class should either
+    // disable scroll back for the screen or process these items
+    // regurarly.
+    di::Vector<Row> m_pending_scroll_back;
+    ScrollBackEnabled m_scroll_back_enabled { ScrollBackEnabled::No };
 
     // Mutable state for writing cells.
     Cursor m_cursor;
@@ -142,6 +134,6 @@ private:
     GraphicsRendition m_empty_graphics;
 
     // Terminal size information.
-    Size m_size { 25, 80 };
+    Size m_size {};
 };
 }

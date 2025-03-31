@@ -58,8 +58,7 @@ static void validate_text(Screen& screen, di::StringView text) {
 }
 
 static void put_text_basic() {
-    auto screen = Screen {};
-    screen.resize({ 5, 5 });
+    auto screen = Screen({ 5, 5 }, Screen::ScrollBackEnabled::No);
 
     put_text(screen, "abcde"
                      "fghij"
@@ -100,8 +99,7 @@ static void put_text_basic() {
 }
 
 static void put_text_unicode() {
-    auto screen = Screen {};
-    screen.resize({ 5, 5 });
+    auto screen = Screen({ 5, 5 }, Screen::ScrollBackEnabled::No);
 
     // Row 1 includes multi-byte utf8 characters, and
     // row 2 includes a zero-width diacritic.
@@ -123,8 +121,7 @@ static void put_text_unicode() {
 }
 
 static void cursor_movement() {
-    auto screen = Screen {};
-    screen.resize({ 5, 5 });
+    auto screen = Screen({ 5, 5 }, Screen::ScrollBackEnabled::No);
 
     put_text(screen, u8"abcde"
                      u8"fghij"
@@ -175,8 +172,7 @@ static void cursor_movement() {
 }
 
 static void clear_row() {
-    auto screen = Screen {};
-    screen.resize({ 5, 5 });
+    auto screen = Screen({ 5, 5 }, Screen::ScrollBackEnabled::No);
 
     put_text(screen, u8"abcde"
                      u8"fghij"
@@ -207,8 +203,7 @@ static void clear_row() {
 }
 
 static void clear_screen() {
-    auto screen = Screen {};
-    screen.resize({ 5, 5 });
+    auto screen = Screen({ 5, 5 }, Screen::ScrollBackEnabled::No);
 
     put_text(screen, u8"abcde"
                      u8"fghij"
@@ -234,8 +229,7 @@ static void clear_screen() {
 }
 
 static void clear_all() {
-    auto screen = Screen {};
-    screen.resize({ 5, 5 });
+    auto screen = Screen({ 5, 5 }, Screen::ScrollBackEnabled::No);
 
     put_text(screen, u8"abcde"
                      u8"fghij"
@@ -256,8 +250,7 @@ static void clear_all() {
 }
 
 static void insert_blank_characters() {
-    auto screen = Screen {};
-    screen.resize({ 5, 5 });
+    auto screen = Screen({ 5, 5 }, Screen::ScrollBackEnabled::No);
 
     put_text(screen, u8"abcde"
                      u8"fghij"
@@ -290,8 +283,7 @@ static void insert_blank_characters() {
 }
 
 static void delete_characters() {
-    auto screen = Screen {};
-    screen.resize({ 5, 5 });
+    auto screen = Screen({ 5, 5 }, Screen::ScrollBackEnabled::No);
 
     put_text(screen, u8"abcde"
                      u8"fghij"
@@ -324,8 +316,7 @@ static void delete_characters() {
 }
 
 static void insert_blank_lines() {
-    auto screen = Screen {};
-    screen.resize({ 5, 5 });
+    auto screen = Screen({ 5, 5 }, Screen::ScrollBackEnabled::No);
 
     put_text(screen, u8"abcde"
                      u8"fghij"
@@ -353,8 +344,7 @@ static void insert_blank_lines() {
 }
 
 static void delete_lines() {
-    auto screen = Screen {};
-    screen.resize({ 5, 5 });
+    auto screen = Screen({ 5, 5 }, Screen::ScrollBackEnabled::No);
 
     put_text(screen, u8"abcde"
                      u8"fghij"
@@ -381,6 +371,27 @@ static void delete_lines() {
                           u8"     "_sv);
 }
 
+static void autowrap() {
+    for (auto scroll_back_enabled : { Screen::ScrollBackEnabled::No, Screen::ScrollBackEnabled::Yes }) {
+        auto screen = Screen({ 4, 2 }, scroll_back_enabled);
+
+        put_text(screen, "ab"
+                         "cd"
+                         "ef"
+                         "gh"
+                         "ij"
+                         "kl"_sv);
+
+        auto expected = Cursor { .row = 3, .col = 1, .text_offset = 1, .overflow_pending = true };
+        ASSERT_EQ(screen.cursor(), expected);
+
+        validate_text(screen, "ef\n"
+                              "gh\n"
+                              "ij\n"
+                              "kl"_sv);
+    }
+}
+
 TEST(screen, put_text_basic)
 TEST(screen, put_text_unicode)
 TEST(screen, cursor_movement)
@@ -391,4 +402,5 @@ TEST(screen, insert_blank_characters)
 TEST(screen, delete_characters)
 TEST(screen, insert_blank_lines)
 TEST(screen, delete_lines)
+TEST(screen, autowrap)
 }

@@ -39,12 +39,12 @@ public:
     // For testing, create a mock pane. This doesn't actually create a psuedo terminal or a subprocess.
     static auto create_mock() -> di::Box<Pane>;
 
-    explicit Pane(dius::SyncFile pty_controller, dius::system::ProcessHandle process,
+    explicit Pane(dius::SyncFile pty_controller, Size const& size, dius::system::ProcessHandle process,
                   di::Function<void(Pane&)> did_exit, di::Function<void(Pane&)> did_update,
                   di::Function<void(di::Span<byte const>)> did_selection,
                   di::Function<void(di::StringView)> apc_passthrough)
         : m_pty_controller(di::move(pty_controller))
-        , m_terminal(m_pty_controller)
+        , m_terminal(di::in_place, m_pty_controller, size)
         , m_process(process)
         , m_did_exit(di::move(did_exit))
         , m_did_update(di::move(did_update))
