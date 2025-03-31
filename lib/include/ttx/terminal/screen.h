@@ -12,6 +12,12 @@
 #include "ttx/terminal/row.h"
 
 namespace ttx::terminal {
+/// @brief Whether or not auto-wrap (DEC mode 7) is enabled.
+enum class AutoWrapMode {
+    Disabled,
+    Enabled,
+};
+
 /// @brief Represents the visible contents of the terminal (with no scroll back)
 ///
 /// The screen class internally maintains a ring buffer of terminal rows, as well as
@@ -69,7 +75,7 @@ public:
     void clear_row_before_cursor();
 
     void scroll_down();
-    void put_code_point(c32 code_point);
+    void put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode);
 
     void invalidate_all();
 
@@ -105,7 +111,7 @@ public:
     }
 
 private:
-    void put_single_cell(di::StringView text);
+    void put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode);
 
     void drop_graphics_id(u16& id);
     void drop_hyperlink_id(u16& id);

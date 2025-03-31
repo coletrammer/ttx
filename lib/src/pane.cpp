@@ -223,8 +223,7 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
     return m_terminal.with_lock([&](Terminal& terminal) {
         if (terminal.allowed_to_draw()) {
             auto& screen = terminal.active_screen().screen;
-            auto rows_to_draw = di::min(screen.max_height(), screen.row_count());
-            for (auto r : di::range(rows_to_draw)) {
+            for (auto r : di::range(screen.max_height())) {
                 for (auto [c, cell, text, graphics, hyperlink] : screen.iterate_row(r)) {
                     if (r < m_vertical_scroll_offset || c < m_horizontal_scroll_offset) {
                         continue;
@@ -236,13 +235,19 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
 
                     if (!cell.stale) {
                         // TODO: selection
-                        renderer.put_cell(text, r, c, graphics);
+                        renderer.put_cell(text, r - m_vertical_scroll_offset, c - m_horizontal_scroll_offset, graphics);
                         cell.stale = true;
                     }
                 }
+                // Clear any blank cols after the terminal.
+                for (auto c :
+                     di::range(screen.max_width() - m_horizontal_scroll_offset, terminal.visible_size().cols)) {
+                    renderer.put_cell(" "_sv, r, c);
+                }
             }
+
             // Clear any blank rows after the terminal.
-            for (auto r : di::range(rows_to_draw, terminal.visible_size().rows)) {
+            for (auto r : di::range(screen.max_height() - m_vertical_scroll_offset, terminal.visible_size().rows)) {
                 renderer.clear_row(r);
             }
         }

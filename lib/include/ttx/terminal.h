@@ -180,7 +180,7 @@ private:
     di::Vector<u32> m_tab_stops;
     bool m_cursor_hidden { false };
     bool m_disable_drawing { false };
-    bool m_autowrap_mode { true };
+    terminal::AutoWrapMode m_auto_wrap_mode { terminal::AutoWrapMode::Enabled };
     bool m_origin_mode { false };
 
     ApplicationCursorKeysMode m_application_cursor_keys_mode { ApplicationCursorKeysMode::Disabled };

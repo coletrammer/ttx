@@ -7,7 +7,7 @@ using namespace ttx::terminal;
 
 static void put_text(Screen& screen, di::StringView text) {
     for (auto code_point : text) {
-        screen.put_code_point(code_point);
+        screen.put_code_point(code_point, AutoWrapMode::Enabled);
     }
 }
 
@@ -196,7 +196,7 @@ static void clear_row() {
     ASSERT_EQ(screen.cursor().overflow_pending, false);
 
     validate_text(screen, "ab   \n"
-                          "  hij\n"
+                          "   ij\n"
                           "     \n"
                           "pqrst\n"
                           "uvwxy"_sv);
@@ -223,7 +223,7 @@ static void clear_screen() {
 
     validate_text(screen, u8"     \n"
                           u8"     \n"
-                          u8"  €𐍈x\n"
+                          u8"   𐍈x\n"
                           u8"p    \n"
                           u8"     "_sv);
 }

@@ -76,6 +76,10 @@ void Screen::resize(Size const& size) {
         }
     }
     ASSERT_EQ(m_rows.size(), size.rows);
+
+    // Clamp the cursor to the screen size.
+    m_cursor.row = di::min(m_cursor.row, size.rows - 1);
+    m_cursor.col = di::min(m_cursor.col, size.cols - 1);
 }
 
 auto Screen::current_graphics_rendition() const -> GraphicsRendition {
@@ -442,13 +446,15 @@ void Screen::clear_row_before_cursor() {
     m_cursor.overflow_pending = false;
 
     auto& row = m_rows[m_cursor.row];
-    for (auto& cell : row.cells | di::take(m_cursor.col)) {
+    auto text_size_to_delete = 0zu;
+    for (auto& cell : row.cells | di::take(m_cursor.col + 1)) {
         drop_cell(cell);
+        text_size_to_delete += cell.text_size;
         cell.text_size = 0;
     }
 
     // Delete all text before the cursor.
-    auto text_end = row.text.iterator_at_offset(m_cursor.text_offset);
+    auto text_end = row.text.iterator_at_offset(text_size_to_delete);
     ASSERT(text_end);
     row.text.erase(row.text.begin(), text_end.value());
 
@@ -482,7 +488,7 @@ void Screen::scroll_down() {
     invalidate_all();
 }
 
-void Screen::put_code_point(c32 code_point) {
+void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
     // 1. Measure the width of the code point.
     auto width = code_point_width(code_point);
 
@@ -490,7 +496,7 @@ void Screen::put_code_point(c32 code_point) {
     if (width == 1) {
         auto code_units = di::encoding::convert_to_code_units(di::String::Encoding(), code_point);
         auto view = di::StringView(di::encoding::assume_valid, code_units.begin(), code_units.end());
-        put_single_cell(view);
+        put_single_cell(view, auto_wrap_mode);
         return;
     }
 
@@ -522,7 +528,7 @@ void Screen::put_code_point(c32 code_point) {
     // TODO: 4. Multi-cell case - width is 2.
 }
 
-void Screen::put_single_cell(di::StringView text) {
+void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode) {
     // Sanity check - if the text size is larger than 2^15, ignore.
     if (text.size_bytes() > di::NumericLimits<u16>::max / 2) {
         return;
@@ -534,7 +540,7 @@ void Screen::put_single_cell(di::StringView text) {
     ASSERT_EQ(row.cells.size(), max_width());
 
     // Check for the overflow condition, which will evenually induce scrolling.
-    if (m_cursor.overflow_pending) {
+    if (auto_wrap_mode == AutoWrapMode::Enabled && m_cursor.overflow_pending) {
         // Mark the current row as having overflowed, and then advance the cursor.
         row.overflow = true;
 
@@ -546,7 +552,7 @@ void Screen::put_single_cell(di::StringView text) {
         } else {
             m_cursor = new_cursor;
         }
-        put_single_cell(text);
+        put_single_cell(text, auto_wrap_mode);
         return;
     }
 

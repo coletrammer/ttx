@@ -15,7 +15,9 @@
 
 namespace ttx {
 Terminal::Terminal(dius::SyncFile& psuedo_terminal, Size const& size)
-    : m_primary_screen(size, terminal::Screen::ScrollBackEnabled::No), m_psuedo_terminal(psuedo_terminal) {}
+    : m_primary_screen(size, terminal::Screen::ScrollBackEnabled::No)
+    , m_available_size(size)
+    , m_psuedo_terminal(psuedo_terminal) {}
 
 void Terminal::on_parser_results(di::Span<ParserResult const> results) {
     for (auto const& result : results) {
@@ -451,9 +453,12 @@ void Terminal::osc_52(di::StringView data) {
 
 // DEC Screen Alignment Pattern - https://vt100.net/docs/vt510-rm/DECALN.html
 void Terminal::esc_decaln() {
-    // TODO: fill the screen with the character 'E'
-    // clear('E');
-    active_screen().screen.set_cursor(0, 0);
+    auto& screen = active_screen().screen;
+    screen.set_cursor(0, 0);
+    for (auto _ : di::range(screen.max_height() * screen.max_width())) {
+        screen.put_code_point(U'E', terminal::AutoWrapMode::Enabled);
+    }
+    screen.set_cursor(0, 0);
 }
 
 // DEC Save Cursor - https://vt100.net/docs/vt510-rm/DECSC.html
@@ -700,7 +705,7 @@ void Terminal::csi_decset(Params const& params) {
             if (m_allow_80_132_col_mode) {
                 m_80_col_mode = false;
                 m_132_col_mode = true;
-                resize({ row_count(), 132, m_available_size.xpixels * 132 / m_available_size.cols, size().ypixels });
+                resize({ row_count(), 132, size().xpixels * 132 / size().cols, size().ypixels });
                 clear();
                 csi_decstbm({});
             }
@@ -713,7 +718,7 @@ void Terminal::csi_decset(Params const& params) {
             break;
         case 7:
             // Autowrap mode - https://vt100.net/docs/vt510-rm/DECAWM.html
-            m_autowrap_mode = true;
+            m_auto_wrap_mode = terminal::AutoWrapMode::Enabled;
             break;
         case 9:
             m_mouse_protocol = MouseProtocol::X10;
@@ -775,7 +780,7 @@ void Terminal::csi_decrst(Params const& params) {
             if (m_allow_80_132_col_mode) {
                 m_80_col_mode = true;
                 m_132_col_mode = false;
-                resize({ row_count(), 80, m_available_size.xpixels * 80 / m_available_size.cols, size().ypixels });
+                resize({ row_count(), 80, size().xpixels * 80 / size().cols, size().ypixels });
                 clear();
                 csi_decstbm({});
             }
@@ -786,7 +791,7 @@ void Terminal::csi_decrst(Params const& params) {
             break;
         case 7:
             // Autowrap mode - https://vt100.net/docs/vt510-rm/DECAWM.html
-            m_autowrap_mode = false;
+            m_auto_wrap_mode = terminal::AutoWrapMode::Disabled;
             break;
         case 9:
             m_mouse_protocol = MouseProtocol::None;
@@ -1053,7 +1058,7 @@ void Terminal::clear() {
 }
 
 void Terminal::put_char(c32 c) {
-    active_screen().screen.put_code_point(c);
+    active_screen().screen.put_code_point(c, m_auto_wrap_mode);
 }
 
 void Terminal::set_use_alternate_screen_buffer(bool b) {
