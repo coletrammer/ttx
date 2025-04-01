@@ -1,6 +1,7 @@
 #include "ttx/terminal/screen.h"
 
 #include "di/container/algorithm/rotate.h"
+#include "di/util/clamp.h"
 #include "di/util/scope_exit.h"
 #include "ttx/graphics_rendition.h"
 #include "ttx/terminal/cell.h"
@@ -9,7 +10,8 @@
 namespace ttx::terminal {
 static u32 code_point_width(c32 code_point);
 
-Screen::Screen(Size const& size, ScrollBackEnabled scroll_back_enabled) : m_scroll_back_enabled(scroll_back_enabled) {
+Screen::Screen(Size const& size, ScrollBackEnabled scroll_back_enabled)
+    : m_scroll_back_enabled(scroll_back_enabled), m_scroll_region(0, size.rows) {
     resize(size);
 }
 
@@ -19,15 +21,15 @@ void Screen::resize(Size const& size) {
     ASSERT_GT(size.rows, 0);
     ASSERT_GT(size.cols, 0);
 
-    // We can ignore the height argument because we lazily add new rows if needed, and if the height shrinked
-    // the caller will need to handle scroll back.
-    // However, the width is used to trunacte or expand new cells.
-    auto _ = di::ScopeExit([&] {
-        m_size = size;
-    });
     if (size.cols == max_width() && size.rows == max_height()) {
         return;
     }
+
+    // Always update the size and clamp the scroll region in bounds.
+    auto _ = di::ScopeExit([&] {
+        m_size = size;
+        m_scroll_region.end_row = di::min(m_scroll_region.end_row, size.rows);
+    });
 
     // First the column size of the existing rows.
     if (size.cols > max_width()) {
@@ -80,6 +82,12 @@ void Screen::resize(Size const& size) {
     // Clamp the cursor to the screen size.
     m_cursor.row = di::min(m_cursor.row, size.rows - 1);
     m_cursor.col = di::min(m_cursor.col, size.cols - 1);
+}
+
+void Screen::set_scroll_region(ScrollRegion const& region) {
+    ASSERT_LT(region.start_row, region.end_row);
+    ASSERT_LT_EQ(region.end_row, max_height());
+    m_scroll_region = region;
 }
 
 auto Screen::current_graphics_rendition() const -> GraphicsRendition {
@@ -174,12 +182,23 @@ void Screen::restore_cursor(SavedCursor const& cursor) {
     m_cursor.overflow_pending = cursor.overflow_pending;
 }
 
+void Screen::set_origin_mode(OriginMode origin_mode) {
+    if (m_origin_mode == origin_mode) {
+        return;
+    }
+    m_origin_mode = origin_mode;
+
+    // If origin mode is enabled, this puts the cursor at the
+    // top-left of the scroll region.
+    set_cursor(0, 0);
+}
+
 void Screen::set_cursor(u32 row, u32 col) {
     // Setting the cursor always clears the overflow pending flag.
     m_cursor.overflow_pending = false;
 
-    row = di::min(row, max_height() - 1);
-    col = di::min(col, max_width() - 1);
+    row = di::clamp(translate_row(row), min_row(), max_row_inclusive());
+    col = di::clamp(translate_col(col), min_col(), max_col_inclusive());
 
     // Special case when moving the cursor on the same row.
     if (m_cursor.row == row) {
@@ -208,7 +227,7 @@ void Screen::set_cursor_col(u32 col) {
     // Setting the cursor always clears the overflow pending flag.
     m_cursor.overflow_pending = false;
 
-    col = di::min(col, max_width() - 1);
+    col = di::clamp(translate_col(col), min_col(), max_col_inclusive());
     if (m_cursor.col == col) {
         return;
     }
@@ -264,13 +283,16 @@ void Screen::insert_blank_characters(u32 count) {
 }
 
 void Screen::insert_blank_lines(u32 count) {
-    // TODO: vertical scrolling region
+    m_cursor.overflow_pending = false;
+    if (!cursor_in_scroll_region()) {
+        return;
+    }
 
     // Start by dropping the correct number of rows. We're clearing rows at the end
     // of the screen. To implement bce we'd need to copy the background color when clearing.
-    auto max_to_insert = di::min(count, max_height() - m_cursor.row);
-    auto delete_row_it = m_rows.begin() + (max_height() - max_to_insert);
-    for (auto it = delete_row_it; it != m_rows.end(); ++it) {
+    auto max_to_insert = di::min(count, m_scroll_region.end_row - m_cursor.row);
+    auto delete_row_it = end_row_iterator() - max_to_insert;
+    for (auto it = delete_row_it; it != end_row_iterator(); ++it) {
         auto& row = *it;
         for (auto& cell : row.cells) {
             drop_cell(cell);
@@ -281,12 +303,11 @@ void Screen::insert_blank_lines(u32 count) {
     }
 
     // Now rotate the blank lines into place.
-    di::rotate(m_rows.begin() + m_cursor.row, delete_row_it, m_rows.end());
+    di::rotate(m_rows.begin() + m_cursor.row, delete_row_it, end_row_iterator());
 
     // Now set the cursor to the left margin.
     m_cursor.text_offset = 0;
     m_cursor.col = 0;
-    m_cursor.overflow_pending = false;
 
     // TODO: optimize!
     invalidate_all();
@@ -294,8 +315,6 @@ void Screen::insert_blank_lines(u32 count) {
 
 void Screen::delete_characters(u32 count) {
     m_cursor.overflow_pending = false;
-
-    // TODO: vertical scrolling region
 
     // Start by dropping the correct number of cells, based on how many new ones we need
     // to insert.
@@ -323,13 +342,16 @@ void Screen::delete_characters(u32 count) {
 }
 
 void Screen::delete_lines(u32 count) {
-    // TODO: vertical scrolling region
+    m_cursor.overflow_pending = false;
+    if (!cursor_in_scroll_region()) {
+        return;
+    }
 
     // Start by dropping the correct number of rows. We're clearing starting from
     // the cursor row. If we supported bce we'd need to copy the
     // background color.
 
-    auto max_to_delete = di::min(count, max_height() - m_cursor.row);
+    auto max_to_delete = di::min(count, m_scroll_region.end_row - m_cursor.row);
     auto delete_row_it = m_rows.begin() + m_cursor.row;
     auto delete_row_end = di::next(delete_row_it, max_to_delete, m_rows.end());
     for (auto it = delete_row_it; it != delete_row_end; ++it) {
@@ -343,12 +365,11 @@ void Screen::delete_lines(u32 count) {
     }
 
     // Rotate the blank lines into place.
-    di::rotate(delete_row_it, delete_row_end, m_rows.end());
+    di::rotate(delete_row_it, delete_row_end, end_row_iterator());
 
     // Now set the cursor to the left margin.
     m_cursor.text_offset = 0;
     m_cursor.col = 0;
-    m_cursor.overflow_pending = false;
 
     // TODO: optimize!
     invalidate_all();
@@ -463,15 +484,15 @@ void Screen::clear_row_before_cursor() {
 }
 
 void Screen::scroll_down() {
-    ASSERT_EQ(m_cursor.row + 1, max_height());
+    ASSERT_EQ(m_cursor.row + 1, m_scroll_region.end_row);
 
+    // Clear the first row, optionally putting it into the scroll back buffer.
+    auto& row = *begin_row_iterator();
     if (m_scroll_back_enabled == ScrollBackEnabled::Yes) {
-        m_pending_scroll_back.push_back(di::move(m_rows[0]));
-        m_rows[0] = {};
-        m_rows[0].cells.resize(max_width());
+        m_pending_scroll_back.push_back(di::move(row));
+        row = {};
+        row.cells.resize(max_width());
     } else {
-        // Clear the first row.
-        auto& row = m_rows[0];
         for (auto& cell : row.cells) {
             drop_cell(cell);
             cell.text_size = 0;
@@ -481,7 +502,7 @@ void Screen::scroll_down() {
     }
 
     // Rotate rows into place.
-    di::rotate(m_rows.begin(), m_rows.begin() + 1, m_rows.end());
+    di::rotate(begin_row_iterator(), begin_row_iterator() + 1, end_row_iterator());
 
     m_cursor.text_offset = 0;
     m_cursor.overflow_pending = false;
@@ -545,7 +566,7 @@ void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode) {
         row.overflow = true;
 
         auto new_cursor = Cursor { m_cursor.row + 1, 0, 0, false };
-        if (m_cursor.row + 1 == max_height()) {
+        if (m_cursor.row + 1 == m_scroll_region.end_row) {
             // This was the last line - so induce scrolling by adding a new row.
             scroll_down();
             m_cursor.col = 0;
@@ -628,6 +649,43 @@ void Screen::drop_cell(Cell& cell) {
     drop_multi_cell_id(cell.multicell_id);
 
     cell.stale = false;
+}
+
+auto Screen::translate_row(u32 row) const -> u32 {
+    if (m_origin_mode == OriginMode::Enabled) {
+        return row + m_scroll_region.start_row;
+    }
+    return row;
+}
+
+auto Screen::translate_col(u32 col) const -> u32 {
+    return col;
+}
+
+auto Screen::min_row() const -> u32 {
+    if (m_origin_mode == OriginMode::Enabled) {
+        return m_scroll_region.start_row;
+    }
+    return 0;
+}
+
+auto Screen::max_row_inclusive() const -> u32 {
+    if (m_origin_mode == OriginMode::Enabled) {
+        return m_scroll_region.end_row - 1;
+    }
+    return max_height() - 1;
+}
+
+auto Screen::min_col() const -> u32 {
+    return 0;
+}
+
+auto Screen::max_col_inclusive() const -> u32 {
+    return max_width() - 1;
+}
+
+auto Screen::cursor_in_scroll_region() const -> bool {
+    return m_cursor.row >= m_scroll_region.start_row && m_cursor.row < m_scroll_region.end_row;
 }
 
 // This list is only for the diacritics used by the

@@ -356,7 +356,7 @@ void Terminal::c0_ht() {
 
 // Line Feed - https://vt100.net/docs/vt510-rm/chapter4.html#T4-1
 void Terminal::c0_lf() {
-    if (cursor_row() + 1 == row_count()) {
+    if (cursor_row() + 1 == active_screen().screen.scroll_region().end_row) {
         active_screen().screen.scroll_down();
     } else {
         active_screen().screen.set_cursor_row(cursor_row() + 1);
@@ -407,7 +407,7 @@ void Terminal::c1_hts() {
 
 // Reverse Index - https://www.vt100.net/docs/vt100-ug/chapter3.html#RI
 void Terminal::c1_ri() {
-    if (cursor_row() == 0) {
+    if (cursor_row() == active_screen().screen.scroll_region().start_row) {
         // Scroll down.
         csi_sd({});
         return;
@@ -597,8 +597,7 @@ void Terminal::csi_su(Params const& params) {
         screen.restore_cursor(save);
     });
 
-    // TODO: scroll regions.
-    screen.set_cursor(0, 0);
+    screen.set_cursor(screen.scroll_region().start_row, 0);
     screen.delete_lines(to_scroll);
 }
 
@@ -614,8 +613,7 @@ void Terminal::csi_sd(Params const& params) {
         screen.restore_cursor(save);
     });
 
-    // TODO: scroll regions.
-    screen.set_cursor(0, 0);
+    screen.set_cursor(screen.scroll_region().start_row, 0);
     screen.insert_blank_lines(to_scroll);
 }
 
@@ -712,9 +710,9 @@ void Terminal::csi_decset(Params const& params) {
             break;
         case 6:
             // Origin Mode - https://vt100.net/docs/vt510-rm/DECOM.html
-            m_origin_mode = true;
-            // TODO: set cursor and handle origin mode.
-            // set_cursor(m_cursor_row, m_cursor_col);
+            // Unlike other modes, this one is per-screen, as this mode
+            // is technically part of the cursor state.
+            active_screen().screen.set_origin_mode(terminal::OriginMode::Enabled);
             break;
         case 7:
             // Autowrap mode - https://vt100.net/docs/vt510-rm/DECAWM.html
@@ -787,7 +785,9 @@ void Terminal::csi_decrst(Params const& params) {
             break;
         case 6:
             // Origin Mode - https://vt100.net/docs/vt510-rm/DECOM.html
-            m_origin_mode = false;
+            // Unlike other modes, this one is per-screen, as this mode
+            // is technically part of the cursor state.
+            active_screen().screen.set_origin_mode(terminal::OriginMode::Disabled);
             break;
         case 7:
             // Autowrap mode - https://vt100.net/docs/vt510-rm/DECAWM.html
@@ -895,10 +895,11 @@ void Terminal::csi_decstbm(Params const& params) {
     if (new_scroll_end - new_scroll_start < 1) {
         return;
     }
-    // TODO: vertical scroll margins
-    // m_scroll_start = new_scroll_start;
-    // m_scroll_end = new_scroll_end;
-    // set_cursor(0, 0);
+
+    // Internally the scroll end is exclusive, but the CSI is inclusive.
+    auto& screen = active_screen().screen;
+    screen.set_scroll_region({ new_scroll_start, new_scroll_end + 1 });
+    screen.set_cursor(0, 0);
 }
 
 // Save Current Cursor Position - https://vt100.net/docs/vt510-rm/SCOSC.html

@@ -171,6 +171,52 @@ static void cursor_movement() {
     ASSERT_EQ(screen.cursor(), expected);
 }
 
+static void origin_mode_cursor_movement() {
+    auto screen = Screen({ 5, 5 }, Screen::ScrollBackEnabled::No);
+    put_text(screen, u8"abcde"
+                     u8"fghij"
+                     u8"$¢€𐍈 "
+                     u8"pqrst"
+                     u8"uvwxy"_sv);
+
+    screen.set_scroll_region({ 1, 4 });
+    screen.set_origin_mode(OriginMode::Enabled);
+
+    auto expected = Cursor { .row = 1, .col = 0 };
+    ASSERT_EQ(screen.cursor(), expected);
+
+    screen.set_cursor(0, 0);
+    ASSERT_EQ(screen.cursor(), expected);
+
+    screen.set_cursor_col(2);
+    expected = { .row = 1, .col = 2, .text_offset = 2 };
+    ASSERT_EQ(screen.cursor(), expected);
+
+    screen.set_cursor_col(1);
+    expected = { .row = 1, .col = 1, .text_offset = 1 };
+    ASSERT_EQ(screen.cursor(), expected);
+
+    screen.set_cursor_row(2);
+    expected = { .row = 3, .col = 1, .text_offset = 1 };
+    ASSERT_EQ(screen.cursor(), expected);
+
+    screen.set_cursor_col(100);
+    expected = { .row = 3, .col = 4, .text_offset = 4 };
+    ASSERT_EQ(screen.cursor(), expected);
+
+    screen.set_cursor_row(1000);
+    expected = { .row = 3, .col = 4, .text_offset = 4 };
+    ASSERT_EQ(screen.cursor(), expected);
+
+    screen.set_cursor(3, 2);
+    expected = { .row = 3, .col = 2, .text_offset = 2 };
+    ASSERT_EQ(screen.cursor(), expected);
+
+    screen.set_cursor(1000, 1000);
+    expected = { .row = 3, .col = 4, .text_offset = 4 };
+    ASSERT_EQ(screen.cursor(), expected);
+}
+
 static void clear_row() {
     auto screen = Screen({ 5, 5 }, Screen::ScrollBackEnabled::No);
 
@@ -343,6 +389,32 @@ static void insert_blank_lines() {
                           u8"     "_sv);
 }
 
+static void vertical_scroll_region_insert_blank_lines() {
+    auto screen = Screen({ 5, 2 }, Screen::ScrollBackEnabled::No);
+    put_text(screen, "ab"
+                     "cd"
+                     "ef"
+                     "gh"
+                     "ij"_sv);
+    screen.set_scroll_region({ 1, 4 });
+
+    auto expected = Cursor {};
+    screen.restore_cursor({ 0, 0, true });
+    screen.insert_blank_lines(1); // No-op, because outside scroll region. But overflow flag is cleared.
+    ASSERT_EQ(screen.cursor(), expected);
+
+    screen.set_cursor(2, 1);
+    screen.insert_blank_lines(1);
+    expected = { .row = 2 };
+    ASSERT_EQ(screen.cursor(), expected);
+
+    validate_text(screen, "ab\n"
+                          "cd\n"
+                          "  \n"
+                          "ef\n"
+                          "ij"_sv);
+}
+
 static void delete_lines() {
     auto screen = Screen({ 5, 5 }, Screen::ScrollBackEnabled::No);
 
@@ -371,6 +443,32 @@ static void delete_lines() {
                           u8"     "_sv);
 }
 
+static void vertical_scroll_region_delete_lines() {
+    auto screen = Screen({ 5, 2 }, Screen::ScrollBackEnabled::No);
+    put_text(screen, "ab"
+                     "cd"
+                     "ef"
+                     "gh"
+                     "ij"_sv);
+    screen.set_scroll_region({ 1, 4 });
+
+    auto expected = Cursor {};
+    screen.restore_cursor({ 0, 0, true });
+    screen.delete_lines(1); // No-op, because outside scroll region. But overflow flag is cleared.
+    ASSERT_EQ(screen.cursor(), expected);
+
+    screen.set_cursor(2, 1);
+    screen.delete_lines(1);
+    expected = { .row = 2 };
+    ASSERT_EQ(screen.cursor(), expected);
+
+    validate_text(screen, "ab\n"
+                          "cd\n"
+                          "gh\n"
+                          "  \n"
+                          "ij"_sv);
+}
+
 static void autowrap() {
     for (auto scroll_back_enabled : { Screen::ScrollBackEnabled::No, Screen::ScrollBackEnabled::Yes }) {
         auto screen = Screen({ 4, 2 }, scroll_back_enabled);
@@ -392,15 +490,41 @@ static void autowrap() {
     }
 }
 
+static void vertical_scroll_region_autowrap() {
+    for (auto scroll_back_enabled : { Screen::ScrollBackEnabled::No, Screen::ScrollBackEnabled::Yes }) {
+        auto screen = Screen({ 4, 2 }, scroll_back_enabled);
+        screen.set_scroll_region({ 1, 3 });
+
+        put_text(screen, "ab"
+                         "cd"
+                         "ef"
+                         "gh"
+                         "ij"
+                         "kl"_sv);
+
+        auto expected = Cursor { .row = 2, .col = 1, .text_offset = 1, .overflow_pending = true };
+        ASSERT_EQ(screen.cursor(), expected);
+
+        validate_text(screen, "ab\n"
+                              "ij\n"
+                              "kl\n"
+                              "  "_sv);
+    }
+}
+
 TEST(screen, put_text_basic)
 TEST(screen, put_text_unicode)
 TEST(screen, cursor_movement)
+TEST(screen, origin_mode_cursor_movement)
 TEST(screen, clear_row)
 TEST(screen, clear_screen)
 TEST(screen, clear_all)
 TEST(screen, insert_blank_characters)
 TEST(screen, delete_characters)
 TEST(screen, insert_blank_lines)
+TEST(screen, vertical_scroll_region_insert_blank_lines)
 TEST(screen, delete_lines)
+TEST(screen, vertical_scroll_region_delete_lines)
 TEST(screen, autowrap)
+TEST(screen, vertical_scroll_region_autowrap)
 }

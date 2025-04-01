@@ -3,6 +3,7 @@
 #include "di/bit/bitset/prelude.h"
 #include "di/container/string/string_view.h"
 #include "di/container/view/cache_last.h"
+#include "scroll_region.h"
 #include "ttx/graphics_rendition.h"
 #include "ttx/size.h"
 #include "ttx/terminal/cursor.h"
@@ -14,6 +15,17 @@
 namespace ttx::terminal {
 /// @brief Whether or not auto-wrap (DEC mode 7) is enabled.
 enum class AutoWrapMode {
+    Disabled,
+    Enabled,
+};
+
+/// @brief Whether or not origin mode (DEC mode 6) is enabled.
+///
+/// When origin mode is enabled, the cursor is constrained to be
+/// within the scroll region of the screen. Additionally, all row
+/// and column indicies are relative to the top-left of the scroll
+/// region when origin is enabled.
+enum class OriginMode {
     Disabled,
     Enabled,
 };
@@ -34,11 +46,13 @@ public:
     explicit Screen(Size const& size, ScrollBackEnabled scroll_back_enabled);
 
     void resize(Size const& size);
+    void set_scroll_region(ScrollRegion const& region);
 
     auto row_count() const -> u32 { return m_rows.size(); }
     auto max_height() const { return m_size.rows; }
     auto max_width() const { return m_size.cols; }
-    auto size() const -> Size { return m_size; }
+    auto size() const -> Size const& { return m_size; }
+    auto scroll_region() const -> ScrollRegion const& { return m_scroll_region; }
 
     auto current_graphics_rendition() const -> GraphicsRendition;
     auto current_hyperlink() const -> di::Optional<Hyperlink const&>;
@@ -56,6 +70,7 @@ public:
     auto save_cursor() const -> SavedCursor;
     void restore_cursor(SavedCursor const& cursor);
 
+    void set_origin_mode(OriginMode mode);
     void set_cursor(u32 row, u32 col);
     void set_cursor_row(u32 row);
     void set_cursor_col(u32 col);
@@ -121,6 +136,19 @@ private:
     /// context to do this more efficiently (because they are erasing multiple cells).
     void drop_cell(Cell& cell);
 
+    // Row/column helper functions for dealing with origin mode.
+    auto translate_row(u32 row) const -> u32;
+    auto translate_col(u32 col) const -> u32;
+    auto min_row() const -> u32;
+    auto max_row_inclusive() const -> u32;
+    auto min_col() const -> u32;
+    auto max_col_inclusive() const -> u32;
+
+    auto cursor_in_scroll_region() const -> bool;
+
+    auto begin_row_iterator() { return m_rows.begin() + m_scroll_region.start_row; }
+    auto end_row_iterator() { return m_rows.begin() + m_scroll_region.end_row; }
+
     // Screen state.
     di::Vector<Row> m_rows;
     IdMap<GraphicsRendition> m_graphics_renditions;
@@ -135,11 +163,13 @@ private:
 
     // Mutable state for writing cells.
     Cursor m_cursor;
+    OriginMode m_origin_mode { OriginMode::Disabled };
     u16 m_graphics_id { 0 };
     u16 m_hyperlink_id { 0 };
     GraphicsRendition m_empty_graphics;
 
     // Terminal size information.
     Size m_size {};
+    ScrollRegion m_scroll_region;
 };
 }
