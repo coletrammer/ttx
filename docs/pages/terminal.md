@@ -54,41 +54,16 @@ Because attributes like hyperlinks and the graphics rendition will be shared acr
 these indirectly in a cell (if we store cells at all). This means there would be map from id to value and each cell
 would have an id for each of these attributes.
 
-For text, it probably makes sense to store each line of text separately and have each cell refer to an offset within
-its corresponding lines text. This allows for arbitrary width cells with an arbitrary amount of text, while still be
-reasonably efficient. This is however unideal for resizing operations because reflowing the text requires modifying
-every cell. I think this means that the reflow operation would have to be lazy with respect to the scroll buffer, as
-otherwise the operation would be too inefficient.
+For text, we can store the size of the associated text for each cell. This allows for arbitrary width cells with an
+arbitrary amount of text, while still be reasonably efficient. The cursor will cache the actual text offset for each
+cell, which makes normal text operations efficient. By storing the width, we don't need to update every cell when
+performing certain operations (specifically overwriting a cell with new text). However, this approach is non-ideal
+when implementing insert/delete lines when a horizontal margin is present (but this is super rare).
 
 For multi-line cells, they would have no corresponding text but will have some attribute set to indicate the cell's
 true information is stored elsewhere.
 
 Cells also need damage tracking as an individual flag for optimizations when rendering.
-
-So we end up with something like this as the central data structure:
-
-```cpp
-struct Cell {
-    u16 graphics_rendition_index; // 0 means default
-    u16 hyperlink_id;             // 0 means none
-    u16 multicell_index;          // 0 means none (single cell)
-    u16 text_offset : 15;         // 0 means no text (this is 1 indexed)
-    u16 dirty : 1;                // bit flag for damage tracking
-};
-
-struct Row {
-    Vector<Cell> cells;
-    String text;             // Text associated with the row.
-    bool overflow { false }; // Use for rewrapping on resize. Set if the cursor overflowed when at this row.
-};
-
-struct Grid {
-    Ring<Row> rows; // Ring buffer to optimize for scrolling the screen.
-    Map<u16, GraphicsRendition> graphics_renditions;
-    Map<u16, Hyperlink> hyperlinks;
-    Map<u16, MultiCellInfo> multi_cell_info;
-};
-```
 
 ## Scroll Back
 
@@ -97,10 +72,23 @@ data structure should be used for scroll back. In particular, the 16 bit integer
 contents won't work at all when the scroll back becomes large enough. Additionally, most of the cells in scroll back
 will be completely empty, so it makes sense to optimize them out.
 
-To handle the large size restriction, we can either cells with larger index types, and "global" maps for all indirect
+To handle the large size restriction, we can either use cells with larger index types, and "global" maps for all indirect
 metadata, or split these up into independent chunks/blocks/pages. The latter approach is clearly more efficient but
 is more complicated, especially because hyperlinks and multi cell info can span multiple terminal rows. This can be
 handled by either choosing boundaries which do not induce this behavior (and splitting hyperlink / drop multi cells in
 pathological cases), or with special markers which indicate to look at a separate block. Splitting hyperlinks is
 reasonable, but dropping multi cells is non-ideal (although realistically multi cells are going to be used by full
-screen applications so its not super important.
+screen applications with no scroll back so its not super important.
+
+The other important operation with the scroll back is reflowing lines which we auto-wrapped. This is very useful
+functionality, but has important performance constraints, because the scroll back buffer can be potentially very
+large. This is especially problematic in cases where there is an extremely large line (1 million characters) when
+using a chunk based approach, since the entire line cannot fit in scroll back. Calling `cat` on a large file with no
+newline needs to not hang the terminal. This implies that the scroll back limit should not be measured in lines (
+which makes sense anyway because lines have no fixed meaning when we reflow text dynamically).
+
+For this reason, we cannot consolidate logical lines into a single line for the purpose of scroll back. However,
+handling the extremely large line case is still tricky (unless we enforce a maximum line length).
+
+Multi cells with a height greater than 0 are also very difficult to deal with when reflowing lines, when the cells have
+mixed height.

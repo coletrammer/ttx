@@ -3,6 +3,7 @@
 #include "di/bit/bitset/prelude.h"
 #include "di/container/string/string_view.h"
 #include "di/container/view/cache_last.h"
+#include "di/reflect/prelude.h"
 #include "scroll_region.h"
 #include "ttx/graphics_rendition.h"
 #include "ttx/size.h"
@@ -28,6 +29,28 @@ enum class AutoWrapMode {
 enum class OriginMode {
     Disabled,
     Enabled,
+};
+
+/// @brief Represents the saved cursor state, which is used for save/restore cursor operations.
+///
+/// The attributes which are saved and restored are defined in the [manual](https://vt100.net/docs/vt510-rm/DECSC.html)
+/// for the DECSC escape sequence.
+struct SavedCursor {
+    u32 row { 0 };                           ///< Row (y coordinate)
+    u32 col { 0 };                           ///< Column (x coordinate)
+    bool overflow_pending { false };         ///< Signals that the previous text outputted reached the end of a row.
+    GraphicsRendition graphics_rendition {}; ///< Active graphics rendition
+    OriginMode origin_mode { OriginMode::Disabled }; ///< Origin mode
+
+    auto operator==(SavedCursor const&) const -> bool = default;
+    auto operator<=>(SavedCursor const&) const = default;
+
+    constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<SavedCursor>) {
+        return di::make_fields<"SavedCursor">(di::field<"row", &SavedCursor::row>, di::field<"col", &SavedCursor::col>,
+                                              di::field<"overflow_pending", &SavedCursor::overflow_pending>,
+                                              di::field<"graphics_rendition", &SavedCursor::graphics_rendition>,
+                                              di::field<"origin_mode", &SavedCursor::origin_mode>);
+    }
 };
 
 /// @brief Represents the visible contents of the terminal (with no scroll back)
@@ -66,12 +89,14 @@ public:
 
     auto cursor() const -> Cursor { return m_cursor; }
     auto text_at_cursor() -> di::StringView;
+    auto origin_mode() const -> OriginMode { return m_origin_mode; }
 
     auto save_cursor() const -> SavedCursor;
     void restore_cursor(SavedCursor const& cursor);
 
     void set_origin_mode(OriginMode mode);
     void set_cursor(u32 row, u32 col);
+    void set_cursor(u32 row, u32 col, bool overflow_pending);
     void set_cursor_row(u32 row);
     void set_cursor_col(u32 col);
 

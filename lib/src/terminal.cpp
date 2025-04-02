@@ -592,9 +592,9 @@ void Terminal::csi_su(Params const& params) {
     u32 to_scroll = params.get(0, 1);
 
     auto& screen = active_screen().screen;
-    auto save = screen.save_cursor();
+    auto save = screen.cursor();
     auto _ = di::ScopeExit([&] {
-        screen.restore_cursor(save);
+        screen.set_cursor(save.row, save.col, save.overflow_pending);
     });
 
     screen.set_cursor(screen.scroll_region().start_row, 0);
@@ -608,9 +608,9 @@ void Terminal::csi_sd(Params const& params) {
     u32 to_scroll = params.get(0, 1);
 
     auto& screen = active_screen().screen;
-    auto save = screen.save_cursor();
+    auto save = screen.cursor();
     auto _ = di::ScopeExit([&] {
-        screen.restore_cursor(save);
+        screen.set_cursor(save.row, save.col, save.overflow_pending);
     });
 
     screen.set_cursor(screen.scroll_region().start_row, 0);

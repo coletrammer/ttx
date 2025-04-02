@@ -171,11 +171,18 @@ auto Screen::save_cursor() const -> SavedCursor {
         .row = m_cursor.row,
         .col = m_cursor.col,
         .overflow_pending = m_cursor.overflow_pending,
+        .graphics_rendition = current_graphics_rendition(),
+        .origin_mode = m_origin_mode,
     };
 }
 
 void Screen::restore_cursor(SavedCursor const& cursor) {
     set_cursor(cursor.row, cursor.col);
+    set_current_graphics_rendition(cursor.graphics_rendition);
+
+    // We don't call set_origin_mode() because that also resets
+    // the cursor position.
+    m_origin_mode = cursor.origin_mode;
 
     // This is restored even if the terminal has been resized such that
     // the cursor is no longer at the end of the row.
@@ -191,6 +198,11 @@ void Screen::set_origin_mode(OriginMode origin_mode) {
     // If origin mode is enabled, this puts the cursor at the
     // top-left of the scroll region.
     set_cursor(0, 0);
+}
+
+void Screen::set_cursor(u32 row, u32 col, bool overflow_pending) {
+    set_cursor(row, col);
+    m_cursor.overflow_pending = overflow_pending;
 }
 
 void Screen::set_cursor(u32 row, u32 col) {

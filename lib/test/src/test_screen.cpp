@@ -1,5 +1,6 @@
 #include "di/test/prelude.h"
 #include "dius/print.h"
+#include "ttx/graphics_rendition.h"
 #include "ttx/terminal/screen.h"
 
 namespace screen {
@@ -162,7 +163,8 @@ static void cursor_movement() {
     expected = { .row = 4, .col = 4, .text_offset = 4 };
     ASSERT_EQ(screen.cursor(), expected);
 
-    screen.restore_cursor({ 4, 4, true });
+    screen.set_cursor(4, 4, true);
+    ;
     expected = { .row = 4, .col = 4, .text_offset = 4, .overflow_pending = true };
     ASSERT_EQ(screen.cursor(), expected);
 
@@ -226,17 +228,20 @@ static void clear_row() {
                      u8"pqrst"
                      u8"uvwxy"_sv);
 
-    screen.restore_cursor({ 0, 2, true });
+    screen.set_cursor(0, 2, true);
+    ;
     screen.clear_row_after_cursor();
     ASSERT_EQ(screen.cursor().text_offset, 2);
     ASSERT_EQ(screen.cursor().overflow_pending, false);
 
-    screen.restore_cursor({ 1, 2, true });
+    screen.set_cursor(1, 2, true);
+    ;
     screen.clear_row_before_cursor();
     ASSERT_EQ(screen.cursor().text_offset, 0);
     ASSERT_EQ(screen.cursor().overflow_pending, false);
 
-    screen.restore_cursor({ 2, 4, true });
+    screen.set_cursor(2, 4, true);
+    ;
     screen.clear_row();
     ASSERT_EQ(screen.cursor().text_offset, 0);
     ASSERT_EQ(screen.cursor().overflow_pending, false);
@@ -257,12 +262,14 @@ static void clear_screen() {
                      u8"pqrst"
                      u8"uvwxy"_sv);
 
-    screen.restore_cursor({ 2, 2, true });
+    screen.set_cursor(2, 2, true);
+    ;
     screen.clear_before_cursor();
     ASSERT_EQ(screen.cursor().text_offset, 0);
     ASSERT_EQ(screen.cursor().overflow_pending, false);
 
-    screen.restore_cursor({ 3, 1, true });
+    screen.set_cursor(3, 1, true);
+    ;
     screen.clear_after_cursor();
     ASSERT_EQ(screen.cursor().text_offset, 1);
     ASSERT_EQ(screen.cursor().overflow_pending, false);
@@ -283,7 +290,8 @@ static void clear_all() {
                      u8"pqrst"
                      u8"uvwxy"_sv);
 
-    screen.restore_cursor({ 2, 2, true });
+    screen.set_cursor(2, 2, true);
+    ;
     screen.clear();
     ASSERT_EQ(screen.cursor().text_offset, 0);
     ASSERT_EQ(screen.cursor().overflow_pending, false);
@@ -305,7 +313,8 @@ static void insert_blank_characters() {
                      u8"uvwxy"_sv);
 
     auto expected = Cursor {};
-    screen.restore_cursor({ 0, 0, true });
+    screen.set_cursor(0, 0, true);
+    ;
     screen.insert_blank_characters(0); // No-op, but clears cursor overflow pending.
     ASSERT_EQ(screen.cursor(), expected);
     screen.insert_blank_characters(1);
@@ -338,7 +347,8 @@ static void delete_characters() {
                      u8"uvwxy"_sv);
 
     auto expected = Cursor {};
-    screen.restore_cursor({ 0, 0, true });
+    screen.set_cursor(0, 0, true);
+    ;
     screen.delete_characters(0); // No-op, but clears cursor overflow pending.
     ASSERT_EQ(screen.cursor(), expected);
     screen.delete_characters(1);
@@ -371,7 +381,8 @@ static void insert_blank_lines() {
                      u8"uvwxy"_sv);
 
     auto expected = Cursor {};
-    screen.restore_cursor({ 0, 4, true });
+    screen.set_cursor(0, 4, true);
+    ;
     screen.insert_blank_lines(0); // No-op, but sets the cursor the left margin.
     ASSERT_EQ(screen.cursor(), expected);
     screen.insert_blank_lines(1);
@@ -399,7 +410,8 @@ static void vertical_scroll_region_insert_blank_lines() {
     screen.set_scroll_region({ 1, 4 });
 
     auto expected = Cursor {};
-    screen.restore_cursor({ 0, 0, true });
+    screen.set_cursor(0, 0, true);
+    ;
     screen.insert_blank_lines(1); // No-op, because outside scroll region. But overflow flag is cleared.
     ASSERT_EQ(screen.cursor(), expected);
 
@@ -425,7 +437,8 @@ static void delete_lines() {
                      u8"uvwxy"_sv);
 
     auto expected = Cursor {};
-    screen.restore_cursor({ 0, 4, true });
+    screen.set_cursor(0, 4, true);
+    ;
     screen.delete_lines(0); // No-op, but sets the cursor the left margin.
     ASSERT_EQ(screen.cursor(), expected);
     screen.delete_lines(1);
@@ -453,7 +466,8 @@ static void vertical_scroll_region_delete_lines() {
     screen.set_scroll_region({ 1, 4 });
 
     auto expected = Cursor {};
-    screen.restore_cursor({ 0, 0, true });
+    screen.set_cursor(0, 0, true);
+    ;
     screen.delete_lines(1); // No-op, because outside scroll region. But overflow flag is cleared.
     ASSERT_EQ(screen.cursor(), expected);
 
@@ -512,6 +526,28 @@ static void vertical_scroll_region_autowrap() {
     }
 }
 
+static void save_restore_cursor() {
+    auto screen = Screen({ 5, 2 }, Screen::ScrollBackEnabled::No);
+    put_text(screen, "ab"
+                     "cd"
+                     "ef"
+                     "gh"
+                     "ij"_sv);
+
+    auto save = screen.save_cursor();
+
+    put_text(screen, u8"¢¢¢¢¢¢¢¢¢¢"_sv);
+    screen.set_current_graphics_rendition({ .blink_mode = ttx::BlinkMode::Normal });
+    screen.set_origin_mode(OriginMode::Enabled);
+
+    screen.restore_cursor(save);
+
+    auto expected_cursor = Cursor { .row = 4, .col = 1, .text_offset = 2, .overflow_pending = true };
+    ASSERT_EQ(screen.cursor(), expected_cursor);
+    ASSERT_EQ(screen.origin_mode(), OriginMode::Disabled);
+    ASSERT_EQ(screen.current_graphics_rendition(), ttx::GraphicsRendition {});
+}
+
 TEST(screen, put_text_basic)
 TEST(screen, put_text_unicode)
 TEST(screen, cursor_movement)
@@ -527,4 +563,5 @@ TEST(screen, delete_lines)
 TEST(screen, vertical_scroll_region_delete_lines)
 TEST(screen, autowrap)
 TEST(screen, vertical_scroll_region_autowrap)
+TEST(screen, save_restore_cursor)
 }
