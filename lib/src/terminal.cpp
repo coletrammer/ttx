@@ -708,6 +708,11 @@ void Terminal::csi_decset(Params const& params) {
                 csi_decstbm({});
             }
             break;
+        case 5:
+            // Reverse video - https://vt100.net/docs/vt510-rm/DECSCNM.html
+            m_reverse_video = true;
+            invalidate_all();
+            break;
         case 6:
             // Origin Mode - https://vt100.net/docs/vt510-rm/DECOM.html
             // Unlike other modes, this one is per-screen, as this mode
@@ -782,6 +787,11 @@ void Terminal::csi_decrst(Params const& params) {
                 clear();
                 csi_decstbm({});
             }
+            break;
+        case 5:
+            // Reverse video - https://vt100.net/docs/vt510-rm/DECSCNM.html
+            m_reverse_video = false;
+            invalidate_all();
             break;
         case 6:
             // Origin Mode - https://vt100.net/docs/vt510-rm/DECOM.html
@@ -892,7 +902,7 @@ void Terminal::csi_dsr(Params const& params) {
 void Terminal::csi_decstbm(Params const& params) {
     u32 new_scroll_start = di::min(params.get(0, 1) - 1, row_count() - 1);
     u32 new_scroll_end = di::min(params.get(1, row_count()) - 1, row_count() - 1);
-    if (new_scroll_end - new_scroll_start < 1) {
+    if (new_scroll_end < new_scroll_start || new_scroll_end - new_scroll_start < 1) {
         return;
     }
 

@@ -48,6 +48,7 @@ public:
     auto cursor_col() const -> u32 { return active_screen().screen.cursor().col; }
     auto cursor_hidden() const -> bool { return m_cursor_hidden; }
     auto cursor_style() const -> CursorStyle { return active_screen().cursor_style; }
+    auto reverse_video() const -> bool { return m_reverse_video; }
 
     auto allowed_to_draw() const -> bool { return !m_disable_drawing; }
 
@@ -181,7 +182,7 @@ private:
     bool m_cursor_hidden { false };
     bool m_disable_drawing { false };
     terminal::AutoWrapMode m_auto_wrap_mode { terminal::AutoWrapMode::Enabled };
-    bool m_origin_mode { false };
+    bool m_reverse_video { false };
 
     ApplicationCursorKeysMode m_application_cursor_keys_mode { ApplicationCursorKeysMode::Disabled };
     KeyReportingFlags m_key_reporting_flags { KeyReportingFlags::None };
