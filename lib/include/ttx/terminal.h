@@ -135,6 +135,8 @@ private:
     void csi_cud(Params const& params);
     void csi_cuf(Params const& params);
     void csi_cub(Params const& params);
+    void csi_cpl(Params const& params);
+    void csi_cnl(Params const& params);
     void csi_cup(Params const& params);
     void csi_cha(Params const& params);
     void csi_ed(Params const& params);

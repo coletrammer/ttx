@@ -198,6 +198,14 @@ void Terminal::on_parser_result(CSI const& csi) {
             csi_cub(csi.params);
             return;
         }
+        case 'E': {
+            csi_cnl(csi.params);
+            return;
+        }
+        case 'F': {
+            csi_cpl(csi.params);
+            return;
+        }
         case 'G': {
             csi_cha(csi.params);
             return;
@@ -508,6 +516,20 @@ void Terminal::csi_cub(Params const& params) {
     auto delta_col = di::max(1u, params.get(0, 1));
     auto new_col = delta_col > cursor_col() ? 0 : cursor_col() - delta_col;
     active_screen().screen.set_cursor_col(new_col);
+}
+
+// Cursor Previous Line - https://vt100.net/docs/vt510-rm/CPL.html
+void Terminal::csi_cpl(Params const& params) {
+    auto delta_row = di::max(1u, params.get(0, 1));
+    auto new_row = delta_row > cursor_row() ? 0 : cursor_row() - delta_row;
+    active_screen().screen.set_cursor(new_row, 0);
+}
+
+// Cursor Next Line - https://vt100.net/docs/vt510-rm/CNL.html
+void Terminal::csi_cnl(Params const& params) {
+    auto delta_row = di::max(1u, params.get(0, 1));
+    auto new_row = di::Checked(cursor_row()) + delta_row;
+    active_screen().screen.set_cursor(new_row.value().value_or(di::NumericLimits<u32>::max), 0);
 }
 
 // Cursor Position - https://www.vt100.net/docs/vt100-ug/chapter3.html#CUP
