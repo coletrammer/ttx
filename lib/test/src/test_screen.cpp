@@ -291,7 +291,7 @@ static void clear_all() {
                      u8"uvwxy"_sv);
 
     screen.set_cursor(2, 2, true);
-    ;
+
     screen.clear();
     ASSERT_EQ(screen.cursor().text_offset, 0);
     ASSERT_EQ(screen.cursor().overflow_pending, false);
@@ -301,6 +301,31 @@ static void clear_all() {
                           "     \n"
                           "     \n"
                           "     "_sv);
+}
+
+static void erase_characters() {
+    auto screen = Screen({ 5, 5 }, Screen::ScrollBackEnabled::No);
+
+    put_text(screen, u8"abcde"
+                     u8"fghij"
+                     u8"$¢€𐍈x"
+                     u8"pqrst"
+                     u8"uvwxy"_sv);
+
+    screen.set_cursor(2, 2, true);
+
+    screen.erase_characters(1);
+    ASSERT_EQ(screen.cursor().text_offset, 3);
+    ASSERT_EQ(screen.cursor().overflow_pending, false);
+
+    screen.set_cursor(3, 1);
+    screen.erase_characters(1000);
+
+    validate_text(screen, u8"abcde\n"
+                          u8"fghij\n"
+                          u8"$¢ 𐍈x\n"
+                          u8"p    \n"
+                          u8"uvwxy"_sv);
 }
 
 static void insert_blank_characters() {
@@ -555,6 +580,7 @@ TEST(screen, origin_mode_cursor_movement)
 TEST(screen, clear_row)
 TEST(screen, clear_screen)
 TEST(screen, clear_all)
+TEST(screen, erase_characters)
 TEST(screen, insert_blank_characters)
 TEST(screen, delete_characters)
 TEST(screen, insert_blank_lines)

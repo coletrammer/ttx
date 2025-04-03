@@ -1,0 +1,65 @@
+[4;2640;5054t[8;61;266t%@[0c[?1l[?3l[?4l[?5l[?6l[?7h[?8l[?40h[?45l[r[0m%G[2J[3;10HVT100 test program, version 2.7 (20241208)[4;10HLine speed 38400bd [5;10HChoose test type:
+[6;1H[0J
+          0. Exit
+          1. Test of cursor movements
+          2. Test of screen features
+          3. Test of character sets
+          4. Test of double-sized characters
+          5. Test of keyboard
+          6. Test of terminal reports
+          7. Test of VT52 mode
+          8. Test of VT102 features (Insert/Delete Char/Line)
+          9. Test of known bugs
+          10. Test of reset and self-test
+          11. Test non-VT100 (e.g., VT220, XTERM) terminals
+          12. Modify test-parameters
+
+          Enter choice number (0 - 12): 11
+[2J[2J[3;10HMenu 11: Non-VT100 Tests[5;10HChoose test type:
+[6;1H[0J
+          0. Exit
+          1. Test of VT220 features
+          2. Test of VT320 features
+          3. Test of VT420 features
+          4. Test of VT520 features
+          5. Test ISO-6429 cursor-movement
+          6. Test ISO-6429 colors
+          7. Test other ISO-6429 features
+          8. Test XTERM special features
+
+          Enter choice number (0 - 8): 7
+[2J[2J[3;10HMenu 11.7: Miscellaneous ISO-6429 (ECMA-48) Tests[5;10HChoose test type:
+[6;1H[0J
+          0. Exit
+          1. Protected-Area Tests
+          2. Test Repeat (REP)
+          3. Test Scroll-Down (SD)
+          4. Test Scroll-Left (SL)
+          5. Test Scroll-Right (SR)
+          6. Test Scroll-Up (SU)
+
+          Enter choice number (0 - 6): 2
+[2J[r[s[1;1H+[0b[10b
+ +[1b[10b
+ [1b+[b[10b
+ [2b+[0b[10b
+ [3b+[1b[10b
+ [4b+[b[10b
+ [5b+[0b[10b
+ [6b+[1b[10b
+ [7b+[b[10b
+ [8b+[0b[10b
+ [9b+[1b[10b
+ [10b+[b[10b
+ [11b+[0b[10b
+ [12b+[1b[10b
+ [13b+[b[10b
+ [14b+[0b[10b
+ [15b+[1b[10b
+ [16b+[b[10b
+[r[s[19;1H******************++************************************************************[20;1H[20;1H----+----1----+----2----+----3----+----4----+----5----+----6----+----7----+----8
+Test Repeat (REP)
+There should be a diagonal of 2 +'s down to the row of *'s above this message.
+The ++ in the row of *'s is the target.  If there are 11 +'s, ECMA-48 does
+not prohibit this, but treats it as undefined behavior (still nonstandard).
+Push <RETURN>

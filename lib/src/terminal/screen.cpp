@@ -468,11 +468,20 @@ void Screen::clear_row_after_cursor() {
     m_cursor.overflow_pending = false;
 
     auto& row = m_rows[m_cursor.row];
+    auto text_size_to_delete = 0zu;
     for (auto& cell : row.cells | di::drop(m_cursor.col)) {
         drop_cell(cell);
+        text_size_to_delete += cell.text_size;
         cell.text_size = 0;
     }
     row.overflow = false;
+
+    // Delete text after the cursor.
+    auto text_start = row.text.iterator_at_offset(m_cursor.text_offset);
+    auto text_end = row.text.iterator_at_offset(m_cursor.text_offset + text_size_to_delete);
+    ASSERT(text_start);
+    ASSERT(text_end);
+    row.text.erase(text_start.value(), text_end.value());
 }
 
 void Screen::clear_row_before_cursor() {
@@ -493,6 +502,30 @@ void Screen::clear_row_before_cursor() {
 
     // We deleted all the text before the cursor.
     m_cursor.text_offset = 0;
+}
+
+void Screen::erase_characters(u32 n) {
+    m_cursor.overflow_pending = false;
+
+    auto& row = m_rows[m_cursor.row];
+    auto text_size_to_delete = 0zu;
+    for (auto& cell : row.cells | di::drop(m_cursor.col) | di::take(n)) {
+        drop_cell(cell);
+        text_size_to_delete += cell.text_size;
+        cell.text_size = 0;
+    }
+
+    // Delete text after the cursor.
+    auto text_start = row.text.iterator_at_offset(m_cursor.text_offset);
+    auto text_end = row.text.iterator_at_offset(m_cursor.text_offset + text_size_to_delete);
+    ASSERT(text_start);
+    ASSERT(text_end);
+    row.text.erase(text_start.value(), text_end.value());
+
+    // Clear row overflow flag if text after the cursor is fully deleted.
+    if (text_end.value() == row.text.end()) {
+        row.overflow = false;
+    }
 }
 
 void Screen::scroll_down() {

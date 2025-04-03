@@ -1,0 +1,55 @@
+[4;2640;1520t[8;61;80t%@[0c[?1l[?3l[?4l[?5l[?6l[?7h[?8l[?40h[?45l[r[0m%G[2J[3;10HVT100 test program, version 2.7 (20241208)[4;10HLine speed 38400bd [5;10HChoose test type:
+[6;1H[0J
+          0. Exit
+          1. Test of cursor movements
+          2. Test of screen features
+          3. Test of character sets
+          4. Test of double-sized characters
+          5. Test of keyboard
+          6. Test of terminal reports
+          7. Test of VT52 mode
+          8. Test of VT102 features (Insert/Delete Char/Line)
+          9. Test of known bugs
+          10. Test of reset and self-test
+          11. Test non-VT100 (e.g., VT220, XTERM) terminals
+          12. Modify test-parameters
+
+          Enter choice number (0 - 12): 11
+[2J[2J[3;10HMenu 11: Non-VT100 Tests[5;10HChoose test type:
+[6;1H[0J
+          0. Exit
+          1. Test of VT220 features
+          2. Test of VT320 features
+          3. Test of VT420 features
+          4. Test of VT520 features
+          5. Test ISO-6429 cursor-movement
+          6. Test ISO-6429 colors
+          7. Test other ISO-6429 features
+          8. Test XTERM special features
+
+          Enter choice number (0 - 8): 1
+[2J[2J[3;10HMenu 11.1: VT220 Tests[5;10HChoose test type:
+[6;1H[0J
+          0. Exit
+          1. Test reporting functions
+          2. Test screen-display functions
+          3. Test 8-bit controls (S7C1T/S8C1T)
+          4. Test Printer (MC)
+          5. Test Soft Character Sets (DECDLD)
+          6. Test Soft Terminal Reset (DECSTR)
+          7. Test User-Defined Keys (DECUDK)
+
+          Enter choice number (0 - 7): 2
+[2J[2J[3;10HMenu 11.1.2: VT220 Screen-Display Tests[5;10HChoose test type:
+[6;1H[0J
+          0. Exit
+          1. Test Send/Receive mode (SRM)
+          2. Test Visible/Invisible Cursor (DECTCEM)
+          3. Test Erase Char (ECH)
+          4. Test Protected-Areas (DECSCA)
+
+          Enter choice number (0 - 4): 3
+[2J#8[1;77H[X[1;78H*[80X*[2;76H[X[2;77H*[80X*[3;75H[X[3;76H*[80X*[4;74H[X[4;75H*[80X*[5;73H[X[5;74H*[80X*[6;72H[X[6;73H*[80X*[7;71H[X[7;72H*[80X*[8;70H[X[8;71H*[80X*[9;69H[X[9;70H*[80X*[10;68H[X[10;69H*[80X*[11;67H[X[11;68H*[80X*[12;66H[X[12;67H*[80X*[13;65H[X[13;66H*[80X*[14;64H[X[14;65H*[80X*[15;63H[X[15;64H*[80X*[16;62H[X[16;63H*[80X*[17;61H[X[17;62H*[80X*[18;60H[X[18;61H*[80X*[19;59H[X[19;60H*[80X*[20;58H[X[20;59H*[80X*[21;57H[X[21;58H*[80X*[22;56H[X[22;57H*[80X*[23;55H[X[23;56H*[80X*[24;54H[X[24;55H*[80X*[20;1H[0J[20;50Hdiagonal: ^^ (clear)
+ECH test: there should be E's with a gap before diagonal of **'s
+The lower-right diagonal region should be cleared.  Nothing else.
+Push <RETURN>

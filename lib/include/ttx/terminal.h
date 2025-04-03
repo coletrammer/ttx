@@ -185,6 +185,7 @@ private:
     bool m_disable_drawing { false };
     terminal::AutoWrapMode m_auto_wrap_mode { terminal::AutoWrapMode::Enabled };
     bool m_reverse_video { false };
+    di::Optional<c32> m_last_graphics_charcter { 0 };
 
     ApplicationCursorKeysMode m_application_cursor_keys_mode { ApplicationCursorKeysMode::Disabled };
     KeyReportingFlags m_key_reporting_flags { KeyReportingFlags::None };

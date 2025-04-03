@@ -29,9 +29,10 @@ void Terminal::on_parser_results(di::Span<ParserResult const> results) {
     }
 }
 
-void Terminal::on_parser_result(PrintableCharacter const& Printable_character) {
-    if (Printable_character.code_point < 0x7F || Printable_character.code_point > 0x9F) {
-        put_char(Printable_character.code_point);
+void Terminal::on_parser_result(PrintableCharacter const& printable_character) {
+    if (printable_character.code_point < 0x7F || printable_character.code_point > 0x9F) {
+        put_char(printable_character.code_point);
+        m_last_graphics_charcter = printable_character.code_point;
     }
 }
 
@@ -642,24 +643,19 @@ void Terminal::csi_sd(Params const& params) {
 // Erase Character - https://vt100.net/docs/vt510-rm/ECH.html
 void Terminal::csi_ech(Params const& params) {
     u32 chars_to_erase = di::max(1u, params.get(0, 1));
-    // TODO: this overwrites characters unlike dch.
+    auto& screen = active_screen().screen;
+    screen.erase_characters(chars_to_erase);
 }
 
 // Repeat Preceding Graphic Character - https://invisible-island.net/xterm/ctlseqs/ctlseqs.html
 void Terminal::csi_rep(Params const& params) {
-    // c32 preceding_character = ' ';
-    // if (m_cursor_col == 0) {
-    //     if (m_cursor_row != 0) {
-    //         preceding_character = m_rows[m_cursor_row - 1][m_col_count - 1].ch;
-    //     }
-    // } else {
-    //     preceding_character = m_rows[m_cursor_row][m_cursor_col - 1].ch;
-    // }
-    // TODO: find the previous character - seems like we should use the last
-    // argument passed to put_char().
-    // for (auto i = 0_u32; i < params.get(0, 0); i++) {
-    //     put_char(preceding_character);
-    // }
+    if (!m_last_graphics_charcter.has_value()) {
+        return;
+    }
+    auto n = di::max(1u, params.get(0, 1));
+    for (auto _ : di::range(n)) {
+        active_screen().screen.put_code_point(m_last_graphics_charcter.value(), m_auto_wrap_mode);
+    }
 }
 
 // Primary Device Attributes - https://vt100.net/docs/vt510-rm/DA1.html

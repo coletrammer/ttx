@@ -114,6 +114,8 @@ public:
     void clear_row_after_cursor();
     void clear_row_before_cursor();
 
+    void erase_characters(u32 n);
+
     void scroll_down();
     void put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode);
 
