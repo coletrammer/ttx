@@ -9,9 +9,9 @@
 #include "ttx/size.h"
 #include "ttx/terminal/cursor.h"
 #include "ttx/terminal/hyperlink.h"
-#include "ttx/terminal/id_map.h"
-#include "ttx/terminal/multi_cell_info.h"
 #include "ttx/terminal/row.h"
+#include "ttx/terminal/row_group.h"
+#include "ttx/terminal/scroll_back.h"
 
 namespace ttx::terminal {
 /// @brief Whether or not auto-wrap (DEC mode 7) is enabled.
@@ -55,7 +55,7 @@ struct SavedCursor {
 
 /// @brief Represents the visible contents of the terminal (with no scroll back)
 ///
-/// The screen class internally maintains a ring buffer of terminal rows, as well as
+/// The screen class internally maintains a vector of terminal rows, as well as
 /// the graphics rendition, hyperlink, and multi cell info indirectly referenced by the
 /// Cell class.
 ///
@@ -71,21 +71,16 @@ public:
     void resize(Size const& size);
     void set_scroll_region(ScrollRegion const& region);
 
-    auto row_count() const -> u32 { return m_rows.size(); }
-    auto max_height() const { return m_size.rows; }
-    auto max_width() const { return m_size.cols; }
+    auto max_height() const -> u32 { return m_size.rows; }
+    auto max_width() const -> u32 { return m_size.cols; }
     auto size() const -> Size const& { return m_size; }
     auto scroll_region() const -> ScrollRegion const& { return m_scroll_region; }
 
-    auto current_graphics_rendition() const -> GraphicsRendition;
+    auto current_graphics_rendition() const -> GraphicsRendition const&;
     auto current_hyperlink() const -> di::Optional<Hyperlink const&>;
 
     void set_current_graphics_rendition(GraphicsRendition const& rendition);
     void set_current_hyperlink(di::Optional<Hyperlink const&> hyperlink);
-
-    auto graphics_rendition(u16 id) const -> GraphicsRendition const&;
-    auto hyperlink(u16 id) const -> Hyperlink const&;
-    auto maybe_hyperlink(u16 id) const -> di::Optional<Hyperlink const&>;
 
     auto cursor() const -> Cursor { return m_cursor; }
     auto text_at_cursor() -> di::StringView;
@@ -113,7 +108,6 @@ public:
     void clear_row();
     void clear_row_after_cursor();
     void clear_row_before_cursor();
-
     void erase_characters(u32 n);
 
     void scroll_down();
@@ -124,7 +118,7 @@ public:
     auto iterate_row(u32 row) {
         ASSERT_LT(row, max_height());
 
-        auto& row_object = m_rows[row];
+        auto& row_object = rows()[row];
 
         // Fetch the indirect data fields for every cell in the row (text, graphics, and hyperlink). This uses
         // cache_last() so that the transform() can can maintain a mutable text offset counter safely, which
@@ -146,22 +140,14 @@ public:
                    }();
 
                    return di::make_tuple(col++, di::ref(cell), text,
-                                         di::ref(graphics_rendition(cell.graphics_rendition_id)),
-                                         maybe_hyperlink(cell.hyperlink_id));
+                                         di::ref(m_active_rows.graphics_rendition(cell.graphics_rendition_id)),
+                                         m_active_rows.maybe_hyperlink(cell.hyperlink_id));
                }) |
                di::cache_last;
     }
 
 private:
     void put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode);
-
-    void drop_graphics_id(u16& id);
-    void drop_hyperlink_id(u16& id);
-    void drop_multi_cell_id(u16& id);
-
-    /// This function does not remove the text associated with the cell, as the caller typically has enough
-    /// context to do this more efficiently (because they are erasing multiple cells).
-    void drop_cell(Cell& cell);
 
     // Row/column helper functions for dealing with origin mode.
     auto translate_row(u32 row) const -> u32;
@@ -173,19 +159,17 @@ private:
 
     auto cursor_in_scroll_region() const -> bool;
 
-    auto begin_row_iterator() { return m_rows.begin() + m_scroll_region.start_row; }
-    auto end_row_iterator() { return m_rows.begin() + m_scroll_region.end_row; }
+    auto begin_row_iterator() { return rows().begin() + m_scroll_region.start_row; }
+    auto end_row_iterator() { return rows().begin() + m_scroll_region.end_row; }
+
+    auto rows() -> di::Ring<Row>& { return m_active_rows.rows(); }
+    auto rows() const -> di::Ring<Row> const& { return m_active_rows.rows(); }
 
     // Screen state.
-    di::Vector<Row> m_rows;
-    IdMap<GraphicsRendition> m_graphics_renditions;
-    IdMap<Hyperlink> m_hyperlinks;
-    IdMap<MultiCellInfo> m_multi_cell_info;
+    RowGroup m_active_rows;
 
-    // Pending scroll back. Users of the screen class should either
-    // disable scroll back for the screen or process these items
-    // regurarly.
-    di::Vector<Row> m_pending_scroll_back;
+    // Scroll back
+    ScrollBack m_scroll_back;
     ScrollBackEnabled m_scroll_back_enabled { ScrollBackEnabled::No };
 
     // Mutable state for writing cells.
@@ -193,7 +177,6 @@ private:
     OriginMode m_origin_mode { OriginMode::Disabled };
     u16 m_graphics_id { 0 };
     u16 m_hyperlink_id { 0 };
-    GraphicsRendition m_empty_graphics;
 
     // Terminal size information.
     Size m_size {};

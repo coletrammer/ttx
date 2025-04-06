@@ -19,7 +19,7 @@ namespace detail {
 
     template<typename T>
     requires(requires { typename T::DefaultOps; })
-    struct DefaultOpsImplT : di::meta::TypeConstant<typename T::DefaultOps> {};
+    struct DefaultOpsT<T> : di::meta::TypeConstant<typename T::DefaultOps> {};
 
     template<typename T>
     using DefaultOps = di::meta::Type<DefaultOpsT<T>>;
@@ -68,7 +68,9 @@ public:
         return di::get<1>(*it);
     }
 
-    auto allocate(T const& value) -> di::Optional<Id> {
+    auto allocate(T const& value) -> di::Optional<Id>
+    requires(di::concepts::CopyConstructible<T>)
+    {
         auto id = allocate_id();
         if (!id) {
             return {};
@@ -78,6 +80,19 @@ public:
         ASSERT(!m_id_lookup.contains(key));
         m_id_lookup[key] = *id;
         m_id_map.insert_or_assign(*id, value);
+        return id;
+    }
+
+    auto allocate(T&& value) -> di::Optional<Id> {
+        auto id = allocate_id();
+        if (!id) {
+            return {};
+        }
+
+        auto const& key = get_key(value);
+        ASSERT(!m_id_lookup.contains(key));
+        m_id_lookup[key] = *id;
+        m_id_map.insert_or_assign(*id, di::move(value));
         return id;
     }
 
@@ -95,7 +110,7 @@ public:
 
         auto& rc = di::get<1>(*it);
         if (--rc.ref_count == 0) {
-            m_id_lookup.erase(rc.value);
+            m_id_lookup.erase(get_key(rc.value));
             m_ids_used[id - 1] = false;
             m_id_map.erase(id);
         }

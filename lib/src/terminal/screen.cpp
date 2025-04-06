@@ -27,23 +27,29 @@ void Screen::resize(Size const& size) {
 
     // Always update the size and clamp the scroll region in bounds.
     auto _ = di::ScopeExit([&] {
+        // If the scroll region is the default (the entire screen, expand it).
+        if (m_scroll_region.end_row == m_size.rows) {
+            m_scroll_region.end_row = size.rows;
+        } else {
+            m_scroll_region.end_row = di::min(m_scroll_region.end_row, size.rows);
+        }
+
         m_size = size;
-        m_scroll_region.end_row = di::min(m_scroll_region.end_row, size.rows);
     });
 
     // First the column size of the existing rows.
     if (size.cols > max_width()) {
         // When expanding, just add blank cells.
-        for (auto& row : m_rows) {
+        for (auto& row : rows()) {
             row.cells.resize(size.cols);
         }
     } else {
         // When contracting, we need to free resources used by each cell we're deleting.
-        for (auto& row : m_rows) {
+        for (auto& row : rows()) {
             auto text_bytes_to_delete = 0zu;
             while (row.cells.size() > size.cols) {
                 auto cell = *row.cells.pop_back();
-                drop_cell(cell);
+                m_active_rows.drop_cell(cell);
 
                 text_bytes_to_delete += cell.text_size;
             }
@@ -55,33 +61,36 @@ void Screen::resize(Size const& size) {
     }
 
     // Now either add new rows or move existing rows to the scroll back.
-    if (m_rows.size() > size.rows) {
-        auto rows_to_delete = m_rows | di::take(m_rows.size() - size.rows);
+    if (rows().size() > size.rows) {
         if (m_scroll_back_enabled == ScrollBackEnabled::Yes) {
-            m_pending_scroll_back.append_container(rows_to_delete | di::as_rvalue);
+            m_scroll_back.add_rows(m_active_rows, 0, rows().size() - size.rows);
         } else {
+            auto rows_to_delete = rows() | di::take(rows().size() - size.rows);
             for (auto& row : rows_to_delete) {
                 for (auto& cell : row.cells) {
-                    drop_cell(cell);
+                    m_active_rows.drop_cell(cell);
                     cell.text_size = 0;
                 }
                 row.text.clear();
                 row.overflow = false;
             }
+            rows().erase(rows().begin(), rows().end() - size.rows);
         }
-        m_rows.erase(m_rows.begin(), m_rows.end() - size.rows);
-    } else if (m_rows.size() < size.rows) {
-        for (auto _ : di::range(size.rows - m_rows.size())) {
+    } else if (rows().size() < size.rows) {
+        for (auto _ : di::range(size.rows - rows().size())) {
             auto row = Row {};
             row.cells.resize(size.cols);
-            m_rows.push_back(di::move(row));
+            rows().push_back(di::move(row));
         }
     }
-    ASSERT_EQ(m_rows.size(), size.rows);
+    ASSERT_EQ(rows().size(), size.rows);
 
     // Clamp the cursor to the screen size.
     m_cursor.row = di::min(m_cursor.row, size.rows - 1);
     m_cursor.col = di::min(m_cursor.col, size.cols - 1);
+
+    // TODO: optimize!
+    invalidate_all();
 }
 
 void Screen::set_scroll_region(ScrollRegion const& region) {
@@ -90,40 +99,34 @@ void Screen::set_scroll_region(ScrollRegion const& region) {
     m_scroll_region = region;
 }
 
-auto Screen::current_graphics_rendition() const -> GraphicsRendition {
-    if (!m_graphics_id) {
-        return {};
-    }
-    return m_graphics_renditions.lookup_id(m_graphics_id);
+auto Screen::current_graphics_rendition() const -> GraphicsRendition const& {
+    return m_active_rows.graphics_rendition(m_graphics_id);
 }
 
 auto Screen::current_hyperlink() const -> di::Optional<Hyperlink const&> {
-    if (!m_hyperlink_id) {
-        return {};
-    }
-    return m_hyperlinks.lookup_id(m_hyperlink_id);
+    return m_active_rows.maybe_hyperlink(m_hyperlink_id);
 }
 
 void Screen::set_current_graphics_rendition(GraphicsRendition const& rendition) {
     if (rendition == GraphicsRendition {}) {
-        drop_graphics_id(m_graphics_id);
+        m_active_rows.drop_graphics_id(m_graphics_id);
         m_graphics_id = 0;
         return;
     }
 
-    auto existing_id = m_graphics_renditions.lookup_key(rendition);
+    auto existing_id = m_active_rows.graphics_id(rendition);
     if (existing_id) {
         if (*existing_id == m_graphics_id) {
             return;
         }
-        drop_graphics_id(m_graphics_id);
-        m_graphics_id = m_graphics_renditions.use_id(*existing_id);
+        m_active_rows.drop_graphics_id(m_graphics_id);
+        m_graphics_id = m_active_rows.use_graphics_id(*existing_id);
         return;
     }
 
-    drop_graphics_id(m_graphics_id);
+    m_active_rows.drop_graphics_id(m_graphics_id);
 
-    auto new_id = m_graphics_renditions.allocate(rendition);
+    auto new_id = m_active_rows.allocate_graphics_id(rendition);
     if (!new_id) {
         m_graphics_id = 0;
         return;
@@ -132,30 +135,9 @@ void Screen::set_current_graphics_rendition(GraphicsRendition const& rendition) 
     m_graphics_id = *new_id;
 }
 
-auto Screen::graphics_rendition(u16 id) const -> GraphicsRendition const& {
-    if (id == 0) {
-        return m_empty_graphics;
-    }
-    return m_graphics_renditions.lookup_id(id);
-}
-
-auto Screen::hyperlink(u16 id) const -> Hyperlink const& {
-    ASSERT_NOT_EQ(id, 0);
-    return m_hyperlinks.lookup_id(id);
-}
-
-auto Screen::maybe_hyperlink(u16 id) const -> di::Optional<Hyperlink const&> {
-    if (id == 0) {
-        return {};
-    }
-    return hyperlink(id);
-}
-
 auto Screen::text_at_cursor() -> di::StringView {
-    if (m_cursor.row >= m_rows.size()) {
-        return {};
-    }
-    auto& row = m_rows[m_cursor.row];
+    ASSERT_LT(m_cursor.row, max_height());
+    auto& row = rows()[m_cursor.row];
     auto& cell = row.cells[m_cursor.col];
 
     auto text_start = row.text.iterator_at_offset(m_cursor.text_offset);
@@ -223,7 +205,7 @@ void Screen::set_cursor(u32 row, u32 col) {
     m_cursor.text_offset = 0;
 
     // Compute the text offset from the beginning of the row.
-    auto& row_object = m_rows[row];
+    auto& row_object = rows()[row];
     for (auto const& cell : row_object.cells | di::take(col)) {
         m_cursor.text_offset += cell.text_size;
     }
@@ -252,7 +234,7 @@ void Screen::set_cursor_col(u32 col) {
     }
 
     // Compute the text offset relative the current cursor.
-    auto& row = m_rows[m_cursor.row];
+    auto& row = rows()[m_cursor.row];
     if (m_cursor.col < col) {
         for (auto const& cell : row.cells | di::drop(m_cursor.col) | di::take(col - m_cursor.col)) {
             m_cursor.text_offset += cell.text_size;
@@ -272,11 +254,11 @@ void Screen::insert_blank_characters(u32 count) {
 
     // Start by dropping the correct number of cells, based on how many new ones we need
     // to insert.
-    auto& row = m_rows[m_cursor.row];
+    auto& row = rows()[m_cursor.row];
     auto max_to_insert = di::min(count, max_width() - m_cursor.col);
     auto text_size_to_remove = 0zu;
     for (auto& cell : row.cells | di::drop(max_width() - max_to_insert)) {
-        drop_cell(cell);
+        m_active_rows.drop_cell(cell);
         text_size_to_remove += cell.text_size;
         cell.text_size = 0;
     }
@@ -307,7 +289,7 @@ void Screen::insert_blank_lines(u32 count) {
     for (auto it = delete_row_it; it != end_row_iterator(); ++it) {
         auto& row = *it;
         for (auto& cell : row.cells) {
-            drop_cell(cell);
+            m_active_rows.drop_cell(cell);
             cell.text_size = 0;
         }
         row.text.clear();
@@ -315,7 +297,7 @@ void Screen::insert_blank_lines(u32 count) {
     }
 
     // Now rotate the blank lines into place.
-    di::rotate(m_rows.begin() + m_cursor.row, delete_row_it, end_row_iterator());
+    di::rotate(rows().begin() + m_cursor.row, delete_row_it, end_row_iterator());
 
     // Now set the cursor to the left margin.
     m_cursor.text_offset = 0;
@@ -330,11 +312,11 @@ void Screen::delete_characters(u32 count) {
 
     // Start by dropping the correct number of cells, based on how many new ones we need
     // to insert.
-    auto& row = m_rows[m_cursor.row];
+    auto& row = rows()[m_cursor.row];
     auto max_to_delete = di::min(count, max_width() - m_cursor.col);
     auto text_size_to_remove = 0zu;
     for (auto& cell : row.cells | di::drop(m_cursor.col) | di::take(max_to_delete)) {
-        drop_cell(cell);
+        m_active_rows.drop_cell(cell);
         text_size_to_remove += cell.text_size;
         cell.text_size = 0;
     }
@@ -364,12 +346,12 @@ void Screen::delete_lines(u32 count) {
     // background color.
 
     auto max_to_delete = di::min(count, m_scroll_region.end_row - m_cursor.row);
-    auto delete_row_it = m_rows.begin() + m_cursor.row;
-    auto delete_row_end = di::next(delete_row_it, max_to_delete, m_rows.end());
+    auto delete_row_it = rows().begin() + m_cursor.row;
+    auto delete_row_end = di::next(delete_row_it, max_to_delete, rows().end());
     for (auto it = delete_row_it; it != delete_row_end; ++it) {
         auto& row = *it;
         for (auto& cell : row.cells) {
-            drop_cell(cell);
+            m_active_rows.drop_cell(cell);
             cell.text_size = 0;
         }
         row.text.clear();
@@ -396,9 +378,9 @@ void Screen::clear() {
     // like kitty, since it allows us to optimize clearing by fully
     // deleting all cells.
 
-    for (auto& row : m_rows) {
+    for (auto& row : rows()) {
         for (auto& cell : row.cells) {
-            drop_cell(cell);
+            m_active_rows.drop_cell(cell);
             cell.text_size = 0;
         }
         row.text.clear();
@@ -416,9 +398,9 @@ void Screen::clear_after_cursor() {
 
     // Now we just need to delete all lines below the cursor. As above, implementing
     // "bce" would require more work.
-    for (auto& row : m_rows | di::drop(m_cursor.row + 1)) {
+    for (auto& row : rows() | di::drop(m_cursor.row + 1)) {
         for (auto& cell : row.cells) {
-            drop_cell(cell);
+            m_active_rows.drop_cell(cell);
             cell.text_size = 0;
         }
         row.text.clear();
@@ -439,9 +421,9 @@ void Screen::clear_before_cursor() {
     // "bce" would require more work. However, we don't actually delete
     // the rows here because rows are always assumed to start at the top
     // of the screen.
-    for (auto& row : m_rows | di::take(m_cursor.row)) {
+    for (auto& row : rows() | di::take(m_cursor.row)) {
         for (auto& cell : row.cells) {
-            drop_cell(cell);
+            m_active_rows.drop_cell(cell);
             cell.text_size = 0;
         }
         row.text.clear();
@@ -452,9 +434,9 @@ void Screen::clear_before_cursor() {
 void Screen::clear_row() {
     m_cursor.overflow_pending = false;
 
-    auto& row = m_rows[m_cursor.row];
+    auto& row = rows()[m_cursor.row];
     for (auto& cell : row.cells) {
-        drop_cell(cell);
+        m_active_rows.drop_cell(cell);
         cell.text_size = 0;
     }
     row.text.clear();
@@ -467,10 +449,10 @@ void Screen::clear_row() {
 void Screen::clear_row_after_cursor() {
     m_cursor.overflow_pending = false;
 
-    auto& row = m_rows[m_cursor.row];
+    auto& row = rows()[m_cursor.row];
     auto text_size_to_delete = 0zu;
     for (auto& cell : row.cells | di::drop(m_cursor.col)) {
-        drop_cell(cell);
+        m_active_rows.drop_cell(cell);
         text_size_to_delete += cell.text_size;
         cell.text_size = 0;
     }
@@ -487,10 +469,10 @@ void Screen::clear_row_after_cursor() {
 void Screen::clear_row_before_cursor() {
     m_cursor.overflow_pending = false;
 
-    auto& row = m_rows[m_cursor.row];
+    auto& row = rows()[m_cursor.row];
     auto text_size_to_delete = 0zu;
     for (auto& cell : row.cells | di::take(m_cursor.col + 1)) {
-        drop_cell(cell);
+        m_active_rows.drop_cell(cell);
         text_size_to_delete += cell.text_size;
         cell.text_size = 0;
     }
@@ -507,10 +489,10 @@ void Screen::clear_row_before_cursor() {
 void Screen::erase_characters(u32 n) {
     m_cursor.overflow_pending = false;
 
-    auto& row = m_rows[m_cursor.row];
+    auto& row = rows()[m_cursor.row];
     auto text_size_to_delete = 0zu;
     for (auto& cell : row.cells | di::drop(m_cursor.col) | di::take(n)) {
-        drop_cell(cell);
+        m_active_rows.drop_cell(cell);
         text_size_to_delete += cell.text_size;
         cell.text_size = 0;
     }
@@ -532,22 +514,24 @@ void Screen::scroll_down() {
     ASSERT_EQ(m_cursor.row + 1, m_scroll_region.end_row);
 
     // Clear the first row, optionally putting it into the scroll back buffer.
-    auto& row = *begin_row_iterator();
     if (m_scroll_back_enabled == ScrollBackEnabled::Yes) {
-        m_pending_scroll_back.push_back(di::move(row));
-        row = {};
-        row.cells.resize(max_width());
+        m_scroll_back.add_rows(m_active_rows, m_scroll_region.start_row, 1);
+
+        // Insert the new row.
+        auto row = m_active_rows.rows().emplace(m_active_rows.rows().iterator(m_scroll_region.end_row - 1));
+        row->cells.resize(max_width());
     } else {
+        auto& row = *begin_row_iterator();
         for (auto& cell : row.cells) {
-            drop_cell(cell);
+            m_active_rows.drop_cell(cell);
             cell.text_size = 0;
         }
         row.text.clear();
         row.overflow = false;
-    }
 
-    // Rotate rows into place.
-    di::rotate(begin_row_iterator(), begin_row_iterator() + 1, end_row_iterator());
+        // Rotate rows into place.
+        di::rotate(begin_row_iterator(), begin_row_iterator() + 1, end_row_iterator());
+    }
 
     m_cursor.text_offset = 0;
     m_cursor.overflow_pending = false;
@@ -575,7 +559,7 @@ void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
         if (m_cursor.col == 0) {
             return;
         }
-        auto& row = m_rows[m_cursor.row];
+        auto& row = rows()[m_cursor.row];
         auto& prev_cell = row.cells[m_cursor.col - 1];
         if (prev_cell.text_size == 0) {
             return;
@@ -601,7 +585,7 @@ void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode) {
     }
 
     // Fetch and validate the row from the cursor position.
-    auto& row = m_rows[m_cursor.row];
+    auto& row = rows()[m_cursor.row];
     ASSERT_LT(m_cursor.col, max_width());
     ASSERT_EQ(row.cells.size(), max_width());
 
@@ -624,13 +608,13 @@ void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode) {
 
     // Modify the cell with the new attributes, starting by clearing the old attributes.
     auto& cell = row.cells[m_cursor.col];
-    drop_cell(cell);
+    m_active_rows.drop_cell(cell);
 
     if (m_graphics_id) {
-        cell.graphics_rendition_id = m_graphics_renditions.use_id(m_graphics_id);
+        cell.graphics_rendition_id = m_active_rows.use_graphics_id(m_graphics_id);
     }
     if (m_hyperlink_id) {
-        cell.hyperlink_id = m_hyperlinks.use_id(m_hyperlink_id);
+        cell.hyperlink_id = m_active_rows.use_hyperlink_id(m_hyperlink_id);
     }
 
     // Insert the text. We can safely assert the iterator is valid because we compute the text offset in all cases
@@ -658,42 +642,11 @@ void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode) {
 }
 
 void Screen::invalidate_all() {
-    for (auto& row : m_rows) {
+    for (auto& row : rows()) {
         for (auto& cell : row.cells) {
             cell.stale = false;
         }
     }
-}
-
-void Screen::drop_graphics_id(u16& id) {
-    if (id) {
-        m_graphics_renditions.drop_id(id);
-        id = 0;
-    }
-}
-
-void Screen::drop_hyperlink_id(u16& id) {
-    if (id) {
-        m_hyperlinks.drop_id(id);
-        id = 0;
-    }
-}
-
-void Screen::drop_multi_cell_id(u16& id) {
-    if (id) {
-        m_multi_cell_info.drop_id(id);
-        id = 0;
-    }
-}
-
-void Screen::drop_cell(Cell& cell) {
-    drop_graphics_id(cell.graphics_rendition_id);
-    drop_hyperlink_id(cell.hyperlink_id);
-
-    // TODO: clear the whole multi cell here.
-    drop_multi_cell_id(cell.multicell_id);
-
-    cell.stale = false;
 }
 
 auto Screen::translate_row(u32 row) const -> u32 {

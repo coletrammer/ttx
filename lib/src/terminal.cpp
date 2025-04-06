@@ -15,7 +15,7 @@
 
 namespace ttx {
 Terminal::Terminal(dius::SyncFile& psuedo_terminal, Size const& size)
-    : m_primary_screen(size, terminal::Screen::ScrollBackEnabled::No)
+    : m_primary_screen(size, terminal::Screen::ScrollBackEnabled::Yes)
     , m_available_size(size)
     , m_psuedo_terminal(psuedo_terminal) {}
 

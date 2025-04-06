@@ -1,6 +1,7 @@
 #pragma once
 
 #include "di/container/string/prelude.h"
+#include "di/util/clone.h"
 
 namespace ttx::terminal {
 struct Hyperlink;
@@ -30,6 +31,13 @@ struct Hyperlink {
 
     di::String uri; ///< URI for the hyperlink
     di::String id;  ///< ID of hyperlink, for linking cells together.
+
+    auto clone() const -> Hyperlink {
+        return {
+            di::clone(uri),
+            di::clone(id),
+        };
+    }
 
     auto operator==(Hyperlink const&) const -> bool = default;
     auto operator<=>(Hyperlink const&) const = default;
