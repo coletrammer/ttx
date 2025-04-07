@@ -181,26 +181,7 @@ auto Pane::create(CreatePaneArgs args, Size const& size, di::Function<void(Pane&
                 });
 
                 auto events = pane.m_terminal.with_lock([&](Terminal& terminal) {
-                    auto at_bottom =
-                        pane.m_vertical_scroll_offset ==
-                        (terminal.active_screen().screen.absolute_row_end() - terminal.visible_size().rows);
-
                     terminal.on_parser_results(parser_result.span());
-
-                    // Adjust the scroll offset if necessary.
-                    if (pane.m_vertical_scroll_offset < terminal.active_screen().screen.absolute_row_start()) {
-                        // In this case, we've deleted part of the scroll back.
-                        pane.m_vertical_scroll_offset = terminal.active_screen().screen.absolute_row_start();
-                        terminal.invalidate_all();
-                    } else if (pane.m_vertical_scroll_offset + terminal.visible_size().rows >
-                               terminal.active_screen().screen.absolute_row_end()) {
-                        pane.m_vertical_scroll_offset = 0;
-                        terminal.invalidate_all();
-                    } else if (at_bottom) {
-                        pane.m_vertical_scroll_offset =
-                            (terminal.active_screen().screen.absolute_row_end() - terminal.visible_size().rows);
-                    }
-
                     return terminal.outgoing_events();
                 });
 
@@ -237,14 +218,20 @@ Pane::~Pane() {
 
 auto Pane::draw(Renderer& renderer) -> RenderedCursor {
     return m_terminal.with_lock([&](Terminal& terminal) {
+        auto& screen = terminal.active_screen().screen;
         if (terminal.allowed_to_draw()) {
-            auto& screen = terminal.active_screen().screen;
             auto whole_screen_dirty = screen.whole_screen_dirty();
-            auto start_row = m_vertical_scroll_offset;
-            auto end_row = di::min(screen.absolute_row_end(), start_row + terminal.visible_size().rows);
-            for (auto r : di::range(start_row, end_row)) {
+            auto end_row = 0_u32;
+            for (auto r :
+                 di::range(m_vertical_scroll_offset, m_vertical_scroll_offset + terminal.visible_size().rows)) {
+                if (r + screen.visual_scroll_offset() >= screen.absolute_row_end()) {
+                    break;
+                }
+                end_row = r - m_vertical_scroll_offset + 1;
+
                 auto end_col = 0_u32;
-                for (auto [c, cell, text, graphics, hyperlink] : screen.iterate_row(r)) {
+                for (auto [c, cell, text, graphics, hyperlink] :
+                     screen.iterate_row(r + screen.visual_scroll_offset())) {
                     if (c < m_horizontal_scroll_offset) {
                         continue;
                     }
@@ -272,39 +259,43 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
             }
 
             // Clear any blank rows after the terminal.
-            for (auto r : di::range(end_row - m_vertical_scroll_offset, terminal.visible_size().rows)) {
+            for (auto r : di::range(end_row, terminal.visible_size().rows)) {
                 renderer.clear_row(r, { .inverted = terminal.reverse_video() });
             }
-            screen.clear_whole_screen_dirty();
+            screen.clear_whole_screen_dirty_flag();
         }
 
-        auto relative_vertical_scroll_offset =
-            u32(m_vertical_scroll_offset - terminal.active_screen().screen.absolute_row_screen_start());
+        auto absolute_cursor_position = screen.absolute_row_screen_start() + terminal.cursor_row();
+        auto relative_cursor_offset = u32(screen.absolute_row_screen_start() - screen.visual_scroll_offset());
         return RenderedCursor {
-            .cursor_row = terminal.cursor_row() - relative_vertical_scroll_offset,
+            .cursor_row = terminal.cursor_row() - m_vertical_scroll_offset + relative_cursor_offset,
             .cursor_col = terminal.cursor_col() - m_horizontal_scroll_offset,
             .style = terminal.cursor_style(),
             .hidden = terminal.cursor_hidden() || !terminal.allowed_to_draw() ||
-                      terminal.cursor_row() < relative_vertical_scroll_offset ||
-                      terminal.cursor_row() - relative_vertical_scroll_offset >= terminal.visible_size().rows ||
+                      terminal.cursor_row() < m_vertical_scroll_offset ||
+                      terminal.cursor_row() - m_vertical_scroll_offset >= terminal.visible_size().rows ||
+                      absolute_cursor_position < screen.visual_scroll_offset() ||
+                      absolute_cursor_position >= screen.visual_scroll_offset() + terminal.visible_size().rows ||
                       terminal.cursor_col() < m_horizontal_scroll_offset ||
                       terminal.cursor_col() - m_horizontal_scroll_offset >= terminal.visible_size().cols,
+
         };
     });
 }
 
 auto Pane::event(KeyEvent const& event) -> bool {
-    // Clear the selection and scrolling on key presses that send text.
-    if (!event.text().empty()) {
-        clear_selection();
-    }
-
     auto [application_cursor_keys_mode, key_reporting_flags] = m_terminal.with_lock([&](Terminal& terminal) {
         return di::Tuple { terminal.application_cursor_keys_mode(), terminal.key_reporting_flags() };
     });
 
     auto serialized_event = ttx::serialize_key_event(event, application_cursor_keys_mode, key_reporting_flags);
     if (serialized_event) {
+        m_terminal.with_lock([&](Terminal& terminal) {
+            // Clear the selection and scroll to the bottom when sending keys to the application.
+            terminal.active_screen().screen.visual_scroll_to_bottom();
+            clear_selection();
+        });
+
         (void) m_pty_controller.write_exactly(di::as_bytes(serialized_event.value().span()));
         return true;
     }
@@ -321,7 +312,7 @@ auto Pane::event(MouseEvent const& event) -> bool {
             terminal.mouse_encoding(),
             terminal.in_alternate_screen_buffer(),
             terminal.size(),
-            terminal.row_offset(),
+            terminal.visual_scroll_offset(),
         };
     });
 
@@ -410,7 +401,7 @@ void Pane::invalidate_all() {
 
 void Pane::resize(Size const& size) {
     clear_selection();
-    reset_scroll();
+    reset_viewport_scroll();
     m_terminal.with_lock([&](Terminal& terminal) {
         terminal.set_visible_size(size);
     });
@@ -424,17 +415,22 @@ void Pane::scroll(Direction direction, i32 amount_in_cells) {
     if (direction == Direction::Vertical) {
         m_terminal.with_lock([&](Terminal& terminal) {
             while (amount_in_cells < 0) {
-                if (m_vertical_scroll_offset > terminal.active_screen().screen.absolute_row_start()) {
+                if (m_vertical_scroll_offset > 0) {
                     m_vertical_scroll_offset--;
                     terminal.invalidate_all();
+                } else {
+                    terminal.active_screen().screen.visual_scroll_up();
                 }
                 amount_in_cells++;
             }
             while (amount_in_cells > 0) {
-                if (m_vertical_scroll_offset <
-                    terminal.active_screen().screen.absolute_row_end() - terminal.visible_size().rows) {
+                if (terminal.visible_size().rows < terminal.row_count() &&
+                    m_vertical_scroll_offset < terminal.row_count() - terminal.visible_size().rows &&
+                    terminal.active_screen().screen.visual_scroll_at_bottom()) {
                     m_vertical_scroll_offset++;
                     terminal.invalidate_all();
+                } else {
+                    terminal.active_screen().screen.visual_scroll_down();
                 }
                 amount_in_cells--;
             }
@@ -534,7 +530,7 @@ void Pane::clear_selection() {
     m_selection_start = m_selection_end = {};
 }
 
-void Pane::reset_scroll() {
+void Pane::reset_viewport_scroll() {
     m_vertical_scroll_offset = m_horizontal_scroll_offset = 0;
 }
 }

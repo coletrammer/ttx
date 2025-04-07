@@ -62,8 +62,21 @@ void Screen::resize(Size const& size) {
 
     // Now either add new rows or move existing rows to the scroll back.
     if (rows().size() > size.rows) {
-        if (m_scroll_back_enabled == ScrollBackEnabled::Yes) {
-            m_scroll_back.add_rows(m_active_rows, 0, rows().size() - size.rows);
+        if (m_scroll_back_enabled == ScrollBackEnabled::Yes && !m_never_got_input) {
+            auto was_at_bottom = visual_scroll_at_bottom();
+            auto rows_to_delete = rows().size() - size.rows;
+            m_scroll_back.add_rows(m_active_rows, 0, rows_to_delete);
+            if (was_at_bottom) {
+                // Automatically scroll to the bottom if the screen isn't already scrolled.
+                m_visual_scroll_offset = absolute_row_screen_start();
+            }
+
+            // Adjust the cursor to account for scrolled lines.
+            if (m_cursor.row > rows_to_delete) {
+                m_cursor.row -= rows_to_delete;
+            } else {
+                m_cursor.row = 0;
+            }
         } else {
             auto rows_to_delete = rows() | di::take(rows().size() - size.rows);
             for (auto& row : rows_to_delete) {
@@ -77,11 +90,16 @@ void Screen::resize(Size const& size) {
             rows().erase(rows().begin(), rows().end() - size.rows);
         }
     } else if (rows().size() < size.rows) {
-        if (m_scroll_back_enabled == ScrollBackEnabled::Yes) {
+        if (m_scroll_back_enabled == ScrollBackEnabled::Yes && !m_never_got_input) {
             // When taking rows from the scroll back, we also need to move the cursor down to accomdate the new rows.
             auto rows_to_take = di::min(m_scroll_back.total_rows(), size.rows - rows().size());
             m_scroll_back.take_rows(m_active_rows, max_width(), 0, rows_to_take);
             m_cursor.row += rows_to_take;
+
+            // In this case, we may need to adjust the visual scroll offset.
+            if (m_visual_scroll_offset > absolute_row_screen_start()) {
+                m_visual_scroll_offset = absolute_row_screen_start();
+            }
         }
         for (auto _ : di::range(size.rows - rows().size())) {
             auto row = Row {};
@@ -521,11 +539,20 @@ void Screen::scroll_down() {
 
     // Clear the first row, optionally putting it into the scroll back buffer.
     if (m_scroll_back_enabled == ScrollBackEnabled::Yes) {
+        auto was_at_bottom = visual_scroll_at_bottom();
         m_scroll_back.add_rows(m_active_rows, m_scroll_region.start_row, 1);
 
         // Insert the new row.
         auto row = m_active_rows.rows().emplace(m_active_rows.rows().iterator(m_scroll_region.end_row - 1));
         row->cells.resize(max_width());
+
+        if (was_at_bottom) {
+            // Automatically scroll to the bottom if the screen isn't already scrolled.
+            m_visual_scroll_offset = absolute_row_screen_start();
+        } else if (m_visual_scroll_offset < absolute_row_start()) {
+            // Adjust the visual scroll offset to be in bounds, if needed.
+            m_visual_scroll_offset = absolute_row_start();
+        }
     } else {
         auto& row = *begin_row_iterator();
         for (auto& cell : row.cells) {
@@ -545,6 +572,10 @@ void Screen::scroll_down() {
 }
 
 void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
+    // 0. Update flag, which is is used when resizing to prevent committing blank lines to the scroll back buffer
+    //    in cases where the terminal's initial size is changed before we get any input.
+    m_never_got_input = false;
+
     // 1. Measure the width of the code point.
     auto width = code_point_width(code_point);
 
@@ -682,6 +713,32 @@ auto Screen::max_col_inclusive() const -> u32 {
 
 auto Screen::cursor_in_scroll_region() const -> bool {
     return m_cursor.row >= m_scroll_region.start_row && m_cursor.row < m_scroll_region.end_row;
+}
+
+void Screen::clear_scroll_back() {
+    visual_scroll_to_bottom();
+    m_scroll_back.clear();
+}
+
+void Screen::visual_scroll_up() {
+    if (visual_scroll_offset() > absolute_row_start()) {
+        m_visual_scroll_offset--;
+        invalidate_all();
+    }
+}
+
+void Screen::visual_scroll_down() {
+    if (visual_scroll_offset() < absolute_row_screen_start()) {
+        m_visual_scroll_offset++;
+        invalidate_all();
+    }
+}
+
+void Screen::visual_scroll_to_bottom() {
+    if (m_visual_scroll_offset != absolute_row_screen_start()) {
+        m_visual_scroll_offset = absolute_row_screen_start();
+        invalidate_all();
+    }
 }
 
 // This list is only for the diacritics used by the

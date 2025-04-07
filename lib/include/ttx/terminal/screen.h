@@ -110,19 +110,29 @@ public:
     void clear_row_before_cursor();
     void erase_characters(u32 n);
 
-    void clear_scroll_back() { m_scroll_back.clear(); }
-
     void scroll_down();
     void put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode);
 
     void invalidate_all() { m_whole_screen_dirty = true; }
     auto whole_screen_dirty() const -> bool { return m_whole_screen_dirty; }
-    void clear_whole_screen_dirty() { m_whole_screen_dirty = false; }
+    void clear_whole_screen_dirty_flag() { m_whole_screen_dirty = false; }
 
     auto absolute_row_start() const -> u64 { return m_scroll_back.absolute_row_start(); }
     auto absolute_row_screen_start() const -> u64 { return m_scroll_back.absolute_row_end(); }
     auto absolute_row_end() const -> u64 { return absolute_row_screen_start() + max_height(); }
     auto total_rows() const -> usize { return m_scroll_back.total_rows() + m_active_rows.total_rows(); }
+
+    void clear_scroll_back();
+
+    auto visual_scroll_offset() const -> u64 {
+        ASSERT_GT_EQ(m_visual_scroll_offset, absolute_row_start());
+        ASSERT_LT_EQ(m_visual_scroll_offset, absolute_row_screen_start());
+        return m_visual_scroll_offset;
+    }
+    auto visual_scroll_at_bottom() const -> bool { return visual_scroll_offset() == absolute_row_screen_start(); }
+    void visual_scroll_up();
+    void visual_scroll_down();
+    void visual_scroll_to_bottom();
 
     auto iterate_row(u64 row) {
         ASSERT_GT_EQ(row, absolute_row_start());
@@ -161,6 +171,8 @@ private:
     // Scroll back
     ScrollBack m_scroll_back;
     ScrollBackEnabled m_scroll_back_enabled { ScrollBackEnabled::No };
+    u64 m_visual_scroll_offset { 0 };
+    bool m_never_got_input { true };
 
     // Mutable state for writing cells.
     Cursor m_cursor;

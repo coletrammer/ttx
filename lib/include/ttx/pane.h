@@ -70,7 +70,7 @@ private:
     auto selection_text() -> di::String;
     auto in_selection(MouseCoordinate coordinate) -> bool;
     void clear_selection();
-    void reset_scroll();
+    void reset_viewport_scroll();
 
     di::Atomic<bool> m_done { false };
     di::Atomic<bool> m_capture { true };
@@ -87,7 +87,7 @@ private:
         auto operator<=>(SelectionPosition const&) const = default;
     };
 
-    u64 m_vertical_scroll_offset { 0 };
+    u32 m_vertical_scroll_offset { 0 };
     u32 m_horizontal_scroll_offset { 0 };
 
     di::Optional<SelectionPosition> m_selection_start;

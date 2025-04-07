@@ -54,7 +54,7 @@ public:
 
     // TODO: scroll back
     auto total_rows() const -> u32 { return row_count(); }
-    auto row_offset() const -> u32 { return 0; }
+    auto visual_scroll_offset() const -> u64 { return active_screen().screen.visual_scroll_offset(); }
 
     auto row_count() const -> u32 { return active_screen().screen.max_height(); }
     auto col_count() const -> u32 { return active_screen().screen.max_width(); }
