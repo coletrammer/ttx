@@ -110,40 +110,29 @@ public:
     void clear_row_before_cursor();
     void erase_characters(u32 n);
 
+    void clear_scroll_back() { m_scroll_back.clear(); }
+
     void scroll_down();
     void put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode);
 
-    void invalidate_all();
+    void invalidate_all() { m_whole_screen_dirty = true; }
+    auto whole_screen_dirty() const -> bool { return m_whole_screen_dirty; }
+    void clear_whole_screen_dirty() { m_whole_screen_dirty = false; }
 
-    auto iterate_row(u32 row) {
-        ASSERT_LT(row, max_height());
+    auto absolute_row_start() const -> u64 { return m_scroll_back.absolute_row_start(); }
+    auto absolute_row_screen_start() const -> u64 { return m_scroll_back.absolute_row_end(); }
+    auto absolute_row_end() const -> u64 { return absolute_row_screen_start() + max_height(); }
+    auto total_rows() const -> usize { return m_scroll_back.total_rows() + m_active_rows.total_rows(); }
 
-        auto& row_object = rows()[row];
+    auto iterate_row(u64 row) {
+        ASSERT_GT_EQ(row, absolute_row_start());
+        ASSERT_LT(row, absolute_row_end());
 
-        // Fetch the indirect data fields for every cell in the row (text, graphics, and hyperlink). This uses
-        // cache_last() so that the transform() can can maintain a mutable text offset counter safely, which
-        // ensures fetching the text associated with a cell is O(1). cache_last() also ensures we do the map lookups
-        // only once for each cell.
-        return row_object.cells |
-               di::transform([this, &row_object, text_offset = 0zu, col = 0u](Cell const& cell) mutable {
-                   auto text = [&] {
-                       if (cell.text_size == 0) {
-                           return di::StringView {};
-                       }
-
-                       auto text_start = row_object.text.iterator_at_offset(text_offset);
-                       text_offset += cell.text_size;
-                       auto text_end = row_object.text.iterator_at_offset(text_offset);
-                       ASSERT(text_start);
-                       ASSERT(text_end);
-                       return row_object.text.substr(text_start.value(), text_end.value());
-                   }();
-
-                   return di::make_tuple(col++, di::ref(cell), text,
-                                         di::ref(m_active_rows.graphics_rendition(cell.graphics_rendition_id)),
-                                         m_active_rows.maybe_hyperlink(cell.hyperlink_id));
-               }) |
-               di::cache_last;
+        if (row >= m_scroll_back.absolute_row_end()) {
+            return m_active_rows.iterate_row(row - m_scroll_back.absolute_row_end());
+        } else {
+            return m_scroll_back.iterate_row(row);
+        }
     }
 
 private:
@@ -167,6 +156,7 @@ private:
 
     // Screen state.
     RowGroup m_active_rows;
+    bool m_whole_screen_dirty { false };
 
     // Scroll back
     ScrollBack m_scroll_back;

@@ -180,11 +180,27 @@ auto Pane::create(CreatePaneArgs args, Size const& size, di::Function<void(Pane&
                     return false;
                 });
 
-                // (void) di::writer_println<di::String::Encoding>(dius::stderr, "{:?}"_sv, utf8_string);
-                // (void) di::writer_println<di::String::Encoding>(dius::stderr, "{}"_sv, parser_result);
-
                 auto events = pane.m_terminal.with_lock([&](Terminal& terminal) {
+                    auto at_bottom =
+                        pane.m_vertical_scroll_offset ==
+                        (terminal.active_screen().screen.absolute_row_end() - terminal.visible_size().rows);
+
                     terminal.on_parser_results(parser_result.span());
+
+                    // Adjust the scroll offset if necessary.
+                    if (pane.m_vertical_scroll_offset < terminal.active_screen().screen.absolute_row_start()) {
+                        // In this case, we've deleted part of the scroll back.
+                        pane.m_vertical_scroll_offset = terminal.active_screen().screen.absolute_row_start();
+                        terminal.invalidate_all();
+                    } else if (pane.m_vertical_scroll_offset + terminal.visible_size().rows >
+                               terminal.active_screen().screen.absolute_row_end()) {
+                        pane.m_vertical_scroll_offset = 0;
+                        terminal.invalidate_all();
+                    } else if (at_bottom) {
+                        pane.m_vertical_scroll_offset =
+                            (terminal.active_screen().screen.absolute_row_end() - terminal.visible_size().rows);
+                    }
+
                     return terminal.outgoing_events();
                 });
 
@@ -223,9 +239,13 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
     return m_terminal.with_lock([&](Terminal& terminal) {
         if (terminal.allowed_to_draw()) {
             auto& screen = terminal.active_screen().screen;
-            for (auto r : di::range(screen.max_height())) {
+            auto whole_screen_dirty = screen.whole_screen_dirty();
+            auto start_row = m_vertical_scroll_offset;
+            auto end_row = di::min(screen.absolute_row_end(), start_row + terminal.visible_size().rows);
+            for (auto r : di::range(start_row, end_row)) {
+                auto end_col = 0_u32;
                 for (auto [c, cell, text, graphics, hyperlink] : screen.iterate_row(r)) {
-                    if (r < m_vertical_scroll_offset || c < m_horizontal_scroll_offset) {
+                    if (c < m_horizontal_scroll_offset) {
                         continue;
                     }
 
@@ -233,7 +253,7 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
                         text = " "_sv;
                     }
 
-                    if (!cell.stale) {
+                    if (!cell.stale || whole_screen_dirty) {
                         // TODO: selection
                         auto gfx = graphics;
                         if (terminal.reverse_video()) {
@@ -242,26 +262,31 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
                         renderer.put_cell(text, r - m_vertical_scroll_offset, c - m_horizontal_scroll_offset, gfx);
                         cell.stale = true;
                     }
+                    end_col = c - m_horizontal_scroll_offset + 1;
                 }
                 // Clear any blank cols after the terminal.
-                for (auto c :
-                     di::range(screen.max_width() - m_horizontal_scroll_offset, terminal.visible_size().cols)) {
-                    renderer.put_cell(" "_sv, r, c, { .inverted = terminal.reverse_video() });
+                for (auto c : di::range(end_col, terminal.visible_size().cols)) {
+                    renderer.put_cell(" "_sv, r - m_vertical_scroll_offset, c,
+                                      { .inverted = terminal.reverse_video() });
                 }
             }
 
             // Clear any blank rows after the terminal.
-            for (auto r : di::range(screen.max_height() - m_vertical_scroll_offset, terminal.visible_size().rows)) {
+            for (auto r : di::range(end_row - m_vertical_scroll_offset, terminal.visible_size().rows)) {
                 renderer.clear_row(r, { .inverted = terminal.reverse_video() });
             }
+            screen.clear_whole_screen_dirty();
         }
+
+        auto relative_vertical_scroll_offset =
+            u32(m_vertical_scroll_offset - terminal.active_screen().screen.absolute_row_screen_start());
         return RenderedCursor {
-            .cursor_row = terminal.cursor_row() - m_vertical_scroll_offset,
+            .cursor_row = terminal.cursor_row() - relative_vertical_scroll_offset,
             .cursor_col = terminal.cursor_col() - m_horizontal_scroll_offset,
             .style = terminal.cursor_style(),
             .hidden = terminal.cursor_hidden() || !terminal.allowed_to_draw() ||
-                      terminal.cursor_row() < m_vertical_scroll_offset ||
-                      terminal.cursor_row() - m_vertical_scroll_offset >= terminal.visible_size().rows ||
+                      terminal.cursor_row() < relative_vertical_scroll_offset ||
+                      terminal.cursor_row() - relative_vertical_scroll_offset >= terminal.visible_size().rows ||
                       terminal.cursor_col() < m_horizontal_scroll_offset ||
                       terminal.cursor_col() - m_horizontal_scroll_offset >= terminal.visible_size().cols,
         };
@@ -312,9 +337,6 @@ auto Pane::event(MouseEvent const& event) -> bool {
     // Support mouse scrolling.
     if (event.button() == MouseButton::ScrollUp && event.type() == MouseEventType::Press) {
         scroll(Direction::Vertical, -1);
-        m_terminal.with_lock([&](Terminal& terminal) {
-            terminal.scroll_up();
-        });
         return true;
     }
     if (event.button() == MouseButton::ScrollDown && event.type() == MouseEventType::Press) {
@@ -323,9 +345,12 @@ auto Pane::event(MouseEvent const& event) -> bool {
     }
 
     // Selection logic.
-    auto scroll_adjusted_position = event.position().in_cells();
-    scroll_adjusted_position = { scroll_adjusted_position.x() + m_horizontal_scroll_offset,
-                                 scroll_adjusted_position.y() + m_vertical_scroll_offset + row_offset };
+    auto scroll_adjusted_position =
+        SelectionPosition { event.position().in_cells().y(), event.position().in_cells().x() };
+    scroll_adjusted_position = {
+        scroll_adjusted_position.row + m_vertical_scroll_offset + row_offset,
+        scroll_adjusted_position.col + m_horizontal_scroll_offset,
+    };
     if (event.button() == MouseButton::Left && event.type() == MouseEventType::Press) {
         // Start selection.
         m_selection_start = m_selection_end = scroll_adjusted_position;
@@ -399,21 +424,17 @@ void Pane::scroll(Direction direction, i32 amount_in_cells) {
     if (direction == Direction::Vertical) {
         m_terminal.with_lock([&](Terminal& terminal) {
             while (amount_in_cells < 0) {
-                if (m_vertical_scroll_offset > 0) {
+                if (m_vertical_scroll_offset > terminal.active_screen().screen.absolute_row_start()) {
                     m_vertical_scroll_offset--;
                     terminal.invalidate_all();
-                } else {
-                    terminal.scroll_up();
                 }
                 amount_in_cells++;
             }
             while (amount_in_cells > 0) {
-                if (terminal.visible_size().rows < terminal.row_count() &&
-                    m_vertical_scroll_offset < terminal.row_count() - terminal.visible_size().rows) {
+                if (m_vertical_scroll_offset <
+                    terminal.active_screen().screen.absolute_row_end() - terminal.visible_size().rows) {
                     m_vertical_scroll_offset++;
                     terminal.invalidate_all();
-                } else {
-                    terminal.scroll_down();
                 }
                 amount_in_cells--;
             }
@@ -460,23 +481,20 @@ auto Pane::in_selection(MouseCoordinate coordinate) -> bool {
         return false;
     }
 
-    auto comparator = [](MouseCoordinate const& a, MouseCoordinate const& b) {
-        return di::Tuple { a.y(), a.x() } <=> di::Tuple { b.y(), b.x() };
-    };
-    auto start = di::min({ *m_selection_start, *m_selection_end }, comparator);
-    auto end = di::max({ *m_selection_start, *m_selection_end }, comparator);
+    auto start = di::min({ *m_selection_start, *m_selection_end });
+    auto end = di::max({ *m_selection_start, *m_selection_end });
 
     auto row = coordinate.y();
     auto col = coordinate.x();
-    if (row > start.y() && row < end.y()) {
+    if (row > start.row && row < end.col) {
         return true;
     }
 
-    if (row == start.y()) {
-        return col >= start.x() && (row == end.y() ? col < end.x() : true);
+    if (row == start.row) {
+        return col >= start.col && (row == end.row ? col < end.col : true);
     }
 
-    return row == end.y() && col < end.x();
+    return row == end.row && col < end.col;
 }
 
 auto Pane::selection_text() -> di::String {
@@ -484,11 +502,8 @@ auto Pane::selection_text() -> di::String {
         return {};
     }
 
-    auto comparator = [](MouseCoordinate const& a, MouseCoordinate const& b) {
-        return di::Tuple { a.y(), a.x() } <=> di::Tuple { b.y(), b.x() };
-    };
-    auto start = di::min({ *m_selection_start, *m_selection_end }, comparator);
-    auto end = di::max({ *m_selection_start, *m_selection_end }, comparator);
+    auto start = di::min({ *m_selection_start, *m_selection_end });
+    auto end = di::max({ *m_selection_start, *m_selection_end });
 
     return m_terminal.with_lock([&](Terminal& terminal) -> di::String {
         auto text = ""_s;

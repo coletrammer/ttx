@@ -77,6 +77,12 @@ void Screen::resize(Size const& size) {
             rows().erase(rows().begin(), rows().end() - size.rows);
         }
     } else if (rows().size() < size.rows) {
+        if (m_scroll_back_enabled == ScrollBackEnabled::Yes) {
+            // When taking rows from the scroll back, we also need to move the cursor down to accomdate the new rows.
+            auto rows_to_take = di::min(m_scroll_back.total_rows(), size.rows - rows().size());
+            m_scroll_back.take_rows(m_active_rows, max_width(), 0, rows_to_take);
+            m_cursor.row += rows_to_take;
+        }
         for (auto _ : di::range(size.rows - rows().size())) {
             auto row = Row {};
             row.cells.resize(size.cols);
@@ -639,14 +645,6 @@ void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode) {
         new_cursor.text_offset += text.size_bytes();
     }
     m_cursor = new_cursor;
-}
-
-void Screen::invalidate_all() {
-    for (auto& row : rows()) {
-        for (auto& cell : row.cells) {
-            cell.stale = false;
-        }
-    }
 }
 
 auto Screen::translate_row(u32 row) const -> u32 {

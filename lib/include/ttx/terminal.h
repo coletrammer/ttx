@@ -52,10 +52,6 @@ public:
 
     auto allowed_to_draw() const -> bool { return !m_disable_drawing; }
 
-    void scroll_to_bottom();
-    void scroll_up();
-    void scroll_down();
-
     // TODO: scroll back
     auto total_rows() const -> u32 { return row_count(); }
     auto row_offset() const -> u32 { return 0; }

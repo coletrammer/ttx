@@ -563,6 +563,7 @@ void Terminal::csi_ed(Params const& params) {
         }
         case 3:
             // XTerm extension to clear scoll buffer
+            active_screen().screen.clear_scroll_back();
             clear();
             return;
         default:
@@ -1102,18 +1103,6 @@ void Terminal::set_use_alternate_screen_buffer(bool b) {
         m_alternate_screen = {};
     }
     invalidate_all();
-}
-
-void Terminal::scroll_up() {
-    // TODO: visual scrolling
-}
-
-void Terminal::scroll_down() {
-    // TODO: visual scrolling
-}
-
-void Terminal::scroll_to_bottom() {
-    // TODO: visual scrolling
 }
 
 auto Terminal::active_screen() const -> ScreenState const& {

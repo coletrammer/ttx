@@ -1,6 +1,7 @@
 #pragma once
 
 #include "di/container/ring/prelude.h"
+#include "di/container/view/cache_last.h"
 #include "ttx/graphics_rendition.h"
 #include "ttx/terminal/hyperlink.h"
 #include "ttx/terminal/id_map.h"
@@ -73,6 +74,37 @@ public:
     /// This function does not remove the text associated with the cell, as the caller typically has enough
     /// context to do this more efficiently (because they are erasing multiple cells).
     void drop_cell(Cell& cell);
+
+    auto iterate_row(u32 row) {
+        ASSERT_LT(row, total_rows());
+
+        auto& row_object = rows()[row];
+
+        // Fetch the indirect data fields for every cell in the row (text, graphics, and hyperlink). This uses
+        // cache_last() so that the transform() can can maintain a mutable text offset counter safely, which
+        // ensures fetching the text associated with a cell is O(1). cache_last() also ensures we do the map lookups
+        // only once for each cell.
+        return row_object.cells |
+               di::transform([this, &row_object, text_offset = 0zu, col = 0u](Cell const& cell) mutable {
+                   auto text = [&] {
+                       if (cell.text_size == 0) {
+                           return di::StringView {};
+                       }
+
+                       auto text_start = row_object.text.iterator_at_offset(text_offset);
+                       text_offset += cell.text_size;
+                       auto text_end = row_object.text.iterator_at_offset(text_offset);
+                       ASSERT(text_start);
+                       ASSERT(text_end);
+                       return row_object.text.substr(text_start.value(), text_end.value());
+                   }();
+
+                   return di::make_tuple(col++, di::ref(cell), text,
+                                         di::ref(graphics_rendition(cell.graphics_rendition_id)),
+                                         maybe_hyperlink(cell.hyperlink_id));
+               }) |
+               di::cache_last;
+    }
 
 private:
     di::Ring<Row> m_rows;

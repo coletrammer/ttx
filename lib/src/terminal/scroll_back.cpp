@@ -55,6 +55,14 @@ void ScrollBack::take_rows(RowGroup& to, u32 desired_cols, usize row_index, usiz
     }
 }
 
+void ScrollBack::clear() {
+    while (!m_groups.empty()) {
+        m_absolute_row_start += m_groups.front().value().group.total_rows();
+        m_groups.pop_front();
+    }
+    m_total_rows = 0;
+}
+
 auto ScrollBack::is_last_group_full() const -> bool {
     if (m_groups.empty()) {
         return true;
@@ -64,6 +72,7 @@ auto ScrollBack::is_last_group_full() const -> bool {
 
 auto ScrollBack::add_group() -> Group& {
     if (m_groups.size() >= max_groups) {
+        m_absolute_row_start += m_groups.front().value().group.total_rows();
         m_groups.pop_front();
     }
     return m_groups.emplace_back();

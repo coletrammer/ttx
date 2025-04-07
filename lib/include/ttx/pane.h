@@ -79,11 +79,19 @@ private:
     di::Synchronized<Terminal> m_terminal;
     dius::system::ProcessHandle m_process;
 
-    u32 m_vertical_scroll_offset { 0 };
+    struct SelectionPosition {
+        u64 row { 0 };
+        u32 col { 0 };
+
+        auto operator==(SelectionPosition const&) const -> bool = default;
+        auto operator<=>(SelectionPosition const&) const = default;
+    };
+
+    u64 m_vertical_scroll_offset { 0 };
     u32 m_horizontal_scroll_offset { 0 };
 
-    di::Optional<MouseCoordinate> m_selection_start;
-    di::Optional<MouseCoordinate> m_selection_end;
+    di::Optional<SelectionPosition> m_selection_start;
+    di::Optional<SelectionPosition> m_selection_end;
 
     // Application controlled callback when the internal process exits.
     di::Function<void(Pane&)> m_did_exit;

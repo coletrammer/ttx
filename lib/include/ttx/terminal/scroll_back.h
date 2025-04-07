@@ -34,7 +34,12 @@ class ScrollBack {
     };
 
 public:
+    auto absolute_row_start() const -> u64 { return m_absolute_row_start; }
+    auto absolute_row_end() const -> u64 { return m_absolute_row_start + total_rows(); }
     auto total_rows() const -> usize { return m_total_rows; }
+
+    /// @brief Clear the scroll back history
+    void clear();
 
     /// @brief Add rows to the scroll back buffer
     ///
@@ -59,11 +64,28 @@ public:
     /// empty cells to meet this constraint.
     void take_rows(RowGroup& to, u32 desired_cols, usize row_index, usize row_count);
 
+    auto iterate_row(u64 row) {
+        ASSERT_GT_EQ(row, absolute_row_start());
+        ASSERT_LT(row, absolute_row_end());
+
+        row -= absolute_row_start();
+
+        // TODO: optimize!
+        for (auto& group : m_groups) {
+            if (row < group.group.total_rows()) {
+                return group.group.iterate_row(row);
+            }
+            row -= group.group.total_rows();
+        }
+        di::unreachable();
+    }
+
 private:
     auto is_last_group_full() const -> bool;
     auto add_group() -> Group&;
 
     di::Ring<Group> m_groups;
     usize m_total_rows { 0 };
+    u64 m_absolute_row_start { 0 };
 };
 }

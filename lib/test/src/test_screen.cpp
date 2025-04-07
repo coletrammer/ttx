@@ -13,7 +13,7 @@ static void put_text(Screen& screen, di::StringView text) {
 }
 
 [[maybe_unused]] static void print_text(Screen& screen) {
-    for (auto i : di::range(screen.max_height())) {
+    for (auto i : di::range(screen.absolute_row_start(), screen.absolute_row_end())) {
         dius::print("\""_sv);
         for (auto row : screen.iterate_row(i)) {
             auto [_, _, text, _, _] = row;
@@ -27,6 +27,7 @@ static void put_text(Screen& screen, di::StringView text) {
 }
 
 static void validate_text(Screen& screen, di::StringView text) {
+    ASSERT_EQ(screen.absolute_row_start(), 0);
     auto lines = text | di::split(U'\n');
     for (auto [i, line] : lines | di::enumerate) {
         if (line.contains(U'|')) {
@@ -522,10 +523,20 @@ static void autowrap() {
         auto expected = Cursor { .row = 3, .col = 1, .text_offset = 1, .overflow_pending = true };
         ASSERT_EQ(screen.cursor(), expected);
 
-        validate_text(screen, "ef\n"
-                              "gh\n"
-                              "ij\n"
-                              "kl"_sv);
+        if (scroll_back_enabled == Screen::ScrollBackEnabled::Yes) {
+            validate_text(screen, "ab\n"
+                                  "cd\n"
+                                  "ef\n"
+                                  "gh\n"
+                                  "ij\n"
+                                  "kl"_sv);
+
+        } else {
+            validate_text(screen, "ef\n"
+                                  "gh\n"
+                                  "ij\n"
+                                  "kl"_sv);
+        }
     }
 }
 
@@ -544,10 +555,20 @@ static void vertical_scroll_region_autowrap() {
         auto expected = Cursor { .row = 2, .col = 1, .text_offset = 1, .overflow_pending = true };
         ASSERT_EQ(screen.cursor(), expected);
 
-        validate_text(screen, "ab\n"
-                              "ij\n"
-                              "kl\n"
-                              "  "_sv);
+        if (scroll_back_enabled == Screen::ScrollBackEnabled::Yes) {
+            validate_text(screen, "cd\n"
+                                  "ef\n"
+                                  "gh\n"
+                                  "ab\n"
+                                  "ij\n"
+                                  "kl\n"
+                                  "  "_sv);
+        } else {
+            validate_text(screen, "ab\n"
+                                  "ij\n"
+                                  "kl\n"
+                                  "  "_sv);
+        }
     }
 }
 
