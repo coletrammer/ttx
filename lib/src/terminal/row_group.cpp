@@ -75,10 +75,9 @@ auto RowGroup::transfer_from(RowGroup& from, usize from_index, usize to_index, u
     ASSERT_LT_EQ(from_index + row_count, from.total_rows());
     ASSERT_LT_EQ(to_index, to.total_rows());
 
-    // TODO: use insert_container().
-    for (auto _ : di::range(row_count)) {
-        to.rows().emplace(to.rows().iterator(to_index));
-    }
+    to.rows().insert_container(to.rows().iterator(to_index), di::range(row_count) | di::transform([](auto) {
+                                                                 return Row();
+                                                             }));
 
     auto from_begin = from.rows().iterator(from_index);
     auto from_end = from_begin + row_count;
