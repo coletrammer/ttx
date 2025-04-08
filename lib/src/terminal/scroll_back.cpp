@@ -55,6 +55,22 @@ void ScrollBack::take_rows(RowGroup& to, u32 desired_cols, usize row_index, usiz
     }
 }
 
+auto ScrollBack::find_row(u64 row) const -> di::Tuple<u32, RowGroup const&> {
+    ASSERT_GT_EQ(row, absolute_row_start());
+    ASSERT_LT(row, absolute_row_end());
+
+    row -= absolute_row_start();
+
+    // TODO: optimize!
+    for (auto& group : m_groups) {
+        if (row < group.group.total_rows()) {
+            return { u32(row), group.group };
+        }
+        row -= group.group.total_rows();
+    }
+    di::unreachable();
+}
+
 void ScrollBack::clear() {
     while (!m_groups.empty()) {
         m_absolute_row_start += m_groups.front().value().group.total_rows();

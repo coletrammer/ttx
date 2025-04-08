@@ -64,21 +64,7 @@ public:
     /// empty cells to meet this constraint.
     void take_rows(RowGroup& to, u32 desired_cols, usize row_index, usize row_count);
 
-    auto iterate_row(u64 row) {
-        ASSERT_GT_EQ(row, absolute_row_start());
-        ASSERT_LT(row, absolute_row_end());
-
-        row -= absolute_row_start();
-
-        // TODO: optimize!
-        for (auto& group : m_groups) {
-            if (row < group.group.total_rows()) {
-                return group.group.iterate_row(row);
-            }
-            row -= group.group.total_rows();
-        }
-        di::unreachable();
-    }
+    auto find_row(u64 row) const -> di::Tuple<u32, RowGroup const&>;
 
 private:
     auto is_last_group_full() const -> bool;

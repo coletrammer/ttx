@@ -12,6 +12,7 @@
 #include "ttx/terminal/row.h"
 #include "ttx/terminal/row_group.h"
 #include "ttx/terminal/scroll_back.h"
+#include "ttx/terminal/selection.h"
 
 namespace ttx::terminal {
 /// @brief Whether or not auto-wrap (DEC mode 7) is enabled.
@@ -134,15 +135,17 @@ public:
     void visual_scroll_down();
     void visual_scroll_to_bottom();
 
-    auto iterate_row(u64 row) {
-        ASSERT_GT_EQ(row, absolute_row_start());
-        ASSERT_LT(row, absolute_row_end());
+    auto selection() const -> di::Optional<Selection> { return m_selection; }
+    void clear_selection();
+    void begin_selection(SelectionPoint const& point);
+    void update_selection(SelectionPoint const& point);
+    auto in_selection(SelectionPoint const& point) const -> bool;
+    auto selected_text() const -> di::String;
 
-        if (row >= m_scroll_back.absolute_row_end()) {
-            return m_active_rows.iterate_row(row - m_scroll_back.absolute_row_end());
-        } else {
-            return m_scroll_back.iterate_row(row);
-        }
+    auto find_row(u64 row) const -> di::Tuple<u32, RowGroup const&>;
+    auto iterate_row(u64 row) const {
+        auto [r, group] = find_row(row);
+        return group.iterate_row(r);
     }
 
 private:
@@ -157,6 +160,9 @@ private:
     auto max_col_inclusive() const -> u32;
 
     auto cursor_in_scroll_region() const -> bool;
+
+    // Clamp the selection to be within bounds, after adding/removing rows from scrollback.
+    void clamp_selection();
 
     auto begin_row_iterator() { return rows().begin() + m_scroll_region.start_row; }
     auto end_row_iterator() { return rows().begin() + m_scroll_region.end_row; }
@@ -173,6 +179,9 @@ private:
     ScrollBackEnabled m_scroll_back_enabled { ScrollBackEnabled::No };
     u64 m_visual_scroll_offset { 0 };
     bool m_never_got_input { true };
+
+    // Visual selection
+    di::Optional<Selection> m_selection;
 
     // Mutable state for writing cells.
     Cursor m_cursor;

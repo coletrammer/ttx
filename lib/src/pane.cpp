@@ -236,15 +236,15 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
                         continue;
                     }
 
-                    if (text.empty()) {
-                        text = " "_sv;
-                    }
-
                     if (!cell.stale || whole_screen_dirty) {
-                        // TODO: selection
+                        auto selected = !text.empty() && screen.in_selection({ r + screen.visual_scroll_offset(),
+                                                                               c - m_horizontal_scroll_offset });
                         auto gfx = graphics;
-                        if (terminal.reverse_video()) {
+                        if (terminal.reverse_video() ^ selected) {
                             gfx.inverted = !gfx.inverted;
+                        }
+                        if (text.empty()) {
+                            text = " "_sv;
                         }
                         renderer.put_cell(text, r - m_vertical_scroll_offset, c - m_horizontal_scroll_offset, gfx);
                         cell.stale = true;
@@ -293,7 +293,7 @@ auto Pane::event(KeyEvent const& event) -> bool {
         m_terminal.with_lock([&](Terminal& terminal) {
             // Clear the selection and scroll to the bottom when sending keys to the application.
             terminal.active_screen().screen.visual_scroll_to_bottom();
-            clear_selection();
+            terminal.active_screen().screen.clear_selection();
         });
 
         (void) m_pty_controller.write_exactly(di::as_bytes(serialized_event.value().span()));
@@ -304,17 +304,19 @@ auto Pane::event(KeyEvent const& event) -> bool {
 
 auto Pane::event(MouseEvent const& event) -> bool {
     auto [application_cursor_keys_mode, alternate_scroll_mode, mouse_protocol, mouse_encoding,
-          in_alternate_screen_buffer, window_size, row_offset] = m_terminal.with_lock([&](Terminal& terminal) {
-        return di::Tuple {
-            terminal.application_cursor_keys_mode(),
-            terminal.alternate_scroll_mode(),
-            terminal.mouse_protocol(),
-            terminal.mouse_encoding(),
-            terminal.in_alternate_screen_buffer(),
-            terminal.size(),
-            terminal.visual_scroll_offset(),
-        };
-    });
+          in_alternate_screen_buffer, window_size, row_offset, selection] =
+        m_terminal.with_lock([&](Terminal& terminal) {
+            return di::Tuple {
+                terminal.application_cursor_keys_mode(),
+                terminal.alternate_scroll_mode(),
+                terminal.mouse_protocol(),
+                terminal.mouse_encoding(),
+                terminal.in_alternate_screen_buffer(),
+                terminal.size(),
+                terminal.visual_scroll_offset(),
+                terminal.active_screen().screen.selection(),
+            };
+        });
 
     auto serialized_event = serialize_mouse_event(
         event, mouse_protocol, mouse_encoding, m_last_mouse_position,
@@ -337,39 +339,50 @@ auto Pane::event(MouseEvent const& event) -> bool {
 
     // Selection logic.
     auto scroll_adjusted_position =
-        SelectionPosition { event.position().in_cells().y(), event.position().in_cells().x() };
+        terminal::SelectionPoint { event.position().in_cells().y(), event.position().in_cells().x() };
     scroll_adjusted_position = {
         scroll_adjusted_position.row + m_vertical_scroll_offset + row_offset,
         scroll_adjusted_position.col + m_horizontal_scroll_offset,
     };
     if (event.button() == MouseButton::Left && event.type() == MouseEventType::Press) {
         // Start selection.
-        m_selection_start = m_selection_end = scroll_adjusted_position;
+        m_terminal.with_lock([&](Terminal& terminal) {
+            terminal.active_screen().screen.begin_selection(scroll_adjusted_position);
+        });
         return true;
     }
 
-    if (m_selection_start.has_value() && event.button() == MouseButton::Left && event.type() == MouseEventType::Move) {
-        m_selection_end = scroll_adjusted_position;
+    if (selection.has_value() && event.button() == MouseButton::Left && event.type() == MouseEventType::Move) {
+        m_terminal.with_lock([&](Terminal& terminal) {
+            terminal.active_screen().screen.update_selection(scroll_adjusted_position);
+        });
         return true;
     }
 
-    if (m_selection_start.has_value() && event.button() == MouseButton::Left &&
-        event.type() == MouseEventType::Release) {
-        auto text = selection_text();
+    if (selection.has_value() && event.button() == MouseButton::Left && event.type() == MouseEventType::Release) {
+        auto text = m_terminal.with_lock([&](Terminal& terminal) {
+            auto result = terminal.active_screen().screen.selected_text();
+            terminal.active_screen().screen.clear_selection();
+            return result;
+        });
         if (!text.empty() && m_did_selection) {
             m_did_selection(di::as_bytes(text.span()));
         }
-        clear_selection();
         return true;
     }
 
     // Clear selection by default on other events.
-    clear_selection();
+    m_terminal.with_lock([&](Terminal& terminal) {
+        terminal.active_screen().screen.clear_selection();
+    });
     return false;
 }
 
 auto Pane::event(FocusEvent const& event) -> bool {
     auto [focus_event_mode] = m_terminal.with_lock([&](Terminal& terminal) {
+        if (event.is_focus_out()) {
+            terminal.active_screen().screen.clear_selection();
+        }
         return di::Tuple { terminal.focus_event_mode() };
     });
 
@@ -382,9 +395,8 @@ auto Pane::event(FocusEvent const& event) -> bool {
 }
 
 auto Pane::event(PasteEvent const& event) -> bool {
-    clear_selection();
-
     auto [bracketed_paste_mode] = m_terminal.with_lock([&](Terminal& terminal) {
+        terminal.active_screen().screen.clear_selection();
         return di::Tuple { terminal.bracked_paste_mode() };
     });
 
@@ -400,7 +412,6 @@ void Pane::invalidate_all() {
 }
 
 void Pane::resize(Size const& size) {
-    clear_selection();
     reset_viewport_scroll();
     m_terminal.with_lock([&](Terminal& terminal) {
         terminal.set_visible_size(size);
@@ -470,64 +481,6 @@ void Pane::stop_capture() {
 
 void Pane::exit() {
     (void) m_process.signal(dius::Signal::Hangup);
-}
-
-auto Pane::in_selection(MouseCoordinate coordinate) -> bool {
-    if (!m_selection_start || !m_selection_end || m_selection_start == m_selection_end) {
-        return false;
-    }
-
-    auto start = di::min({ *m_selection_start, *m_selection_end });
-    auto end = di::max({ *m_selection_start, *m_selection_end });
-
-    auto row = coordinate.y();
-    auto col = coordinate.x();
-    if (row > start.row && row < end.col) {
-        return true;
-    }
-
-    if (row == start.row) {
-        return col >= start.col && (row == end.row ? col < end.col : true);
-    }
-
-    return row == end.row && col < end.col;
-}
-
-auto Pane::selection_text() -> di::String {
-    if (!m_selection_start || !m_selection_end || m_selection_start == m_selection_end) {
-        return {};
-    }
-
-    auto start = di::min({ *m_selection_start, *m_selection_end });
-    auto end = di::max({ *m_selection_start, *m_selection_end });
-
-    return m_terminal.with_lock([&](Terminal& terminal) -> di::String {
-        auto text = ""_s;
-        // TODO: selection text with scroll back
-        // for (auto r = start.y(); r <= end.y(); r++) {
-        //     auto row_text = ""_s;
-        //     auto iter_start_col = r == start.y() ? start.x() : 0;
-        //     auto iter_end_col = r == end.y() ? end.x() : terminal.col_count();
-        //
-        // for (auto c = iter_start_col; c < iter_end_col; c++) {
-        //     row_text.push_back(terminal.row_at_scroll_relative_offset(r)[c].ch);
-        // }
-
-        //     while (!row_text.empty() && *row_text.back() == ' ') {
-        //         row_text.pop_back();
-        //     }
-        //
-        //     text += row_text;
-        //     if (iter_end_col == terminal.col_count()) {
-        //         text.push_back('\n');
-        //     }
-        // }
-        return text;
-    });
-}
-
-void Pane::clear_selection() {
-    m_selection_start = m_selection_end = {};
 }
 
 void Pane::reset_viewport_scroll() {

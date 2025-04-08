@@ -75,7 +75,7 @@ public:
     /// context to do this more efficiently (because they are erasing multiple cells).
     void drop_cell(Cell& cell);
 
-    auto iterate_row(u32 row) {
+    auto iterate_row(u32 row) const {
         ASSERT_LT(row, total_rows());
 
         auto& row_object = rows()[row];

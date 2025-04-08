@@ -35,6 +35,7 @@ void Screen::resize(Size const& size) {
         }
 
         m_size = size;
+        clamp_selection();
     });
 
     // First the column size of the existing rows.
@@ -553,6 +554,7 @@ void Screen::scroll_down() {
             // Adjust the visual scroll offset to be in bounds, if needed.
             m_visual_scroll_offset = absolute_row_start();
         }
+        clamp_selection();
     } else {
         auto& row = *begin_row_iterator();
         for (auto& cell : row.cells) {
@@ -738,6 +740,93 @@ void Screen::visual_scroll_to_bottom() {
     if (m_visual_scroll_offset != absolute_row_screen_start()) {
         m_visual_scroll_offset = absolute_row_screen_start();
         invalidate_all();
+    }
+}
+
+void Screen::clear_selection() {
+    if (!m_selection.value_or({}).empty()) {
+        invalidate_all();
+    }
+    m_selection = {};
+}
+
+void Screen::begin_selection(SelectionPoint const& point) {
+    m_selection = { point, point };
+}
+
+void Screen::update_selection(SelectionPoint const& point) {
+    if (!m_selection) {
+        begin_selection(point);
+    }
+    ASSERT(m_selection);
+    if (point != m_selection.value().end) {
+        m_selection.value().end = point;
+        invalidate_all();
+    }
+}
+
+auto Screen::in_selection(SelectionPoint const& point) const -> bool {
+    if (m_selection.value_or({}).empty()) {
+        return false;
+    }
+    auto [start, end] = m_selection.value().normalize();
+    return point >= start && point < end;
+}
+
+auto Screen::selected_text() const -> di::String {
+    if (m_selection.value_or({}).empty()) {
+        return {};
+    }
+
+    auto [start, end] = m_selection.value().normalize();
+    ASSERT_GT_EQ(start.row, absolute_row_start());
+    ASSERT_LT_EQ(start.col, absolute_row_end());
+
+    auto text = ""_s;
+    for (auto r = start.row; r <= end.row; r++) {
+        // Fast path: the entire row is contained the selection.
+        auto [row, group] = find_row(r);
+        auto& row_object = group.rows()[row];
+        if (r > start.row && r < end.row) {
+            text.append(row_object.text);
+            if (!row_object.overflow) {
+                text.push_back('\n');
+            }
+            continue;
+        }
+
+        // Slow path: iterate over the whole row and add the relevant cells.
+        auto iter_start_col = r == start.row ? start.col : 0_usize;
+        auto iter_end_col = r == end.row ? end.col : row_object.cells.size();
+        for (auto values : group.iterate_row(row)) {
+            auto [c, _, cell_text, _, _] = values;
+            if (c < iter_start_col || c >= iter_end_col) {
+                continue;
+            }
+            text.append(cell_text);
+        }
+        if (r != end.row && !row_object.overflow) {
+            text.push_back('\n');
+        }
+    }
+    return text;
+}
+
+void Screen::clamp_selection() {
+    for (auto& selection : m_selection) {
+        selection.start.row = di::clamp(selection.start.row, absolute_row_start(), absolute_row_end() - 1);
+        selection.end.row = di::clamp(selection.end.row, absolute_row_start(), absolute_row_end() - 1);
+    }
+}
+
+auto Screen::find_row(u64 row) const -> di::Tuple<u32, RowGroup const&> {
+    ASSERT_GT_EQ(row, absolute_row_start());
+    ASSERT_LT(row, absolute_row_end());
+
+    if (row >= m_scroll_back.absolute_row_end()) {
+        return { u32(row - m_scroll_back.absolute_row_end()), m_active_rows };
+    } else {
+        return m_scroll_back.find_row(row);
     }
 }
 

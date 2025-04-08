@@ -67,9 +67,6 @@ public:
     void exit();
 
 private:
-    auto selection_text() -> di::String;
-    auto in_selection(MouseCoordinate coordinate) -> bool;
-    void clear_selection();
     void reset_viewport_scroll();
 
     di::Atomic<bool> m_done { false };
@@ -79,19 +76,8 @@ private:
     di::Synchronized<Terminal> m_terminal;
     dius::system::ProcessHandle m_process;
 
-    struct SelectionPosition {
-        u64 row { 0 };
-        u32 col { 0 };
-
-        auto operator==(SelectionPosition const&) const -> bool = default;
-        auto operator<=>(SelectionPosition const&) const = default;
-    };
-
     u32 m_vertical_scroll_offset { 0 };
     u32 m_horizontal_scroll_offset { 0 };
-
-    di::Optional<SelectionPosition> m_selection_start;
-    di::Optional<SelectionPosition> m_selection_end;
 
     // Application controlled callback when the internal process exits.
     di::Function<void(Pane&)> m_did_exit;
