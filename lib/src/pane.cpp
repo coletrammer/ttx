@@ -38,7 +38,7 @@ static auto spawn_child(di::Vector<di::TransparentStringView> command, dius::Syn
         .with_file_dup(0, 1)
         .with_file_dup(0, 2)
 #ifndef __linux__
-        .with_tty_window_size(0, size)
+        .with_tty_window_size(0, size.as_window_size())
         .with_controlling_tty(0)
 #endif
         .spawn();
