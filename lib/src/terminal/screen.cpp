@@ -1,8 +1,11 @@
 #include "ttx/terminal/screen.h"
 
 #include "di/container/algorithm/rotate.h"
+#include "di/io/vector_writer.h"
 #include "di/util/clamp.h"
+#include "di/util/construct.h"
 #include "di/util/scope_exit.h"
+#include "dius/print.h"
 #include "ttx/graphics_rendition.h"
 #include "ttx/terminal/cell.h"
 #include "ttx/terminal/cursor.h"
@@ -828,6 +831,79 @@ auto Screen::find_row(u64 row) const -> di::Tuple<u32, RowGroup const&> {
     } else {
         return m_scroll_back.find_row(row);
     }
+}
+
+auto Screen::state_as_escape_sequences() const -> di::String {
+    auto writer = di::VectorWriter<> {};
+
+    // 1. Set default margins
+    di::writer_print<di::String::Encoding>(writer, "\033[r"_sv);
+
+    // 2. Set origin mode
+    if (m_origin_mode == OriginMode::Enabled) {
+        di::writer_print<di::String::Encoding>(writer, "\033[?6h"_sv);
+    }
+
+    // 3. Screen contents
+    auto prev_sgr = GraphicsRendition();
+    for (auto r : di::range(absolute_row_start(), absolute_row_end())) {
+        auto [row, group] = find_row(r);
+        for (auto row : group.iterate_row(row)) {
+            auto [c, _, text, gfx, _] = row;
+
+            // If we're at the cursor, and overflow isn't pending, then save the cursor now.
+            auto at_cursor = r - absolute_row_start() == m_cursor.row && c == m_cursor.col;
+            if (at_cursor && (text.empty() || !m_cursor.overflow_pending)) {
+                di::writer_print<di::String::Encoding>(writer, "\0337"_sv);
+            }
+
+            // For now, we assume no text means no graphics. If we support https://sw.kovidgoyal.net/kitty/deccara/,
+            // we would use that to handle cells with no text.
+            if (text.empty()) {
+                di::writer_print<di::String::Encoding>(writer, "\033[C"_sv);
+                continue;
+            }
+
+            // Write out the cell
+            // TODO: hyperlinks
+            if (gfx != prev_sgr) {
+                for (auto& params : gfx.as_csi_params()) {
+                    di::writer_print<di::String::Encoding>(writer, "\033[{}m"_sv, params);
+                }
+                prev_sgr = gfx;
+            }
+            di::writer_print<di::String::Encoding>(writer, "{}"_sv, text);
+
+            // Since overflow was pending, save the cursor position after writing the cell.
+            if (at_cursor && m_cursor.overflow_pending) {
+                di::writer_print<di::String::Encoding>(writer, "\0337"_sv);
+            }
+        }
+
+        // If the row hasn't overflowed, go to the next line. This doesn't apply for the last line.
+        auto& row_object = group.rows()[row];
+        if (!row_object.overflow && r != absolute_row_end() - 1) {
+            di::writer_print<di::String::Encoding>(writer, "\r\n"_sv);
+        }
+    }
+
+    // 4. Scroll region
+    // This is saved before the cursor because setting the scroll region also moves the cursor.
+    di::writer_print<di::String::Encoding>(writer, "\033[{};{}r"_sv, m_scroll_region.start_row + 1,
+                                           m_scroll_region.end_row + 2);
+
+    // 5. Cursor
+    di::writer_print<di::String::Encoding>(writer, "\0338"_sv);
+
+    // 6. Current sgr
+    for (auto& params : current_graphics_rendition().as_csi_params()) {
+        di::writer_print<di::String::Encoding>(writer, "\033[{}m"_sv, params);
+    }
+
+    // TODO: current hyperlink
+
+    // Return the resulting string.
+    return writer.vector() | di::transform(di::construct<c8>) | di::to<di::String>(di::encoding::assume_valid);
 }
 
 // This list is only for the diacritics used by the

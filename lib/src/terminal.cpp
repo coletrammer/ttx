@@ -1,6 +1,7 @@
 #include "ttx/terminal.h"
 
 #include "di/container/algorithm/contains.h"
+#include "di/math/align_up.h"
 #include "di/serialization/base64.h"
 #include "di/util/construct.h"
 #include "dius/print.h"
@@ -353,6 +354,13 @@ void Terminal::c0_bs() {
 
 // Horizontal Tab - https://vt100.net/docs/vt510-rm/chapter4.html#T4-1
 void Terminal::c0_ht() {
+    // Special case: if there are no tab stops, simulate having tab stops every 8 columns.
+    if (m_tab_stops.empty()) {
+        auto col = di::align_up(cursor_col() + 1, 8u);
+        active_screen().screen.set_cursor_col(col);
+        return;
+    }
+
     for (auto tab_stop : m_tab_stops) {
         if (tab_stop > cursor_col()) {
             active_screen().screen.set_cursor_col(tab_stop);
@@ -463,9 +471,11 @@ void Terminal::osc_52(di::StringView data) {
 // DEC Screen Alignment Pattern - https://vt100.net/docs/vt510-rm/DECALN.html
 void Terminal::esc_decaln() {
     auto& screen = active_screen().screen;
-    screen.set_cursor(0, 0);
-    for (auto _ : di::range(screen.max_height() * screen.max_width())) {
-        screen.put_code_point(U'E', terminal::AutoWrapMode::Enabled);
+    for (auto r : di::range(screen.max_height())) {
+        screen.set_cursor(r, 0);
+        for (auto _ : di::range(screen.max_width())) {
+            screen.put_code_point(U'E', terminal::AutoWrapMode::Disabled);
+        }
     }
     screen.set_cursor(0, 0);
 }
@@ -722,8 +732,9 @@ void Terminal::csi_decset(Params const& params) {
             if (m_allow_80_132_col_mode) {
                 m_80_col_mode = false;
                 m_132_col_mode = true;
-                resize({ row_count(), 132, size().xpixels * 132 / size().cols, size().ypixels });
+                active_screen().screen.clear_scroll_back();
                 clear();
+                resize({ row_count(), 132, size().xpixels * 132 / size().cols, size().ypixels });
                 csi_decstbm({});
             }
             break;
@@ -802,6 +813,7 @@ void Terminal::csi_decrst(Params const& params) {
             if (m_allow_80_132_col_mode) {
                 m_80_col_mode = true;
                 m_132_col_mode = false;
+                active_screen().screen.clear_scroll_back();
                 resize({ row_count(), 80, size().xpixels * 80 / size().cols, size().ypixels });
                 clear();
                 csi_decstbm({});
@@ -1112,218 +1124,140 @@ auto Terminal::active_screen() const -> ScreenState const& {
     return m_primary_screen;
 }
 
-// auto Terminal::state_as_escape_sequences_internal(di::VectorWriter<>& writer) const {
-// // 1. Terminal size. (note that the visibile size is not reported in any way).
-// di::writer_print<di::String::Encoding>(writer, "\033[4;{};{}t"_sv, m_ypixels, m_xpixels);
-// di::writer_print<di::String::Encoding>(writer, "\033[8;{};{}t"_sv, m_row_count, m_col_count);
-// if (m_80_col_mode || m_132_col_mode) {
-//     // When writing the mode, first ensure we enable setting the mode.
-//     di::writer_print<di::String::Encoding>(writer, "\033[?40h"_sv);
-//     auto _ = di::ScopeExit([&] {
-//         di::writer_print<di::String::Encoding>(writer, "\033[?40l"_sv);
-//     });
-//
-//     if (m_80_col_mode) {
-//         di::writer_print<di::String::Encoding>(writer, "\033[?3l"_sv);
-//     } else {
-//         di::writer_print<di::String::Encoding>(writer, "\033[?3h"_sv);
-//     }
-// }
-//
-// // 2. Terminal cell contents.
-// {
-//     // When printing terminal cell contents, ensure auto-wrap is disabled, to prevent accidently scrolling the
-//     // screen.
-//     di::writer_print<di::String::Encoding>(writer, "\033[?7l"_sv);
-//     auto _ = di::ScopeExit([&] {
-//         di::writer_print<di::String::Encoding>(writer, "\033[?7h"_sv);
-//     });
-//
-//     auto first = true;
-//     auto last_sgr = GraphicsRendition {};
-//     auto output_row = [&](Row const& row) {
-//         // Move to the next line (for any row other than the first).
-//         if (!first) {
-//             di::writer_print<di::String::Encoding>(writer, "\r\n"_sv);
-//         }
-//         first = false;
-//
-//         for (auto const& cell : row) {
-//             // Write graphics rendition if needed.
-//             if (cell.graphics_rendition != last_sgr) {
-//                 for (auto& params : cell.graphics_rendition.as_csi_params()) {
-//                     di::writer_print<di::String::Encoding>(writer, "\033[{}m"_sv, params);
-//                 }
-//                 last_sgr = cell.graphics_rendition;
-//             }
-//
-//             // Write cell text.
-//             di::writer_print<di::String::Encoding>(writer, "{}"_sv, cell.ch);
-//         }
-//     };
-//
-//     // Write out all cell contents.
-//     auto all_rows = di::concat(m_rows_above, m_rows, di::reverse(m_rows_below));
-//     di::container::for_each(all_rows, output_row);
-//
-//     // Pan up so that the active region is correct.
-//     if (!m_rows_below.empty()) {
-//         di::writer_print<di::String::Encoding>(writer, "\033[H\033[{}T"_sv, m_rows_below.size());
-//     }
-// }
-//
-// // 3. Tab stops (this is done before setting the cursor position, as it requires moving the cursor)
-// for (auto col : m_tab_stops) {
-//     di::writer_print<di::String::Encoding>(writer, "\033[0;{}H\033H"_sv, col + 1);
-// }
-//
-// // 4. Internal state.
-// {
-//     // NOTE: Disable drawing (DECSET 2026) is ignored as saving its state is not useful.
-//
-//     // Scroll margin.
-//     di::writer_print<di::String::Encoding>(writer, "\033[{};{}r"_sv, m_scroll_start + 1, m_scroll_end + 1);
-//
-//     // Auto wrap.
-//     if (m_autowrap_mode) {
-//         di::writer_print<di::String::Encoding>(writer, "\033[?7h"_sv);
-//     }
-//
-//     // Origin mode.
-//     if (m_origin_mode) {
-//         di::writer_print<di::String::Encoding>(writer, "\033[?6h"_sv);
-//     }
-// }
-//
-// // 5. Application state
-// {
-//     // Cursor keys mode
-//     if (m_application_cursor_keys_mode == ApplicationCursorKeysMode::Enabled) {
-//         di::writer_print<di::String::Encoding>(writer, "\033[?1h"_sv);
-//     }
-//
-//     // Kitty key flags
-//     auto first = true;
-//     auto set_kitty_key_flags = [&](KeyReportingFlags flags) {
-//         if (first) {
-//             di::writer_print<di::String::Encoding>(writer, "\033[=1;{}u"_sv, i32(flags));
-//             first = false;
-//         } else {
-//             di::writer_print<di::String::Encoding>(writer, "\033[>{}u"_sv, i32(flags));
-//         }
-//     };
-//
-//     for (auto flags : m_key_reporting_flags_stack) {
-//         set_kitty_key_flags(flags);
-//     }
-//     set_kitty_key_flags(m_key_reporting_flags);
-//
-//     // Alternate scroll mode
-//     if (m_alternate_scroll_mode == AlternateScrollMode::Enabled) {
-//         di::writer_print<di::String::Encoding>(writer, "\033[?1007h"_sv);
-//     }
-//
-//     // Mouse protocol
-//     switch (m_mouse_protocol) {
-//         case MouseProtocol::None:
-//             break;
-//         case MouseProtocol::X10:
-//             di::writer_print<di::String::Encoding>(writer, "\033[?9h"_sv);
-//             break;
-//         case MouseProtocol::VT200:
-//             di::writer_print<di::String::Encoding>(writer, "\033[?1000h"_sv);
-//             break;
-//         case MouseProtocol::BtnEvent:
-//             di::writer_print<di::String::Encoding>(writer, "\033[?1002h"_sv);
-//             break;
-//         case MouseProtocol::AnyEvent:
-//             di::writer_print<di::String::Encoding>(writer, "\033[?1003h"_sv);
-//             break;
-//     }
-//
-//     // Mouse encoding
-//     switch (m_mouse_encoding) {
-//         case MouseEncoding::X10:
-//             break;
-//         case MouseEncoding::UTF8:
-//             di::writer_print<di::String::Encoding>(writer, "\033[?1005h"_sv);
-//             break;
-//         case MouseEncoding::SGR:
-//             di::writer_print<di::String::Encoding>(writer, "\033[?1006h"_sv);
-//             break;
-//         case MouseEncoding::URXVT:
-//             di::writer_print<di::String::Encoding>(writer, "\033[?1015h"_sv);
-//             break;
-//         case MouseEncoding::SGRPixels:
-//             di::writer_print<di::String::Encoding>(writer, "\033[?1016h"_sv);
-//             break;
-//     }
-//
-//     // Focus event mode
-//     if (m_focus_event_mode == FocusEventMode::Enabled) {
-//         di::writer_print<di::String::Encoding>(writer, "\033[?1004h"_sv);
-//     }
-//
-//     // Bracketed paste
-//     if (m_bracketed_paste_mode == BracketedPasteMode::Enabled) {
-//         di::writer_print<di::String::Encoding>(writer, "\033[?2004h"_sv);
-//     }
-// }
-//
-// // 6. Cursor
-// {
-//     // Cursor style
-//     di::writer_print<di::String::Encoding>(writer, "\033[{} q"_sv, i32(m_cursor_style));
-//
-//     // Cursor position - when in origin mode we need to adjust our coordinates based on the scroll region's
-//     // start.
-//     if (m_origin_mode) {
-//         di::writer_print<di::String::Encoding>(writer, "\033[{};{}H"_sv, m_cursor_row - m_scroll_start + 1,
-//                                                m_cursor_col - m_scroll_start + 1);
-//     } else {
-//         di::writer_print<di::String::Encoding>(writer, "\033[{};{}H"_sv, m_cursor_row + 1, m_cursor_col + 1);
-//     }
-//
-//     // Cursor visible
-//     if (m_cursor_hidden) {
-//         di::writer_print<di::String::Encoding>(writer, "\033[?25l"_sv);
-//     }
-// }
-//
-// // 7. X-overflow
-// {
-//     // If we're pending overflow, we need to emit the last visibile cell again.
-//     if (m_x_overflow) {
-//         auto const& cell = *di::back(m_rows[m_cursor_row]);
-//         for (auto& params : cell.graphics_rendition.as_csi_params()) {
-//             di::writer_print<di::String::Encoding>(writer, "\033[{}m"_sv, params);
-//         }
-//         di::writer_print<di::String::Encoding>(writer, "{}"_sv, cell.ch);
-//     }
-// }
-//
-// // 8. Current sgr
-// for (auto& params : m_current_graphics_rendition.as_csi_params()) {
-//     di::writer_print<di::String::Encoding>(writer, "\033[{}m"_sv, params);
-// }
-// }
-
 auto Terminal::state_as_escape_sequences() const -> di::String {
     auto writer = di::VectorWriter<> {};
 
     // 1. Reset terminal
     di::writer_print<di::String::Encoding>(writer, "\033c"_sv);
 
-    // if (m_save_state) {
-    //     // 2. If in alternate screen buffer, write the main buffer first.
-    //     m_save_state->state_as_escape_sequences_internal(writer);
-    //
-    //     // 3. Enter alternate screen buffer, if necssary.
-    //     di::writer_print<di::String::Encoding>(writer, "\033[?1049h"_sv);
-    // }
-    //
-    // // 4. Write current contents.
-    // state_as_escape_sequences_internal(writer);
+    // 2. Terminal size. (note that the visibile size is not reported in any way).
+    di::writer_print<di::String::Encoding>(writer, "\033[4;{};{}t"_sv, size().ypixels, size().xpixels);
+    di::writer_print<di::String::Encoding>(writer, "\033[8;{};{}t"_sv, size().rows, size().cols);
+    if (m_80_col_mode || m_132_col_mode) {
+        // When writing the mode, first ensure we enable setting the mode.
+        di::writer_print<di::String::Encoding>(writer, "\033[?40h"_sv);
+
+        if (m_80_col_mode) {
+            di::writer_print<di::String::Encoding>(writer, "\033[?3l"_sv);
+        } else {
+            di::writer_print<di::String::Encoding>(writer, "\033[?3h"_sv);
+        }
+    }
+
+    // 3. Tab stops (this is done early on, because it requires moving the cursor)
+    for (auto col : m_tab_stops) {
+        di::writer_print<di::String::Encoding>(writer, "\033[0;{}H\033H"_sv, col + 1);
+    }
+
+    // 4. Screen contents.
+    {
+        // When printing the screen, we need auto wrap enabled.
+        di::writer_print<di::String::Encoding>(writer, "\033[?7h"_sv);
+
+        auto print_screen = [&](ScreenState const& screen) {
+            di::writer_print<di::String::Encoding>(writer, "{}"_sv, screen.screen.state_as_escape_sequences());
+            di::writer_print<di::String::Encoding>(writer, "\033[{} q"_sv, i32(screen.cursor_style));
+        };
+
+        print_screen(m_primary_screen);
+        if (m_alternate_screen) {
+            di::writer_print<di::String::Encoding>(writer, "\033[?1049h\033[H\033[2J"_sv);
+            print_screen(*m_alternate_screen);
+        }
+    }
+
+    // 4. Dec modes.
+    {
+        // NOTE: Disable drawing (DECSET 2026) is ignored as saving its state is not useful.
+        // NOTE: Origin mode is considered screen state.
+
+        // Reverse video.
+        if (m_reverse_video) {
+            di::writer_print<di::String::Encoding>(writer, "\033[?5h"_sv);
+        }
+
+        // Auto wrap.
+        if (m_auto_wrap_mode == terminal::AutoWrapMode::Disabled) {
+            di::writer_print<di::String::Encoding>(writer, "\033[?7l"_sv);
+        }
+
+        // Cursor keys mode
+        if (m_application_cursor_keys_mode == ApplicationCursorKeysMode::Enabled) {
+            di::writer_print<di::String::Encoding>(writer, "\033[?1h"_sv);
+        }
+
+        // Cursor visible
+        if (m_cursor_hidden) {
+            di::writer_print<di::String::Encoding>(writer, "\033[?25l"_sv);
+        }
+
+        // Kitty key flags
+        auto first = true;
+        auto set_kitty_key_flags = [&](KeyReportingFlags flags) {
+            if (first) {
+                di::writer_print<di::String::Encoding>(writer, "\033[=1;{}u"_sv, i32(flags));
+                first = false;
+            } else {
+                di::writer_print<di::String::Encoding>(writer, "\033[>{}u"_sv, i32(flags));
+            }
+        };
+
+        for (auto flags : m_key_reporting_flags_stack) {
+            set_kitty_key_flags(flags);
+        }
+        set_kitty_key_flags(m_key_reporting_flags);
+
+        // Alternate scroll mode
+        if (m_alternate_scroll_mode == AlternateScrollMode::Enabled) {
+            di::writer_print<di::String::Encoding>(writer, "\033[?1007h"_sv);
+        }
+
+        // Mouse protocol
+        switch (m_mouse_protocol) {
+            case MouseProtocol::None:
+                break;
+            case MouseProtocol::X10:
+                di::writer_print<di::String::Encoding>(writer, "\033[?9h"_sv);
+                break;
+            case MouseProtocol::VT200:
+                di::writer_print<di::String::Encoding>(writer, "\033[?1000h"_sv);
+                break;
+            case MouseProtocol::BtnEvent:
+                di::writer_print<di::String::Encoding>(writer, "\033[?1002h"_sv);
+                break;
+            case MouseProtocol::AnyEvent:
+                di::writer_print<di::String::Encoding>(writer, "\033[?1003h"_sv);
+                break;
+        }
+
+        // Mouse encoding
+        switch (m_mouse_encoding) {
+            case MouseEncoding::X10:
+                break;
+            case MouseEncoding::UTF8:
+                di::writer_print<di::String::Encoding>(writer, "\033[?1005h"_sv);
+                break;
+            case MouseEncoding::SGR:
+                di::writer_print<di::String::Encoding>(writer, "\033[?1006h"_sv);
+                break;
+            case MouseEncoding::URXVT:
+                di::writer_print<di::String::Encoding>(writer, "\033[?1015h"_sv);
+                break;
+            case MouseEncoding::SGRPixels:
+                di::writer_print<di::String::Encoding>(writer, "\033[?1016h"_sv);
+                break;
+        }
+
+        // Focus event mode
+        if (m_focus_event_mode == FocusEventMode::Enabled) {
+            di::writer_print<di::String::Encoding>(writer, "\033[?1004h"_sv);
+        }
+
+        // Bracketed paste
+        if (m_bracketed_paste_mode == BracketedPasteMode::Enabled) {
+            di::writer_print<di::String::Encoding>(writer, "\033[?2004h"_sv);
+        }
+    }
 
     // Return the resulting string.
     return writer.vector() | di::transform(di::construct<c8>) | di::to<di::String>(di::encoding::assume_valid);

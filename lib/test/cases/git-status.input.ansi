@@ -1,0 +1,20 @@
+[4;2640;5054t[8;61;266t[1m[7m%[27m[1m[0m                                                                                                                                                                                                                                                                          ]133;A;cl=m;aid=38150]7;file:///persist/home/Workspace/cpp/ttx\]7;kitty-shell-cwd://desktop/persist/home/Workspace/cpp/ttx]7;kitty-shell-cwd://desktop/persist/home/Workspace/cpp/ttx]2;…/Workspace/cpp/ttx[0m[27m[24m[J]133;A[32m❯[0m [K[241C[34m ttx[0m[37m on [49m[35m terminal-new[0m[2C[?1h=[6 q[6 q[?2004h[1m[38;2;243;139;168mg[0m[39m[1m[38;2;243;139;168mg[0m[39m[90mit status[39m[9D[1m[38;2;243;139;168mg[1m[38;2;243;139;168mi[0m[39m[0m[38;2;137;180;250mg[0m[38;2;137;180;250mi[38;2;137;180;250mt[39m[39m [39ms[39mt[39ma[39mt[39mu[38;2;116;199;236ms[38;2;116;199;236mt[38;2;116;199;236ma[38;2;116;199;236mt[38;2;116;199;236mu[38;2;116;199;236ms[39m[?2004l[?2004h[0m[27m[24m[J[32m❯ [0m[38;2;137;180;250mgit[39m [38;2;116;199;236mstatus[39m[K[?1l>[0 q[?2004l
+]133;C;]133;C]2;git statusOn branch terminal-new
+Your branch is up to date with 'origin/terminal-new'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	[31mmodified:   lib/include/ttx/terminal/screen.h[m
+	[31mmodified:   lib/src/terminal.cpp[m
+	[31mmodified:   lib/src/terminal/screen.cpp[m
+	[31mmodified:   lib/test/cases/git-log-with-scroll.expected.ansi[m
+	[31mmodified:   lib/test/cases/nvim-basic.expected.ansi[m
+	[31mmodified:   lib/test/cases/zsh-eza.expected.ansi[m
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	[31mlib/test/cases/git-status.input.ansi[m
+
+no changes added to commit (use "git add" and/or "git commit -a")
+[1m[7m%[27m[1m[0m                                                                                                                                                                                                                                                                          ]133;D;0;aid=38150]133;A;cl=m;aid=38150]7;file:///persist/home/Workspace/cpp/ttx\]133;D;0]7;kitty-shell-cwd://desktop/persist/home/Workspace/cpp/ttx]2;…/Workspace/cpp/ttx[0m[27m[24m[J]133;A[32m❯[0m [K[241C[34m ttx[0m[37m on [49m[35m terminal-new[0m[2C[?1h=[6 q[6 q[?2004h

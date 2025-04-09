@@ -148,6 +148,15 @@ public:
         return group.iterate_row(r);
     }
 
+    /// @brief Serialize screen contents to terminal escape sequences
+    ///
+    /// This function does not preserve attributes like the visual scroll
+    /// offset and current selection. Additionally, the terminal size is
+    /// not embedded in the returned escape sequences. The
+    /// Terminal::state_as_escape_sequences() includes a superset of
+    /// information, including the size and dec modes.
+    auto state_as_escape_sequences() const -> di::String;
+
 private:
     void put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode);
 
