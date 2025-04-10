@@ -471,6 +471,7 @@ void Terminal::osc_52(di::StringView data) {
 // DEC Screen Alignment Pattern - https://vt100.net/docs/vt510-rm/DECALN.html
 void Terminal::esc_decaln() {
     auto& screen = active_screen().screen;
+    screen.set_scroll_region({ 0, screen.max_height() });
     for (auto r : di::range(screen.max_height())) {
         screen.set_cursor(r, 0);
         for (auto _ : di::range(screen.max_width())) {
@@ -547,13 +548,13 @@ void Terminal::csi_cnl(Params const& params) {
 void Terminal::csi_cup(Params const& params) {
     auto row = di::max(1u, params.get(0, 1)) - 1;
     auto col = di::max(1u, params.get(1, 1)) - 1;
-    active_screen().screen.set_cursor(row, col);
+    active_screen().screen.set_cursor_relative(row, col);
 }
 
 // Cursor Horizontal Absolute - https://vt100.net/docs/vt510-rm/CHA.html
 void Terminal::csi_cha(Params const& params) {
     auto col = di::max(1u, params.get(0, 1)) - 1;
-    active_screen().screen.set_cursor_col(col);
+    active_screen().screen.set_cursor_col_relative(col);
 }
 
 // Erase in Display - https://vt100.net/docs/vt510-rm/ED.html
@@ -696,7 +697,7 @@ void Terminal::csi_da3(Params const& params) {
 // Vertical Line Position Absolute - https://vt100.net/docs/vt510-rm/VPA.html
 void Terminal::csi_vpa(Params const& params) {
     auto row = di::max(1u, params.get(0, 1)) - 1;
-    active_screen().screen.set_cursor_row(row);
+    active_screen().screen.set_cursor_row_relative(row);
 }
 
 // Horizontal and Vertical Position - https://vt100.net/docs/vt510-rm/HVP.html
@@ -734,7 +735,7 @@ void Terminal::csi_decset(Params const& params) {
                 m_132_col_mode = true;
                 active_screen().screen.clear_scroll_back();
                 clear();
-                resize({ row_count(), 132, size().xpixels * 132 / size().cols, size().ypixels });
+                resize({ 24, 132, size().xpixels * 132 / size().cols, size().ypixels * 24 / size().rows });
                 csi_decstbm({});
             }
             break;
@@ -814,7 +815,7 @@ void Terminal::csi_decrst(Params const& params) {
                 m_80_col_mode = true;
                 m_132_col_mode = false;
                 active_screen().screen.clear_scroll_back();
-                resize({ row_count(), 80, size().xpixels * 80 / size().cols, size().ypixels });
+                resize({ 24, 80, size().xpixels * 80 / size().cols, size().ypixels * 24 / size().rows });
                 clear();
                 csi_decstbm({});
             }

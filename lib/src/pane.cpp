@@ -252,15 +252,19 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
                     end_col = c - m_horizontal_scroll_offset + 1;
                 }
                 // Clear any blank cols after the terminal.
-                for (auto c : di::range(end_col, terminal.visible_size().cols)) {
-                    renderer.put_cell(" "_sv, r - m_vertical_scroll_offset, c,
-                                      { .inverted = terminal.reverse_video() });
+                if (end_col < terminal.visible_size().cols) {
+                    for (auto c : di::range(end_col, terminal.visible_size().cols)) {
+                        renderer.put_cell(" "_sv, r - m_vertical_scroll_offset, c,
+                                          { .inverted = terminal.reverse_video() });
+                    }
                 }
             }
 
             // Clear any blank rows after the terminal.
-            for (auto r : di::range(end_row, terminal.visible_size().rows)) {
-                renderer.clear_row(r, { .inverted = terminal.reverse_video() });
+            if (end_row < terminal.visible_size().rows) {
+                for (auto r : di::range(end_row, terminal.visible_size().rows)) {
+                    renderer.clear_row(r, { .inverted = terminal.reverse_video() });
+                }
             }
             screen.clear_whole_screen_dirty_flag();
         }

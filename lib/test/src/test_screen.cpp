@@ -188,34 +188,34 @@ static void origin_mode_cursor_movement() {
     auto expected = Cursor { .row = 1, .col = 0 };
     ASSERT_EQ(screen.cursor(), expected);
 
-    screen.set_cursor(0, 0);
+    screen.set_cursor_relative(0, 0);
     ASSERT_EQ(screen.cursor(), expected);
 
-    screen.set_cursor_col(2);
+    screen.set_cursor_col_relative(2);
     expected = { .row = 1, .col = 2, .text_offset = 2 };
     ASSERT_EQ(screen.cursor(), expected);
 
-    screen.set_cursor_col(1);
+    screen.set_cursor_col_relative(1);
     expected = { .row = 1, .col = 1, .text_offset = 1 };
     ASSERT_EQ(screen.cursor(), expected);
 
-    screen.set_cursor_row(2);
+    screen.set_cursor_row_relative(2);
     expected = { .row = 3, .col = 1, .text_offset = 1 };
     ASSERT_EQ(screen.cursor(), expected);
 
-    screen.set_cursor_col(100);
+    screen.set_cursor_col_relative(100);
     expected = { .row = 3, .col = 4, .text_offset = 4 };
     ASSERT_EQ(screen.cursor(), expected);
 
-    screen.set_cursor_row(1000);
+    screen.set_cursor_row_relative(1000);
     expected = { .row = 3, .col = 4, .text_offset = 4 };
     ASSERT_EQ(screen.cursor(), expected);
 
-    screen.set_cursor(3, 2);
+    screen.set_cursor_relative(3, 2);
     expected = { .row = 3, .col = 2, .text_offset = 2 };
     ASSERT_EQ(screen.cursor(), expected);
 
-    screen.set_cursor(1000, 1000);
+    screen.set_cursor_relative(1000, 1000);
     expected = { .row = 3, .col = 4, .text_offset = 4 };
     ASSERT_EQ(screen.cursor(), expected);
 }

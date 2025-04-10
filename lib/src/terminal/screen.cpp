@@ -187,12 +187,10 @@ auto Screen::save_cursor() const -> SavedCursor {
 }
 
 void Screen::restore_cursor(SavedCursor const& cursor) {
+    // Restore origin mode first to ensure we clamp the cursor if necessary.
+    m_origin_mode = cursor.origin_mode;
     set_cursor(cursor.row, cursor.col);
     set_current_graphics_rendition(cursor.graphics_rendition);
-
-    // We don't call set_origin_mode() because that also resets
-    // the cursor position.
-    m_origin_mode = cursor.origin_mode;
 
     // This is restored even if the terminal has been resized such that
     // the cursor is no longer at the end of the row.
@@ -210,6 +208,10 @@ void Screen::set_origin_mode(OriginMode origin_mode) {
     set_cursor(0, 0);
 }
 
+void Screen::set_cursor_relative(u32 row, u32 col) {
+    set_cursor(translate_row(row), translate_col(col));
+}
+
 void Screen::set_cursor(u32 row, u32 col, bool overflow_pending) {
     set_cursor(row, col);
     m_cursor.overflow_pending = overflow_pending;
@@ -219,8 +221,8 @@ void Screen::set_cursor(u32 row, u32 col) {
     // Setting the cursor always clears the overflow pending flag.
     m_cursor.overflow_pending = false;
 
-    row = di::clamp(translate_row(row), min_row(), max_row_inclusive());
-    col = di::clamp(translate_col(col), min_col(), max_col_inclusive());
+    row = di::clamp(row, min_row(), max_row_inclusive());
+    col = di::clamp(col, min_col(), max_col_inclusive());
 
     // Special case when moving the cursor on the same row.
     if (m_cursor.row == row) {
@@ -239,8 +241,16 @@ void Screen::set_cursor(u32 row, u32 col) {
     }
 }
 
+void Screen::set_cursor_row_relative(u32 row) {
+    set_cursor_row(translate_row(row));
+}
+
 void Screen::set_cursor_row(u32 row) {
     set_cursor(row, m_cursor.col);
+}
+
+void Screen::set_cursor_col_relative(u32 col) {
+    set_cursor_col(translate_col(col));
 }
 
 void Screen::set_cursor_col(u32 col) {
@@ -783,7 +793,7 @@ auto Screen::selected_text() const -> di::String {
 
     auto [start, end] = m_selection.value().normalize();
     ASSERT_GT_EQ(start.row, absolute_row_start());
-    ASSERT_LT_EQ(start.col, absolute_row_end());
+    ASSERT_LT_EQ(start.row, absolute_row_end());
 
     auto text = ""_s;
     for (auto r = start.row; r <= end.row; r++) {
@@ -847,12 +857,21 @@ auto Screen::state_as_escape_sequences() const -> di::String {
     // 3. Screen contents
     auto prev_sgr = GraphicsRendition();
     for (auto r : di::range(absolute_row_start(), absolute_row_end())) {
+        // Once we get to the screen buffer, force the screen to fully scroll.
+        if (r == absolute_row_screen_start()) {
+            for (auto _ : di::range(max_height() - 1)) {
+                di::writer_print<di::String::Encoding>(writer, "\n"_sv);
+            }
+            di::writer_print<di::String::Encoding>(writer, "\033[H"_sv);
+        }
+
         auto [row, group] = find_row(r);
         for (auto row : group.iterate_row(row)) {
             auto [c, _, text, gfx, _] = row;
 
             // If we're at the cursor, and overflow isn't pending, then save the cursor now.
-            auto at_cursor = r - absolute_row_start() == m_cursor.row && c == m_cursor.col;
+            auto at_cursor = r >= absolute_row_screen_start() && r - absolute_row_screen_start() == m_cursor.row &&
+                             c == m_cursor.col;
             if (at_cursor && (text.empty() || !m_cursor.overflow_pending)) {
                 di::writer_print<di::String::Encoding>(writer, "\0337"_sv);
             }

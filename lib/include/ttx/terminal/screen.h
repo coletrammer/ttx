@@ -91,9 +91,12 @@ public:
     void restore_cursor(SavedCursor const& cursor);
 
     void set_origin_mode(OriginMode mode);
+    void set_cursor_relative(u32 row, u32 col);
     void set_cursor(u32 row, u32 col);
     void set_cursor(u32 row, u32 col, bool overflow_pending);
+    void set_cursor_row_relative(u32 row);
     void set_cursor_row(u32 row);
+    void set_cursor_col_relative(u32 col);
     void set_cursor_col(u32 col);
 
     void insert_blank_characters(u32 count);
