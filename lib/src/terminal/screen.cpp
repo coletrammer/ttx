@@ -11,7 +11,7 @@
 #include "ttx/terminal/cursor.h"
 
 namespace ttx::terminal {
-static u32 code_point_width(c32 code_point);
+static auto code_point_width(c32 code_point) -> u32;
 
 Screen::Screen(Size const& size, ScrollBackEnabled scroll_back_enabled)
     : m_scroll_back_enabled(scroll_back_enabled), m_scroll_region(0, size.rows) {
@@ -101,9 +101,7 @@ void Screen::resize(Size const& size) {
             m_cursor.row += rows_to_take;
 
             // In this case, we may need to adjust the visual scroll offset.
-            if (m_visual_scroll_offset > absolute_row_screen_start()) {
-                m_visual_scroll_offset = absolute_row_screen_start();
-            }
+            m_visual_scroll_offset = di::min(m_visual_scroll_offset, absolute_row_screen_start());
         }
         for (auto _ : di::range(size.rows - rows().size())) {
             auto row = Row {};
@@ -799,7 +797,7 @@ auto Screen::selected_text() const -> di::String {
     for (auto r = start.row; r <= end.row; r++) {
         // Fast path: the entire row is contained the selection.
         auto [row, group] = find_row(r);
-        auto& row_object = group.rows()[row];
+        auto const& row_object = group.rows()[row];
         if (r > start.row && r < end.row) {
             text.append(row_object.text);
             if (!row_object.overflow) {
@@ -838,9 +836,8 @@ auto Screen::find_row(u64 row) const -> di::Tuple<u32, RowGroup const&> {
 
     if (row >= m_scroll_back.absolute_row_end()) {
         return { u32(row - m_scroll_back.absolute_row_end()), m_active_rows };
-    } else {
-        return m_scroll_back.find_row(row);
     }
+    return m_scroll_back.find_row(row);
 }
 
 auto Screen::state_as_escape_sequences() const -> di::String {
@@ -900,7 +897,7 @@ auto Screen::state_as_escape_sequences() const -> di::String {
         }
 
         // If the row hasn't overflowed, go to the next line. This doesn't apply for the last line.
-        auto& row_object = group.rows()[row];
+        auto const& row_object = group.rows()[row];
         if (!row_object.overflow && r != absolute_row_end() - 1) {
             di::writer_print<di::String::Encoding>(writer, "\r\n"_sv);
         }
@@ -927,7 +924,7 @@ auto Screen::state_as_escape_sequences() const -> di::String {
 
 // This list is only for the diacritics used by the
 // kitty image protocol.
-auto zero_width_characters = di::Array {
+static auto zero_width_characters = di::Array {
     0x0305u,  0x030Du,  0x030Eu,  0x0310u,  0x0312u,  0x033Du,  0x033Eu,  0x033Fu,  0x0346u,  0x034Au,  0x034Bu,
     0x034Cu,  0x0350u,  0x0351u,  0x0352u,  0x0357u,  0x035Bu,  0x0363u,  0x0364u,  0x0365u,  0x0366u,  0x0367u,
     0x0368u,  0x0369u,  0x036Au,  0x036Bu,  0x036Cu,  0x036Du,  0x036Eu,  0x036Fu,  0x0483u,  0x0484u,  0x0485u,

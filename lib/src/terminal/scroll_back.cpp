@@ -62,7 +62,7 @@ auto ScrollBack::find_row(u64 row) const -> di::Tuple<u32, RowGroup const&> {
     row -= absolute_row_start();
 
     // TODO: optimize!
-    for (auto& group : m_groups) {
+    for (auto const& group : m_groups) {
         if (row < group.group.total_rows()) {
             return { u32(row), group.group };
         }

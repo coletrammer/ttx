@@ -1,6 +1,6 @@
 #pragma once
 
-#include "di/types/integers.h"
+#include "di/types/prelude.h"
 
 namespace ttx::terminal {
 /// @brief Shared information for cells linked via text sizing protocol (OSC 66) or double width characters

@@ -80,10 +80,10 @@ auto RowGroup::transfer_from(RowGroup& from, usize from_index, usize to_index, u
                                                              }));
 
     auto from_begin = from.rows().iterator(from_index);
-    auto from_end = from_begin + row_count;
+    auto from_end = from_begin + isize(row_count);
 
     auto to_begin = to.rows().iterator(to_index);
-    auto to_end = to_begin + row_count;
+    auto to_end = to_begin + isize(row_count);
 
     auto total_cells = 0_usize;
     for (auto [from_row, to_row] : di::zip(di::View(from_begin, from_end), di::View(to_begin, to_end))) {
