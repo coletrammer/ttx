@@ -32,7 +32,7 @@ public:
     // Returns the removed pane, if found.
     auto remove_pane(Pane* pane) -> di::Box<Pane>;
 
-    auto add_pane(Size const& size, u32 row, u32 col, CreatePaneArgs args, Direction direction,
+    auto add_pane(u64 pane_id, Size const& size, u32 row, u32 col, CreatePaneArgs args, Direction direction,
                   RenderThread& render_thread) -> di::Result<>;
 
     void navigate(NavigateDirection direction);

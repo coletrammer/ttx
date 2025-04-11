@@ -1,6 +1,7 @@
 #pragma once
 
 #include "di/container/string/prelude.h"
+#include "di/reflect/prelude.h"
 #include "di/util/clone.h"
 
 namespace ttx::terminal {
@@ -41,6 +42,10 @@ struct Hyperlink {
 
     auto operator==(Hyperlink const&) const -> bool = default;
     auto operator<=>(Hyperlink const&) const = default;
+
+    constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<Hyperlink>) {
+        return di::make_fields<"Hyperlink">(di::field<"id", &Hyperlink::id>, di::field<"uri", &Hyperlink::uri>);
+    }
 };
 
 namespace detail {

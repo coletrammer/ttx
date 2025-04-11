@@ -9,6 +9,7 @@
 #include "ttx/graphics_rendition.h"
 #include "ttx/terminal/cell.h"
 #include "ttx/terminal/cursor.h"
+#include "ttx/terminal/escapes/osc_8.h"
 
 namespace ttx::terminal {
 static auto code_point_width(c32 code_point) -> u32;
@@ -161,17 +162,32 @@ void Screen::set_current_graphics_rendition(GraphicsRendition const& rendition) 
     m_graphics_id = *new_id;
 }
 
-auto Screen::text_at_cursor() -> di::StringView {
-    ASSERT_LT(m_cursor.row, max_height());
-    auto& row = rows()[m_cursor.row];
-    auto& cell = row.cells[m_cursor.col];
+void Screen::set_current_hyperlink(di::Optional<Hyperlink const&> hyperlink) {
+    if (!hyperlink) {
+        m_active_rows.drop_hyperlink_id(m_hyperlink_id);
+        m_hyperlink_id = 0;
+        return;
+    }
 
-    auto text_start = row.text.iterator_at_offset(m_cursor.text_offset);
-    auto text_end = row.text.iterator_at_offset(m_cursor.text_offset + cell.text_size);
-    ASSERT(text_start);
-    ASSERT(text_end);
+    auto existing_id = m_active_rows.hyperlink_id(hyperlink.value().id);
+    if (existing_id) {
+        if (*existing_id == m_hyperlink_id) {
+            return;
+        }
+        m_active_rows.drop_hyperlink_id(m_hyperlink_id);
+        m_hyperlink_id = m_active_rows.use_hyperlink_id(*existing_id);
+        return;
+    }
 
-    return row.text.substr(text_start.value(), text_end.value());
+    m_active_rows.drop_hyperlink_id(m_hyperlink_id);
+
+    auto new_id = m_active_rows.allocate_hyperlink_id(hyperlink.value().clone());
+    if (!new_id) {
+        m_hyperlink_id = 0;
+        return;
+    }
+
+    m_hyperlink_id = *new_id;
 }
 
 auto Screen::save_cursor() const -> SavedCursor {
@@ -843,6 +859,21 @@ auto Screen::find_row(u64 row) const -> di::Tuple<u32, RowGroup const&> {
 auto Screen::state_as_escape_sequences() const -> di::String {
     auto writer = di::VectorWriter<> {};
 
+    auto write_hyperlink = [&](di::Optional<Hyperlink const&> hyperlink) {
+        if (!hyperlink) {
+            di::writer_print<di::String::Encoding>(writer, "{}"_sv, OSC8::from_hyperlink(hyperlink).serialize());
+            return;
+        }
+
+        // To ensure the escape sequence representation is a fixed point, we need to strip our fixed prefix from the
+        // hyperlink id.
+        auto prefix = hyperlink.value().id.find(U'-');
+        ASSERT(prefix);
+        auto new_id = hyperlink.value().id.substr(prefix.end());
+        auto new_hyperlink = Hyperlink { .uri = di::clone(hyperlink.value().uri), .id = new_id.to_owned() };
+        di::writer_print<di::String::Encoding>(writer, "{}"_sv, OSC8::from_hyperlink(new_hyperlink).serialize());
+    };
+
     // 1. Set default margins
     di::writer_print<di::String::Encoding>(writer, "\033[r"_sv);
 
@@ -853,6 +884,7 @@ auto Screen::state_as_escape_sequences() const -> di::String {
 
     // 3. Screen contents
     auto prev_sgr = GraphicsRendition();
+    auto prev_hyperlink = di::Optional<Hyperlink const&> {};
     for (auto r : di::range(absolute_row_start(), absolute_row_end())) {
         // Once we get to the screen buffer, force the screen to fully scroll.
         if (r == absolute_row_screen_start()) {
@@ -864,7 +896,7 @@ auto Screen::state_as_escape_sequences() const -> di::String {
 
         auto [row, group] = find_row(r);
         for (auto row : group.iterate_row(row)) {
-            auto [c, _, text, gfx, _] = row;
+            auto [c, _, text, gfx, hyperlink] = row;
 
             // If we're at the cursor, and overflow isn't pending, then save the cursor now.
             auto at_cursor = r >= absolute_row_screen_start() && r - absolute_row_screen_start() == m_cursor.row &&
@@ -881,12 +913,15 @@ auto Screen::state_as_escape_sequences() const -> di::String {
             }
 
             // Write out the cell
-            // TODO: hyperlinks
             if (gfx != prev_sgr) {
                 for (auto& params : gfx.as_csi_params()) {
                     di::writer_print<di::String::Encoding>(writer, "\033[{}m"_sv, params);
                 }
                 prev_sgr = gfx;
+            }
+            if (hyperlink != prev_hyperlink) {
+                write_hyperlink(hyperlink);
+                prev_hyperlink = hyperlink;
             }
             di::writer_print<di::String::Encoding>(writer, "{}"_sv, text);
 
@@ -916,7 +951,10 @@ auto Screen::state_as_escape_sequences() const -> di::String {
         di::writer_print<di::String::Encoding>(writer, "\033[{}m"_sv, params);
     }
 
-    // TODO: current hyperlink
+    // 7. Current hyperlink
+    if (auto hyperlink = current_hyperlink(); hyperlink != prev_hyperlink) {
+        write_hyperlink(current_hyperlink());
+    }
 
     // Return the resulting string.
     return writer.vector() | di::transform(di::construct<c8>) | di::to<di::String>(di::encoding::assume_valid);

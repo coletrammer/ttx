@@ -84,7 +84,6 @@ public:
     void set_current_hyperlink(di::Optional<Hyperlink const&> hyperlink);
 
     auto cursor() const -> Cursor { return m_cursor; }
-    auto text_at_cursor() -> di::StringView;
     auto origin_mode() const -> OriginMode { return m_origin_mode; }
 
     auto save_cursor() const -> SavedCursor;

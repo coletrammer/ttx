@@ -32,7 +32,7 @@ auto Tab::remove_pane(Pane* pane) -> di::Box<Pane> {
     return m_layout_root.remove_pane(pane);
 }
 
-auto Tab::add_pane(Size const& size, u32 row, u32 col, CreatePaneArgs args, Direction direction,
+auto Tab::add_pane(u64 pane_id, Size const& size, u32 row, u32 col, CreatePaneArgs args, Direction direction,
                    RenderThread& render_thread) -> di::Result<> {
     auto [new_layout, pane_layout, pane_out] = m_layout_root.split(size, row, col, m_active, direction);
 
@@ -43,7 +43,7 @@ auto Tab::add_pane(Size const& size, u32 row, u32 col, CreatePaneArgs args, Dire
     }
 
     auto maybe_pane = Pane::create(
-        di::move(args), pane_layout->size,
+        pane_id, di::move(args), pane_layout->size,
         [this, &render_thread](Pane& pane) {
             render_thread.push_event(PaneExited(this, &pane));
         },

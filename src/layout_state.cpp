@@ -82,9 +82,9 @@ auto LayoutState::remove_pane(Tab& tab, Pane* pane) -> di::Box<Pane> {
 auto LayoutState::add_pane(Tab& tab, CreatePaneArgs args, Direction direction, RenderThread& render_thread)
     -> di::Result<> {
     if (hide_status_bar()) {
-        return tab.add_pane(m_size, 0, 0, di::move(args), direction, render_thread);
+        return tab.add_pane(m_next_pane_id++, m_size, 0, 0, di::move(args), direction, render_thread);
     }
-    return tab.add_pane(m_size.rows_shrinked(1), 1, 0, di::move(args), direction, render_thread);
+    return tab.add_pane(m_next_pane_id++, m_size.rows_shrinked(1), 1, 0, di::move(args), direction, render_thread);
 }
 
 auto LayoutState::add_tab(CreatePaneArgs args, RenderThread& render_thread) -> di::Result<> {

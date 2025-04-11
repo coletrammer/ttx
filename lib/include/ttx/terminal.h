@@ -31,7 +31,7 @@ class Terminal {
     };
 
 public:
-    explicit Terminal(dius::SyncFile& psuedo_terminal, Size const& size);
+    explicit Terminal(u64 id, dius::SyncFile& psuedo_terminal, Size const& size);
 
     // Return a string which when replayed will result in the terminal
     // having state identical to the current state.
@@ -124,6 +124,7 @@ private:
 
     void dcs_decrqss(Params const& params, di::StringView data);
 
+    void osc_8(di::StringView data);
     void osc_52(di::StringView data);
 
     void csi_ich(Params const& params);
@@ -165,6 +166,10 @@ private:
     void csi_get_key_reporting_flags(Params const& params);
     void csi_push_key_reporting_flags(Params const& params);
     void csi_pop_key_reporting_flags(Params const& params);
+
+    // Hyperlink state
+    u64 m_id { 0 }; // Base id
+    u64 m_next_hyperlink_id { 1 };
 
     ScreenState m_primary_screen;
     di::Box<ScreenState> m_alternate_screen;

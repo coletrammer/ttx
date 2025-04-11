@@ -34,6 +34,7 @@ private:
     Size m_size;
     di::Vector<di::Box<Tab>> m_tabs {};
     Tab* m_active_tab { nullptr };
+    u64 m_next_pane_id { 1 };
     bool m_hide_status_bar { false };
 };
 }

@@ -13,10 +13,12 @@
 #include "ttx/mouse_event_io.h"
 #include "ttx/params.h"
 #include "ttx/paste_event_io.h"
+#include "ttx/terminal/escapes/osc_8.h"
 
 namespace ttx {
-Terminal::Terminal(dius::SyncFile& psuedo_terminal, Size const& size)
-    : m_primary_screen(size, terminal::Screen::ScrollBackEnabled::Yes)
+Terminal::Terminal(u64 id, dius::SyncFile& psuedo_terminal, Size const& size)
+    : m_id(id)
+    , m_primary_screen(size, terminal::Screen::ScrollBackEnabled::Yes)
     , m_available_size(size)
     , m_psuedo_terminal(psuedo_terminal) {}
 
@@ -51,6 +53,10 @@ void Terminal::on_parser_result(OSC const& osc) {
     }
 
     auto ps = osc.data.substr(osc.data.begin(), ps_end.begin());
+    if (ps == "8"_sv) {
+        osc_8(osc.data.substr(ps_end.end()));
+        return;
+    }
     if (ps == "52"_sv) {
         osc_52(osc.data.substr(ps_end.end()));
         return;
@@ -443,6 +449,22 @@ void Terminal::dcs_decrqss(Params const&, di::StringView data) {
     } else {
         (void) m_psuedo_terminal.write_exactly(di::as_bytes("\033P0$r\033\\"_sv.span()));
     }
+}
+
+// OSC 8 - https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda
+void Terminal::osc_8(di::StringView data) {
+    auto result = terminal::OSC8::parse(data);
+    if (!result) {
+        return;
+    }
+
+    auto hyperlink = result.value().to_hyperlink([&](di::Optional<di::StringView> id) -> di::String {
+        if (id) {
+            return *di::present("{}e-{}"_sv, m_id, id.value());
+        }
+        return *di::present("{}i-{}"_sv, m_id, m_next_hyperlink_id++);
+    });
+    active_screen().screen.set_current_hyperlink(hyperlink.transform(di::cref));
 }
 
 // OSC 52 - https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Operating-System-Commands

@@ -44,14 +44,15 @@ static auto spawn_child(di::Vector<di::TransparentStringView> command, dius::Syn
         .spawn();
 }
 
-auto Pane::create_from_replay(di::PathView replay_path, di::Optional<di::Path> save_state_path, Size const& size,
-                              di::Function<void(Pane&)> did_exit, di::Function<void(Pane&)> did_update,
+auto Pane::create_from_replay(u64 id, di::PathView replay_path, di::Optional<di::Path> save_state_path,
+                              Size const& size, di::Function<void(Pane&)> did_exit,
+                              di::Function<void(Pane&)> did_update,
                               di::Function<void(di::Span<byte const>)> did_selection,
                               di::Function<void(di::StringView)> apc_passthrough) -> di::Result<di::Box<Pane>> {
     auto replay_file = TRY(dius::open_sync(replay_path, dius::OpenMode::Readonly));
 
     // When replaying content, there is no need for any threads, a psudeo terminal or a sub-process.
-    auto pane = di::make_box<Pane>(dius::SyncFile(), size, dius::system::ProcessHandle(), di::move(did_exit),
+    auto pane = di::make_box<Pane>(id, dius::SyncFile(), size, dius::system::ProcessHandle(), di::move(did_exit),
                                    di::move(did_update), di::move(did_selection), di::move(apc_passthrough));
 
     // Allow the terminal to use CSI 8; height; width; t. Normally this would be ignored since application
@@ -111,11 +112,11 @@ auto Pane::create_from_replay(di::PathView replay_path, di::Optional<di::Path> s
     return pane;
 }
 
-auto Pane::create(CreatePaneArgs args, Size const& size, di::Function<void(Pane&)> did_exit,
+auto Pane::create(u64 id, CreatePaneArgs args, Size const& size, di::Function<void(Pane&)> did_exit,
                   di::Function<void(Pane&)> did_update, di::Function<void(di::Span<byte const>)> did_selection,
                   di::Function<void(di::StringView)> apc_passthrough) -> di::Result<di::Box<Pane>> {
     if (args.replay_path) {
-        return create_from_replay(*args.replay_path, di::move(args.save_state_path), size, di::move(did_exit),
+        return create_from_replay(id, *args.replay_path, di::move(args.save_state_path), size, di::move(did_exit),
                                   di::move(did_update), di::move(did_selection), di::move(apc_passthrough));
     }
 
@@ -130,8 +131,8 @@ auto Pane::create(CreatePaneArgs args, Size const& size, di::Function<void(Pane&
 
     auto pty_controller = TRY(dius::open_psuedo_terminal_controller(dius::OpenMode::ReadWrite));
     auto process = TRY(spawn_child(di::move(args.command), pty_controller, size));
-    auto pane = di::make_box<Pane>(di::move(pty_controller), size, process, di::move(did_exit), di::move(did_update),
-                                   di::move(did_selection), di::move(apc_passthrough));
+    auto pane = di::make_box<Pane>(id, di::move(pty_controller), size, process, di::move(did_exit),
+                                   di::move(did_update), di::move(did_selection), di::move(apc_passthrough));
 
     pane->m_process_thread = TRY(dius::Thread::create([&pane = *pane] mutable {
         auto guard = di::ScopeExit([&] {
@@ -205,7 +206,7 @@ auto Pane::create(CreatePaneArgs args, Size const& size, di::Function<void(Pane&
 
 auto Pane::create_mock() -> di::Box<Pane> {
     auto fake_psuedo_terminal = dius::SyncFile();
-    return di::make_box<Pane>(di::move(fake_psuedo_terminal), Size(1, 1), dius::system::ProcessHandle(), nullptr,
+    return di::make_box<Pane>(0, di::move(fake_psuedo_terminal), Size(1, 1), dius::system::ProcessHandle(), nullptr,
                               nullptr, nullptr, nullptr);
 }
 
