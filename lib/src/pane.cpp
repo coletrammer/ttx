@@ -247,7 +247,8 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
                         if (text.empty()) {
                             text = " "_sv;
                         }
-                        renderer.put_cell(text, r - m_vertical_scroll_offset, c - m_horizontal_scroll_offset, gfx);
+                        renderer.put_cell(text, r - m_vertical_scroll_offset, c - m_horizontal_scroll_offset, gfx,
+                                          hyperlink);
                         cell.stale = true;
                     }
                     end_col = c - m_horizontal_scroll_offset + 1;

@@ -6,6 +6,7 @@
 #include "dius/sync_file.h"
 #include "ttx/graphics_rendition.h"
 #include "ttx/size.h"
+#include "ttx/terminal/escapes/osc_8.h"
 
 namespace ttx {
 void Renderer::start(Size const& size) {
@@ -20,10 +21,14 @@ void Renderer::start(Size const& size) {
     // changes should affect things.
     m_last_cursor_row = 0;
     m_last_cursor_col = 0;
+    m_last_graphics_rendition = {};
+    m_last_hyperlink = {};
 
     di::writer_print<di::String::Encoding>(m_buffer, "\033[?2026h"_sv);
     di::writer_print<di::String::Encoding>(m_buffer, "\033[?25l"_sv);
     di::writer_print<di::String::Encoding>(m_buffer, "\033[H"_sv);
+    di::writer_print<di::String::Encoding>(m_buffer, "\033[m"_sv);
+    di::writer_print<di::String::Encoding>(m_buffer, terminal::OSC8().serialize());
 }
 
 auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor) -> di::Result<> {
@@ -41,7 +46,8 @@ auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor) -> d
     return output.write_exactly(di::as_bytes(text.span()));
 }
 
-void Renderer::put_text(di::StringView text, u32 row, u32 col, GraphicsRendition const& rendition) {
+void Renderer::put_text(di::StringView text, u32 row, u32 col, GraphicsRendition const& rendition,
+                        di::Optional<terminal::Hyperlink const&> hyperlink) {
     if (col >= m_bound_width || row >= m_bound_height) {
         return;
     }
@@ -56,6 +62,7 @@ void Renderer::put_text(di::StringView text, u32 row, u32 col, GraphicsRendition
     col += m_col_offset;
     move_cursor_to(row, col);
     set_graphics_rendition(rendition);
+    set_hyperlink(hyperlink);
 
     for (auto code_point : truncated_text) {
         di::writer_print<di::String::Encoding>(m_buffer, "{}"_sv, code_point);
@@ -63,13 +70,15 @@ void Renderer::put_text(di::StringView text, u32 row, u32 col, GraphicsRendition
     }
 }
 
-void Renderer::put_text(c32 text, u32 row, u32 col, GraphicsRendition const& rendition) {
+void Renderer::put_text(c32 text, u32 row, u32 col, GraphicsRendition const& rendition,
+                        di::Optional<terminal::Hyperlink const&> hyperlink) {
     auto string = di::container::string::StringImpl<di::String::Encoding, di::StaticVector<c8, di::Constexpr<4zu>>> {};
     (void) string.push_back(text);
-    put_text(string.view(), row, col, rendition);
+    put_text(string.view(), row, col, rendition, hyperlink);
 }
 
-void Renderer::put_cell(di::StringView text, u32 row, u32 col, GraphicsRendition const& rendition) {
+void Renderer::put_cell(di::StringView text, u32 row, u32 col, GraphicsRendition const& rendition,
+                        di::Optional<terminal::Hyperlink const&> hyperlink) {
     if (col >= m_bound_width || row >= m_bound_height) {
         return;
     }
@@ -78,19 +87,21 @@ void Renderer::put_cell(di::StringView text, u32 row, u32 col, GraphicsRendition
     col += m_col_offset;
     move_cursor_to(row, col);
     set_graphics_rendition(rendition);
+    set_hyperlink(hyperlink);
 
     // NOTE: this assumes the text fits in a single cell., which may not be accurate...
     di::writer_print<di::String::Encoding>(m_buffer, "{}"_sv, text);
     m_last_cursor_col++;
 }
 
-void Renderer::clear_row(u32 row, GraphicsRendition const& rendition) {
+void Renderer::clear_row(u32 row, GraphicsRendition const& rendition,
+                         di::Optional<terminal::Hyperlink const&> hyperlink) {
     if (row >= m_bound_height) {
         return;
     }
 
     for (auto c : di::range(m_bound_width)) {
-        put_text(U' ', row, c, rendition);
+        put_text(U' ', row, c, rendition, hyperlink);
     }
 }
 
@@ -109,6 +120,14 @@ void Renderer::set_graphics_rendition(GraphicsRendition const& rendition) {
         for (auto& params : rendition.as_csi_params()) {
             di::writer_print<di::String::Encoding>(m_buffer, "\033[{}m"_sv, params);
         }
+    }
+}
+
+void Renderer::set_hyperlink(di::Optional<terminal::Hyperlink const&> hyperlink) {
+    if (m_last_hyperlink != hyperlink) {
+        m_last_hyperlink = hyperlink.transform(di::clone);
+
+        di::writer_print<di::String::Encoding>(m_buffer, terminal::OSC8::from_hyperlink(hyperlink).serialize());
     }
 }
 
