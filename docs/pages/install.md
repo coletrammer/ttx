@@ -1,8 +1,9 @@
 # Install
 
 The easiest way to install ttx is using [nix](https://nixos). As of now, the only alternative is compiling from source.
-In the future, a statically linked binary will available via a GitHub release. To build ttx from source,
-see the steps [here](./build.md).
+In the future, a statically linked binary will available via a GitHub release. However the user will
+still need to install `fzf` to make use to the application. To build ttx from source, see the steps
+[here](./build.md).
 
 ## Installing with Nix
 

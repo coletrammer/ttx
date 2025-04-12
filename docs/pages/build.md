@@ -11,6 +11,8 @@ This package can be built either directly through [CMake](https://cmake.org/) or
 
 ### Dependencies
 
+- The [fzf](https://github.com/junegunn/fzf) program. This is used at runtime for various menus. To be clear, this
+  dependency is only needed for the `ttx` application and not the terminal emulation library itself.
 - The [dius](https://github.com/coletrammer/dius) library.
 - The [di](https://github.com/coletrammer/di) library (dependency of dius).
 
@@ -66,6 +68,9 @@ Afterwards, use the library via `target_link_libraries(target PRIVATE ttx::ttx)`
 
 ### Note to packagers
 
+Any `ttx` package should depend on `fzf` as `ttx` requires the `fzf` program to be
+in the user's PATH on application startup.
+
 The `CMAKE_INSTALL_INCLUDEDIR` is set to a path other than just `include` if
 the project is configured as a top level project to avoid indirectly including
 other libraries when installed to a common prefix. Please review the
@@ -98,7 +103,9 @@ ttx = {
 Then include `inputs.ttx.packages.${system}.ttx-lib` in the `buildInputs` of your derivation. Assuming your
 project is using CMake, `find_package(ttx)` will succeed automatically.
 
-This flake provides takes the di and dius libraries as a flake input, so it can be overridden easily.
+This flake provides takes the di and dius libraries as a flake input, so it can be overridden easily. The
+`fzf` dependency is taken from nixpkgs (which is also easy to override), and the `ttx` binary is wrapped
+by nix to ensure `fzf` will be in the `PATH` variable when running `ttx`.
 
 ### Manual Build Commands
 

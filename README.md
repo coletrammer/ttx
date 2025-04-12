@@ -51,8 +51,9 @@ details.
 
 ## Dependencies
 
-This project depends on the [dius](https://github.com/coletrammer/dius) library, to use its cross-platform
-abstractions.
+- [fzf](https://github.com/junegunn/fzf) program, for various popup memus
+- [dius](https://github.com/coletrammer/dius) library, to use its cross-platform
+  abstractions.
 
 ## Installing
 
