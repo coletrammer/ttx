@@ -321,6 +321,11 @@ void Screen::insert_blank_characters(u32 count) {
     ASSERT(text_start);
     row.text.erase(text_start.value(), row.text.end());
 
+    // Mark any cells which have moved as dirty.
+    for (auto& cell : row.cells | di::drop(m_cursor.col)) {
+        cell.stale = false;
+    }
+
     // Finally, insert the blank cells. Note that to implement bce this would need to
     // preserve the background color. The cursor position is unchanged, as is
     // the cursor byte offset.
@@ -380,6 +385,11 @@ void Screen::delete_characters(u32 count) {
     ASSERT(text_start);
     ASSERT(text_end);
     row.text.erase(text_start.value(), text_end.value());
+
+    // Mark any cells which have moved as dirty.
+    for (auto& cell : row.cells | di::drop(m_cursor.col + max_to_delete)) {
+        cell.stale = false;
+    }
 
     // Insert blank cells at the end of the row. Note that to implement bce this would need to
     // preserve the background color. The cursor position is unchanged, as is the cursor byte offset.
