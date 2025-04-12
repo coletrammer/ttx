@@ -67,6 +67,7 @@ public:
     void scroll(Direction direction, i32 amount_in_cells);
     auto save_state(di::PathView path) -> di::Result<>;
     void stop_capture();
+    void soft_reset();
     void exit();
 
 private:

@@ -152,6 +152,21 @@ auto exit_pane() -> Action {
     };
 }
 
+auto soft_reset() -> Action {
+    return {
+        .description = "Soft reset the active pane"_s,
+        .apply =
+            [](ActionContext const& context) {
+                context.layout_state.with_lock([&](LayoutState& state) {
+                    if (auto pane = state.active_pane()) {
+                        pane->soft_reset();
+                    }
+                });
+                context.render_thread.request_render();
+            },
+    };
+}
+
 auto toggle_full_screen_pane() -> Action {
     return {
         .description = "Toggle full screen for the active pane"_s,

@@ -14,6 +14,7 @@
 #include "ttx/params.h"
 #include "ttx/paste_event_io.h"
 #include "ttx/terminal/escapes/osc_8.h"
+#include "ttx/terminal/screen.h"
 
 namespace ttx {
 Terminal::Terminal(u64 id, dius::SyncFile& psuedo_terminal, Size const& size)
@@ -174,6 +175,17 @@ void Terminal::on_parser_result(CSI const& csi) {
         switch (csi.terminator) {
             case 'q': {
                 csi_decscusr(csi.params);
+                return;
+            }
+            default:
+                return;
+        }
+    }
+
+    if (csi.intermediate == "!"_sv) {
+        switch (csi.terminator) {
+            case 'p': {
+                csi_decstr(csi.params);
                 return;
             }
             default:
@@ -978,6 +990,12 @@ void Terminal::csi_scorc(Params const&) {
     esc_decrc();
 }
 
+// Soft Terminal Reset - https://vt100.net/docs/vt510-rm/DECSTR.html
+void Terminal::csi_decstr(Params const&) {
+    // NOTE: this isn't exactly standards compliant.
+    soft_reset();
+}
+
 // Window manipulation -
 // https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h4-Functions-using-CSI-_-ordered-by-the-final-character-lparen-s-rparen:CSI-Ps;Ps;Ps-t.1EB0
 void Terminal::csi_xtwinops(Params const& params) {
@@ -1145,6 +1163,39 @@ auto Terminal::active_screen() const -> ScreenState const& {
         return *m_alternate_screen;
     }
     return m_primary_screen;
+}
+
+void Terminal::soft_reset() {
+    // The goal of this routine is to make the terminal usable again after a full-screen
+    // application crashes without cleaning anything up. This won't fully follow the
+    // spec for DECSTR (https://vt100.net/docs/vt510-rm/DECSTR.html), becuase it claims
+    // autowrap should be disabled. Autowrap is on by default in this terminal.
+
+    set_use_alternate_screen_buffer(false);
+
+    active_screen().cursor_style = CursorStyle::SteadyBlock;
+    active_screen().saved_cursor = {};
+
+    auto& screen = active_screen().screen;
+    auto cursor = screen.save_cursor();
+    csi_decstbm({});
+    screen.set_current_graphics_rendition({});
+    screen.set_current_hyperlink({});
+    cursor.origin_mode = terminal::OriginMode::Disabled;
+    screen.restore_cursor(cursor);
+    screen.invalidate_all();
+
+    m_allow_80_132_col_mode = false;
+    m_allow_force_terminal_size = false;
+    m_auto_wrap_mode = terminal::AutoWrapMode::Enabled;
+    m_mouse_encoding = MouseEncoding::X10;
+    m_mouse_protocol = MouseProtocol::None;
+    m_key_reporting_flags_stack.clear();
+    m_key_reporting_flags = KeyReportingFlags::None;
+    m_cursor_hidden = false;
+    m_disable_drawing = false;
+
+    resize(visible_size());
 }
 
 auto Terminal::state_as_escape_sequences() const -> di::String {

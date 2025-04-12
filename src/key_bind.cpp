@@ -149,6 +149,12 @@ auto make_key_binds(Key prefix, di::Path save_state_path, bool replay_mode) -> d
             .action = quit(),
         });
         result.push_back({
+            .key = Key::R,
+            .modifiers = Modifiers::Shift,
+            .mode = InputMode::Normal,
+            .action = soft_reset(),
+        });
+        result.push_back({
             .key = Key::I,
             .modifiers = Modifiers::Shift,
             .mode = InputMode::Normal,

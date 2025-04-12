@@ -485,6 +485,12 @@ void Pane::stop_capture() {
     m_capture.store(false, di::MemoryOrder::Release);
 }
 
+void Pane::soft_reset() {
+    m_terminal.with_lock([&](Terminal& terminal) {
+        terminal.soft_reset();
+    });
+}
+
 void Pane::exit() {
     (void) m_process.signal(dius::Signal::Hangup);
 }

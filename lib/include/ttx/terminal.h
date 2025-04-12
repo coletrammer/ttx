@@ -76,6 +76,8 @@ public:
 
     auto bracked_paste_mode() const -> BracketedPasteMode { return m_bracketed_paste_mode; }
 
+    void soft_reset();
+
     void invalidate_all();
 
     auto outgoing_events() -> di::Vector<TerminalEvent> { return di::move(m_outgoing_events); }
@@ -160,6 +162,7 @@ private:
     void csi_decstbm(Params const& params);
     void csi_scosc(Params const& params);
     void csi_scorc(Params const& params);
+    void csi_decstr(Params const& params);
     void csi_xtwinops(Params const& params);
 
     void csi_set_key_reporting_flags(Params const& params);
