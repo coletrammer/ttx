@@ -15,9 +15,9 @@ void LayoutState::layout(di::Optional<Size> size) {
     }
     if (hide_status_bar()) {
         // Now status bar when forcing a single pane.
-        m_active_tab->layout(m_size, 0, 0);
+        m_active_tab->layout(m_size);
     } else {
-        m_active_tab->layout(m_size.rows_shrinked(1), 1, 0);
+        m_active_tab->layout(m_size.rows_shrinked(1));
     }
 }
 
@@ -82,9 +82,9 @@ auto LayoutState::remove_pane(Tab& tab, Pane* pane) -> di::Box<Pane> {
 auto LayoutState::add_pane(Tab& tab, CreatePaneArgs args, Direction direction, RenderThread& render_thread)
     -> di::Result<> {
     if (hide_status_bar()) {
-        return tab.add_pane(m_next_pane_id++, m_size, 0, 0, di::move(args), direction, render_thread);
+        return tab.add_pane(m_next_pane_id++, m_size, di::move(args), direction, render_thread);
     }
-    return tab.add_pane(m_next_pane_id++, m_size.rows_shrinked(1), 1, 0, di::move(args), direction, render_thread);
+    return tab.add_pane(m_next_pane_id++, m_size.rows_shrinked(1), di::move(args), direction, render_thread);
 }
 
 auto LayoutState::add_tab(CreatePaneArgs args, RenderThread& render_thread) -> di::Result<> {
@@ -106,5 +106,12 @@ auto LayoutState::active_pane() const -> di::Optional<Pane&> {
         return {};
     }
     return active_tab()->active();
+}
+
+auto LayoutState::full_screen_pane() const -> di::Optional<Pane&> {
+    if (!active_tab()) {
+        return {};
+    }
+    return active_tab()->full_screen_pane();
 }
 }

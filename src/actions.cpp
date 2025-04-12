@@ -152,6 +152,26 @@ auto exit_pane() -> Action {
     };
 }
 
+auto toggle_full_screen_pane() -> Action {
+    return {
+        .description = "Toggle full screen for the active pane"_s,
+        .apply =
+            [](ActionContext const& context) {
+                context.layout_state.with_lock([&](LayoutState& state) {
+                    for (auto& pane : state.active_pane()) {
+                        auto& tab = *state.active_tab();
+                        if (&pane == state.full_screen_pane().data()) {
+                            tab.set_full_screen_pane(nullptr);
+                        } else {
+                            tab.set_full_screen_pane(&pane);
+                        }
+                    }
+                });
+                context.render_thread.request_render();
+            },
+    };
+}
+
 auto add_pane(Direction direction) -> Action {
     return {
         .description = *di::present("Add a new pane, in a {} position relative to the active pane"_sv, direction),

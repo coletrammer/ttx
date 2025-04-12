@@ -94,6 +94,11 @@ static auto make_replay_key_binds() -> di::Vector<KeyBind> {
         .mode = InputMode::Insert,
         .action = scroll(Direction::Horizontal, -1),
     });
+    result.push_back({
+        .key = Key::Z,
+        .mode = InputMode::Insert,
+        .action = toggle_full_screen_pane(),
+    });
     make_navigate_binds(result, InputMode::Insert, InputMode::Insert);
 
     return result;
@@ -159,6 +164,11 @@ auto make_key_binds(Key prefix, di::Path save_state_path, bool replay_mode) -> d
             .key = Key::X,
             .mode = InputMode::Normal,
             .action = exit_pane(),
+        });
+        result.push_back({
+            .key = Key::Z,
+            .mode = InputMode::Normal,
+            .action = toggle_full_screen_pane(),
         });
         result.push_back({
             .key = Key::BackSlash,

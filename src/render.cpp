@@ -106,6 +106,7 @@ struct Render {
     di::Optional<RenderedCursor>& cursor;
     Tab& tab;
     LayoutState& state;
+    bool have_status_bar { false };
 
     void operator()(di::Box<LayoutNode> const& node) { (*this)(*node); }
 
@@ -117,14 +118,14 @@ struct Render {
                 auto [row, col, size] = di::visit(PositionAndSize {}, child);
                 renderer.set_bound(0, 0, state.size().cols, state.size().rows);
                 if (node.direction == Direction::Horizontal) {
-                    for (auto r : di::range(row, row + size.rows)) {
+                    for (auto r : di::range(row + have_status_bar, row + have_status_bar + size.rows)) {
                         auto code_point = U'│';
                         renderer.put_text(code_point, r, col - 1);
                     }
                 } else if (node.direction == Direction::Vertical) {
                     for (auto c : di::range(col, col + size.cols)) {
                         auto code_point = U'─';
-                        renderer.put_text(code_point, row - 1, c);
+                        renderer.put_text(code_point, row + have_status_bar - 1, c);
                     }
                 }
             }
@@ -135,9 +136,10 @@ struct Render {
     }
 
     void operator()(LayoutEntry const& entry) {
-        renderer.set_bound(entry.row, entry.col, entry.size.cols, entry.size.rows);
+        renderer.set_bound(entry.row + have_status_bar, entry.col, entry.size.cols, entry.size.rows);
         auto pane_cursor = entry.pane->draw(renderer);
         if (entry.pane == tab.active().data()) {
+            pane_cursor.cursor_row += have_status_bar;
             pane_cursor.cursor_row += entry.row;
             pane_cursor.cursor_col += entry.col;
             cursor = pane_cursor;
@@ -164,8 +166,13 @@ void RenderThread::do_render(Renderer& renderer) {
         // Status bar.
         if (!state.hide_status_bar()) {
             auto text = di::enumerate(state.tabs()) | di::transform(di::uncurry([&](usize i, di::Box<Tab> const& tab) {
-                            return *di::present("[{}{} {}]"_sv, tab.get() == active_tab.data() ? U'*' : U' ', i + 1,
-                                                tab->name());
+                            auto sign = U' ';
+                            if (tab->full_screen_pane()) {
+                                sign = U'+';
+                            } else if (tab.get() == active_tab.data()) {
+                                sign = U'*';
+                            }
+                            return *di::present("[{}{} {}]"_sv, sign, i + 1, tab->name());
                         })) |
                         di::join_with(U' ') | di::to<di::String>();
             renderer.clear_row(0);
@@ -178,7 +185,7 @@ void RenderThread::do_render(Renderer& renderer) {
 
         auto cursor = di::Optional<RenderedCursor> {};
 
-        Render(renderer, cursor, tab, state)(*tree);
+        Render(renderer, cursor, tab, state, !state.hide_status_bar())(*tree);
 
         (void) renderer.finish(dius::stdin, cursor.value_or({ .hidden = true }));
     });

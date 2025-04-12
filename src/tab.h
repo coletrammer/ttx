@@ -26,14 +26,14 @@ struct Tab {
 public:
     explicit Tab(di::String name) : m_name(di::move(name)) {}
 
-    void layout(Size const& size, u32 row, u32 col);
+    void layout(Size const& size);
     void invalidate_all();
 
     // Returns the removed pane, if found.
     auto remove_pane(Pane* pane) -> di::Box<Pane>;
 
-    auto add_pane(u64 pane_id, Size const& size, u32 row, u32 col, CreatePaneArgs args, Direction direction,
-                  RenderThread& render_thread) -> di::Result<>;
+    auto add_pane(u64 pane_id, Size const& size, CreatePaneArgs args, Direction direction, RenderThread& render_thread)
+        -> di::Result<>;
 
     void navigate(NavigateDirection direction);
 
@@ -61,7 +61,15 @@ public:
     auto panes() const -> di::Ring<Pane*> const& { return m_panes_ordered_by_recency; }
 
     auto set_is_active(bool b) -> bool;
-    auto is_active() -> bool { return m_is_active; }
+    auto is_active() const -> bool { return m_is_active; }
+
+    auto full_screen_pane() const -> di::Optional<Pane&> {
+        if (!m_full_screen_pane) {
+            return {};
+        }
+        return *m_full_screen_pane;
+    }
+    auto set_full_screen_pane(Pane* pane) -> bool;
 
 private:
     Size m_size;
@@ -71,5 +79,6 @@ private:
     di::Ring<Pane*> m_panes_ordered_by_recency {};
     bool m_is_active { false };
     Pane* m_active { nullptr };
+    Pane* m_full_screen_pane { nullptr };
 };
 }

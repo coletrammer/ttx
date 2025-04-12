@@ -15,6 +15,7 @@ auto quit() -> Action;
 auto save_state(di::Path path) -> Action;
 auto stop_capture() -> Action;
 auto exit_pane() -> Action;
+auto toggle_full_screen_pane() -> Action;
 auto add_pane(Direction direction) -> Action;
 auto scroll(Direction direction, i32 amount_in_cells) -> Action;
 auto send_to_pane() -> Action;

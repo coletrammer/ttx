@@ -3,11 +3,22 @@
 #include "di/serialization/base64.h"
 #include "dius/print.h"
 #include "render.h"
+#include "ttx/direction.h"
 
 namespace ttx {
-void Tab::layout(Size const& size, u32 row, u32 col) {
+void Tab::layout(Size const& size) {
     m_size = size;
-    m_layout_tree = m_layout_root.layout(size, row, col);
+
+    if (m_full_screen_pane) {
+        // In full screen mode, circumvent ordinary layout.
+        m_full_screen_pane->resize(m_size);
+        m_layout_tree =
+            di::make_box<LayoutNode>(0, 0, size, di::Vector<di::Variant<di::Box<LayoutNode>, LayoutEntry>> {}, nullptr,
+                                     &m_layout_root, Direction::None);
+        m_layout_tree->children.emplace_back(LayoutEntry { 0, 0, size, m_layout_tree.get(), m_full_screen_pane });
+    } else {
+        m_layout_tree = m_layout_root.layout(size, 0, 0);
+    }
     invalidate_all();
 }
 
@@ -18,6 +29,11 @@ void Tab::invalidate_all() {
 }
 
 auto Tab::remove_pane(Pane* pane) -> di::Box<Pane> {
+    // Clear full screen pane. The caller makes sure to call layout() for us.
+    if (m_full_screen_pane == pane) {
+        m_full_screen_pane = nullptr;
+    }
+
     // Clear active pane.
     if (m_active == pane) {
         if (pane) {
@@ -32,9 +48,9 @@ auto Tab::remove_pane(Pane* pane) -> di::Box<Pane> {
     return m_layout_root.remove_pane(pane);
 }
 
-auto Tab::add_pane(u64 pane_id, Size const& size, u32 row, u32 col, CreatePaneArgs args, Direction direction,
-                   RenderThread& render_thread) -> di::Result<> {
-    auto [new_layout, pane_layout, pane_out] = m_layout_root.split(size, row, col, m_active, direction);
+auto Tab::add_pane(u64 pane_id, Size const& size, CreatePaneArgs args, Direction direction, RenderThread& render_thread)
+    -> di::Result<> {
+    auto [new_layout, pane_layout, pane_out] = m_layout_root.split(size, 0, 0, m_active, direction);
 
     if (!pane_layout || !pane_out || pane_layout->size == Size {}) {
         // NOTE: this happens when the visible terminal size is too small.
@@ -128,9 +144,32 @@ void Tab::navigate(NavigateDirection direction) {
     }
 }
 
+auto Tab::set_full_screen_pane(Pane* pane) -> bool {
+    if (m_full_screen_pane == pane) {
+        return false;
+    }
+
+    if (pane == nullptr) {
+        m_full_screen_pane = nullptr;
+        layout(m_size);
+        return true;
+    }
+
+    m_full_screen_pane = pane;
+    set_active(pane);
+    layout(m_size);
+    return true;
+}
+
 auto Tab::set_active(Pane* pane) -> bool {
     if (m_active == pane) {
         return false;
+    }
+
+    // Clear full screen pane, if said pane is no longer focused.
+    if (m_full_screen_pane && m_full_screen_pane != pane) {
+        m_full_screen_pane = nullptr;
+        layout(m_size);
     }
 
     // Unfocus the old pane, and focus the new pane.

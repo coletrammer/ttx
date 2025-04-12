@@ -27,6 +27,7 @@ public:
     }
 
     auto active_pane() const -> di::Optional<Pane&>;
+    auto full_screen_pane() const -> di::Optional<Pane&>;
     auto size() const -> Size { return m_size; }
     auto hide_status_bar() const -> bool { return m_hide_status_bar; }
 
