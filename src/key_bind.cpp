@@ -154,6 +154,11 @@ auto make_key_binds(Key prefix, di::Path save_state_path, bool replay_mode) -> d
             .action = find_tab(),
         });
         result.push_back({
+            .key = Key::Comma,
+            .mode = InputMode::Normal,
+            .action = rename_tab(),
+        });
+        result.push_back({
             .key = Key::R,
             .modifiers = Modifiers::Shift,
             .mode = InputMode::Normal,

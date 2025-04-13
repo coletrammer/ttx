@@ -18,10 +18,7 @@ auto Fzf::popup_args() && -> di::Tuple<CreatePaneArgs, PopupLayout> {
     // Build the command string based on the configuration. For now, most
     // fields are hard-coded.
     create_pane_args.command = di::Array {
-        "fzf"_ts,
-        "--border"_ts,
-        "--layout"_ts,
-        "reverse"_ts,
+        "fzf"_ts, "--border"_ts, "--layout"_ts, "reverse"_ts, "--info"_ts, "inline-right"_ts,
     } | di::to<di::Vector>();
     if (m_prompt) {
         create_pane_args.command.push_back("--prompt"_ts);
@@ -38,6 +35,15 @@ auto Fzf::popup_args() && -> di::Tuple<CreatePaneArgs, PopupLayout> {
         auto label_string = *di::present(" {} "_sv, m_title.value());
         create_pane_args.command.push_back(label_string.span() | di::transform(di::construct<char>) |
                                            di::to<di::TransparentString>());
+    }
+    if (m_no_info) {
+        create_pane_args.command.push_back("--no-info"_ts);
+    }
+    if (m_no_separator) {
+        create_pane_args.command.push_back("--no-separator"_ts);
+    }
+    if (m_print_query) {
+        create_pane_args.command.push_back("--print-query"_ts);
     }
 
     return { di::move(create_pane_args), layout };

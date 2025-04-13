@@ -83,6 +83,50 @@ auto create_tab() -> Action {
     };
 }
 
+auto rename_tab() -> Action {
+    return {
+        .description = "Rename the current active tab"_s,
+        .apply =
+            [](ActionContext const& context) {
+                context.layout_state.with_lock([&](LayoutState& state) {
+                    if (!state.active_tab()) {
+                        return;
+                    }
+                    auto& tab = state.active_tab().value();
+
+                    auto [create_pane_args, popup_layout] = Fzf()
+                                                                .with_title("Rename Tab"_s)
+                                                                .with_prompt("Name"_s)
+                                                                .with_no_separator()
+                                                                .with_no_info()
+                                                                .with_print_query()
+                                                                .popup_args();
+                    create_pane_args.hooks.did_finish_output = di::make_function<void(di::StringView)>(
+                        [&layout_state = context.layout_state, &tab,
+                         &render_thread = context.render_thread](di::StringView contents) {
+                            if (contents.empty()) {
+                                return;
+                            }
+                            while (contents.ends_with(U'\n')) {
+                                contents = contents.substr(contents.begin(), --contents.end());
+                            }
+                            layout_state.with_lock([&](LayoutState&) {
+                                // NOTE: we take the layout state lock to prevent data races. Also, the tab is
+                                // guaranteed to still be alive because tabs won't be killed until all their panes have
+                                // exited. And we put the popup in the tab.
+                                tab.set_name(contents.to_owned());
+                            });
+                            render_thread.request_render();
+                        });
+                    for (auto& tab : state.active_tab()) {
+                        (void) state.popup_pane(tab, popup_layout, di::move(create_pane_args), context.render_thread);
+                    }
+                });
+                context.render_thread.request_render();
+            },
+    };
+}
+
 auto switch_tab(usize index) -> Action {
     ASSERT_GT(index, 0);
     return {

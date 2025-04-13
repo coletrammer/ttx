@@ -21,11 +21,29 @@ public:
         return di::move(*this);
     }
 
+    auto with_no_info(bool no_info = true) && -> Fzf {
+        m_no_info = no_info;
+        return di::move(*this);
+    }
+
+    auto with_no_separator(bool no_separator = true) && -> Fzf {
+        m_no_separator = no_separator;
+        return di::move(*this);
+    }
+
+    auto with_print_query(bool print_query = true) && -> Fzf {
+        m_print_query = print_query;
+        return di::move(*this);
+    }
+
     auto popup_args() && -> di::Tuple<CreatePaneArgs, PopupLayout>;
 
 private:
     di::Optional<di::String> m_prompt;
     di::Optional<di::String> m_title;
     di::Vector<di::String> m_input;
+    bool m_no_info { false };
+    bool m_no_separator { false };
+    bool m_print_query { false };
 };
 }

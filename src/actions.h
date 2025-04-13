@@ -10,6 +10,7 @@ auto reset_mode() -> Action;
 auto navigate(NavigateDirection direction) -> Action;
 auto resize(ResizeDirection direction, i32 amount_in_cells) -> Action;
 auto create_tab() -> Action;
+auto rename_tab() -> Action;
 auto switch_tab(usize index) -> Action;
 auto find_tab() -> Action;
 auto quit() -> Action;
