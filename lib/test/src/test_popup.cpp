@@ -17,8 +17,16 @@ static auto alignments() {
     auto make_input = [&](PopupAlignment alignment, i64 height_percent, i64 width_percent) {
         return PopupLayout {
             .alignment = alignment,
-            .relative_width = max_layout_precision / 100 * width_percent,
-            .relative_height = max_layout_precision / 100 * height_percent,
+            .width = RelatizeSize(max_layout_precision / 100 * width_percent),
+            .height = RelatizeSize(max_layout_precision / 100 * height_percent),
+        };
+    };
+
+    auto make_fixed_input = [&](PopupAlignment alignment, u32 height, u32 width) {
+        return PopupLayout {
+            .alignment = alignment,
+            .width = AbsoluteSize(width),
+            .height = AbsoluteSize(height),
         };
     };
 
@@ -31,7 +39,7 @@ static auto alignments() {
     };
 
     auto cases = di::Array {
-        // Regular
+        // Fixed
         Case {
             .input = make_input(PopupAlignment::Center, 50, 50),
             .expected = make_entry(13, 15, 25, 30),
@@ -56,6 +64,16 @@ static auto alignments() {
         Case {
             .input = make_input(PopupAlignment::Center, 1, 1),
             .expected = make_entry(25, 30, 1, 1),
+        },
+        // Absolute
+        Case {
+            .input = make_fixed_input(PopupAlignment::Center, 25, 30),
+            .expected = make_entry(13, 15, 25, 30),
+        },
+        // Too big
+        Case {
+            .input = make_fixed_input(PopupAlignment::Center, 100, 100),
+            .expected = make_entry(0, 0, 50, 60),
         },
     };
 

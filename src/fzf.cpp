@@ -6,9 +6,6 @@
 
 namespace ttx {
 auto Fzf::popup_args() && -> di::Tuple<CreatePaneArgs, PopupLayout> {
-    // For now, the default (centered) layout.
-    auto layout = PopupLayout {};
-
     // Setup the pipes for fzf.
     auto create_pane_args = CreatePaneArgs {
         .pipe_input = m_input | di::join_with(U'\n') | di::to<di::String>(),
@@ -36,6 +33,11 @@ auto Fzf::popup_args() && -> di::Tuple<CreatePaneArgs, PopupLayout> {
         create_pane_args.command.push_back(label_string.span() | di::transform(di::construct<char>) |
                                            di::to<di::TransparentString>());
     }
+    if (m_query) {
+        create_pane_args.command.push_back("--query"_ts);
+        create_pane_args.command.push_back(m_query.value().span() | di::transform(di::construct<char>) |
+                                           di::to<di::TransparentString>());
+    }
     if (m_no_info) {
         create_pane_args.command.push_back("--no-info"_ts);
     }
@@ -46,6 +48,6 @@ auto Fzf::popup_args() && -> di::Tuple<CreatePaneArgs, PopupLayout> {
         create_pane_args.command.push_back("--print-query"_ts);
     }
 
-    return { di::move(create_pane_args), layout };
+    return { di::move(create_pane_args), m_layout };
 }
 }

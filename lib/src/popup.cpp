@@ -4,14 +4,24 @@
 #include "ttx/size.h"
 
 namespace ttx {
-auto Popup::layout(Size const& size) -> LayoutEntry {
-    auto cols = (di::Rational(layout_config.relative_width, max_layout_precision) * size.cols).round();
-    auto rows = (di::Rational(layout_config.relative_height, max_layout_precision) * size.rows).round();
-    cols = di::max(cols, 1_i64);
-    rows = di::max(rows, 1_i64);
+struct ResolveSize {
+    static auto operator()(Size const& total_size, RelatizeSize dimension, bool width) -> u32 {
+        auto size_dimension = width ? total_size.cols : total_size.rows;
+        return u32((di::Rational(dimension.raw_value(), max_layout_precision) * size_dimension).round());
+    }
 
-    auto empty_rows = u32(di::max(size.rows - rows, 0_i64));
-    auto empty_cols = u32(di::max(size.cols - cols, 0_i64));
+    static auto operator()(Size const&, AbsoluteSize dimension, bool) -> u32 { return dimension.raw_value(); }
+};
+
+auto Popup::layout(Size const& size) -> LayoutEntry {
+    auto resolve_size = di::bind_front(ResolveSize {}, size);
+    auto cols = di::visit(di::bind_back(resolve_size, true), layout_config.width);
+    auto rows = di::visit(di::bind_back(resolve_size, false), layout_config.height);
+    cols = di::clamp(cols, 1_u32, size.cols);
+    rows = di::clamp(rows, 1_u32, size.rows);
+
+    auto empty_rows = di::max(size.rows - rows, 0_u32);
+    auto empty_cols = di::max(size.cols - cols, 0_u32);
 
     auto layout_size = Size(rows, cols, size.xpixels / cols, size.ypixels / rows);
     auto [r, c] = [&] -> di::Tuple<u32, u32> {

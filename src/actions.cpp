@@ -95,11 +95,10 @@ auto rename_tab() -> Action {
                     auto& tab = state.active_tab().value();
 
                     auto [create_pane_args, popup_layout] = Fzf()
+                                                                .as_text_box()
                                                                 .with_title("Rename Tab"_s)
                                                                 .with_prompt("Name"_s)
-                                                                .with_no_separator()
-                                                                .with_no_info()
-                                                                .with_print_query()
+                                                                .with_query(tab.name().to_owned())
                                                                 .popup_args();
                     create_pane_args.hooks.did_finish_output = di::make_function<void(di::StringView)>(
                         [&layout_state = context.layout_state, &tab,
