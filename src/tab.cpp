@@ -4,10 +4,15 @@
 #include "dius/print.h"
 #include "render.h"
 #include "ttx/direction.h"
+#include "ttx/popup.h"
 
 namespace ttx {
 void Tab::layout(Size const& size) {
     m_size = size;
+
+    if (m_popup) {
+        m_popup_layout = m_popup.value().layout(size);
+    }
 
     if (m_full_screen_pane) {
         // In full screen mode, circumvent ordinary layout.
@@ -34,15 +39,25 @@ auto Tab::remove_pane(Pane* pane) -> di::Box<Pane> {
         m_full_screen_pane = nullptr;
     }
 
+    if (pane) {
+        di::erase(m_panes_ordered_by_recency, pane);
+    }
+
     // Clear active pane.
     if (m_active == pane) {
-        if (pane) {
-            di::erase(m_panes_ordered_by_recency, pane);
-        }
         auto candidates = m_panes_ordered_by_recency | di::transform([](Pane* pane) {
                               return pane;
                           });
         set_active(candidates.front().value_or(nullptr));
+    }
+
+    // Clean the popup information if this pane was a popup. In this case,
+    // we don't return try to remove the pane from the layout tree.
+    if (m_popup && m_popup.value().pane.get() == pane) {
+        auto result = di::move(m_popup).value().pane;
+        m_popup_layout = {};
+        m_popup = {};
+        return result;
     }
 
     return m_layout_root.remove_pane(pane);
@@ -58,24 +73,7 @@ auto Tab::add_pane(u64 pane_id, Size const& size, CreatePaneArgs args, Direction
         return di::Unexpected(di::BasicError::InvalidArgument);
     }
 
-    auto maybe_pane = Pane::create(
-        pane_id, di::move(args), pane_layout->size,
-        [this, &render_thread](Pane& pane) {
-            render_thread.push_event(PaneExited(this, &pane));
-        },
-        [&render_thread](Pane&) {
-            render_thread.request_render();
-        },
-        [&render_thread](di::Span<byte const> data) {
-            auto base64 = di::Base64View(data);
-            auto string = *di::present("\033]52;;{}\033\\"_sv, base64);
-            render_thread.push_event(WriteString(di::move(string)));
-        },
-        [&render_thread](di::StringView apc_data) {
-            // Pass-through APC commands to host terminal. This makes kitty graphics "work".
-            auto string = *di::present("\033_{}\033\\"_sv, apc_data);
-            render_thread.push_event(WriteString(di::move(string)));
-        });
+    auto maybe_pane = make_pane(pane_id, di::move(args), size, render_thread);
     if (!maybe_pane) {
         m_layout_root.remove_pane(nullptr);
         return di::Unexpected(di::move(maybe_pane).error());
@@ -86,6 +84,28 @@ auto Tab::add_pane(u64 pane_id, Size const& size, CreatePaneArgs args, Direction
     m_layout_tree = di::move(new_layout);
 
     set_active(pane.get());
+    return {};
+}
+
+auto Tab::popup_pane(u64 pane_id, PopupLayout const& popup_layout, Size const& size, CreatePaneArgs args,
+                     RenderThread& render_thread) -> di::Result<> {
+    m_popup = Popup {
+        .pane = nullptr,
+        .layout_config = popup_layout,
+    };
+    m_popup_layout = m_popup.value().layout(size);
+
+    auto maybe_pane = make_pane(pane_id, di::move(args), m_popup_layout.value().size, render_thread);
+    if (!maybe_pane) {
+        m_popup = {};
+        m_popup_layout = {};
+        return di::Unexpected(di::move(maybe_pane).error());
+    }
+    m_popup.value().pane = di::move(maybe_pane).value();
+    m_popup_layout.value().pane = m_popup.value().pane.get();
+
+    set_active(m_popup.value().pane.get());
+    invalidate_all();
     return {};
 }
 
@@ -201,5 +221,27 @@ auto Tab::set_is_active(bool b) -> bool {
         m_active->event(FocusEvent::focus_in());
     }
     return true;
+}
+
+auto Tab::make_pane(u64 pane_id, CreatePaneArgs args, Size const& size, RenderThread& render_thread)
+    -> di::Result<di::Box<Pane>> {
+    return Pane::create(
+        pane_id, di::move(args), size,
+        [this, &render_thread](Pane& pane) {
+            render_thread.push_event(PaneExited(this, &pane));
+        },
+        [&render_thread](Pane&) {
+            render_thread.request_render();
+        },
+        [&render_thread](di::Span<byte const> data) {
+            auto base64 = di::Base64View(data);
+            auto string = *di::present("\033]52;;{}\033\\"_sv, base64);
+            render_thread.push_event(WriteString(di::move(string)));
+        },
+        [&render_thread](di::StringView apc_data) {
+            // Pass-through APC commands to host terminal. This makes kitty graphics "work".
+            auto string = *di::present("\033_{}\033\\"_sv, apc_data);
+            render_thread.push_event(WriteString(di::move(string)));
+        });
 }
 }

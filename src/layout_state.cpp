@@ -87,6 +87,14 @@ auto LayoutState::add_pane(Tab& tab, CreatePaneArgs args, Direction direction, R
     return tab.add_pane(m_next_pane_id++, m_size.rows_shrinked(1), di::move(args), direction, render_thread);
 }
 
+auto LayoutState::popup_pane(Tab& tab, PopupLayout const& popup_layout, CreatePaneArgs args,
+                             RenderThread& render_thread) -> di::Result<> {
+    if (hide_status_bar()) {
+        return tab.popup_pane(m_next_pane_id++, popup_layout, m_size, di::move(args), render_thread);
+    }
+    return tab.popup_pane(m_next_pane_id++, popup_layout, m_size.rows_shrinked(1), di::move(args), render_thread);
+}
+
 auto LayoutState::add_tab(CreatePaneArgs args, RenderThread& render_thread) -> di::Result<> {
     auto name = args.replay_path ? "capture"_s
                                  : di::back(di::PathView(args.command[0])).value_or(""_tsv) | di::transform([](char c) {

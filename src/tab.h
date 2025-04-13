@@ -4,6 +4,7 @@
 #include "di/reflect/prelude.h"
 #include "ttx/layout.h"
 #include "ttx/pane.h"
+#include "ttx/popup.h"
 
 namespace ttx {
 class RenderThread;
@@ -34,6 +35,8 @@ public:
 
     auto add_pane(u64 pane_id, Size const& size, CreatePaneArgs args, Direction direction, RenderThread& render_thread)
         -> di::Result<>;
+    auto popup_pane(u64 pane_id, PopupLayout const& popup_layout, Size const& size, CreatePaneArgs args,
+                    RenderThread& render_thread) -> di::Result<>;
 
     void navigate(NavigateDirection direction);
 
@@ -41,7 +44,7 @@ public:
     auto set_active(Pane* pane) -> bool;
 
     auto name() const -> di::StringView { return m_name; }
-    auto empty() const -> bool { return m_layout_root.empty(); }
+    auto empty() const -> bool { return m_layout_root.empty() && !m_popup; }
 
     auto layout_group() -> LayoutGroup& { return m_layout_root; }
     auto layout_tree() const -> di::Optional<LayoutNode&> {
@@ -71,7 +74,12 @@ public:
     }
     auto set_full_screen_pane(Pane* pane) -> bool;
 
+    auto popup_layout() const -> di::Optional<LayoutEntry> { return m_popup_layout; }
+
 private:
+    auto make_pane(u64 pane_id, CreatePaneArgs args, Size const& size, RenderThread& render_thread)
+        -> di::Result<di::Box<Pane>>;
+
     Size m_size;
     di::String m_name;
     LayoutGroup m_layout_root {};
@@ -80,5 +88,7 @@ private:
     bool m_is_active { false };
     Pane* m_active { nullptr };
     Pane* m_full_screen_pane { nullptr };
+    di::Optional<Popup> m_popup;
+    di::Optional<LayoutEntry> m_popup_layout;
 };
 }

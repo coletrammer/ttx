@@ -183,7 +183,7 @@ private:
 
     // Screen state.
     RowGroup m_active_rows;
-    bool m_whole_screen_dirty { false };
+    bool m_whole_screen_dirty { true };
 
     // Scroll back
     ScrollBack m_scroll_back;

@@ -3,6 +3,7 @@
 #include "di/container/vector/vector.h"
 #include "tab.h"
 #include "ttx/layout.h"
+#include "ttx/popup.h"
 
 namespace ttx {
 class LayoutState {
@@ -15,6 +16,8 @@ public:
     auto remove_pane(Tab& tab, Pane* pane) -> di::Box<Pane>;
 
     auto add_pane(Tab& tab, CreatePaneArgs args, Direction direction, RenderThread& render_thread) -> di::Result<>;
+    auto popup_pane(Tab& tab, PopupLayout const& popup_layout, CreatePaneArgs args, RenderThread& render_thread)
+        -> di::Result<>;
     auto add_tab(CreatePaneArgs args, RenderThread& render_thread) -> di::Result<>;
 
     auto empty() const -> bool { return m_tabs.empty(); }
@@ -30,6 +33,8 @@ public:
     auto full_screen_pane() const -> di::Optional<Pane&>;
     auto size() const -> Size { return m_size; }
     auto hide_status_bar() const -> bool { return m_hide_status_bar; }
+
+    auto active_popup() const -> di::Optional<Popup&>;
 
 private:
     Size m_size;

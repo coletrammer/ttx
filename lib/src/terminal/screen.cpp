@@ -116,6 +116,13 @@ void Screen::resize(Size const& size) {
     m_cursor.row = di::min(m_cursor.row, size.rows - 1);
     m_cursor.col = di::min(m_cursor.col, size.cols - 1);
 
+    // Recompute the cursor text offset.
+    auto& row_object = rows()[m_cursor.row];
+    m_cursor.text_offset = 0;
+    for (auto const& cell : row_object.cells | di::take(m_cursor.col)) {
+        m_cursor.text_offset += cell.text_size;
+    }
+
     // TODO: optimize!
     invalidate_all();
 }

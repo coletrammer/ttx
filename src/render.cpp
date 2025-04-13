@@ -67,9 +67,9 @@ void RenderThread::render_thread() {
                 m_layout_state.lock()->layout(ev.value());
             } else if (auto ev = di::get_if<PaneExited>(event)) {
                 // Exit pane.
-                auto should_exit = m_layout_state.with_lock([&](LayoutState& state) {
-                    state.remove_pane(*ev->tab, ev->pane);
-                    return state.empty();
+                auto [pane, should_exit] = m_layout_state.with_lock([&](LayoutState& state) {
+                    auto pane = state.remove_pane(*ev->tab, ev->pane);
+                    return di::Tuple { di::move(pane), state.empty() };
                 });
                 if (should_exit) {
                     return;
@@ -185,7 +185,17 @@ void RenderThread::do_render(Renderer& renderer) {
 
         auto cursor = di::Optional<RenderedCursor> {};
 
-        Render(renderer, cursor, tab, state, !state.hide_status_bar())(*tree);
+        // First render all panes in the layout tree.
+        auto render_fn = Render(renderer, cursor, tab, state, !state.hide_status_bar());
+        render_fn(*tree);
+
+        // If there is a popup, render it.
+        for (auto popup_layout : tab.popup_layout()) {
+            // For now, always invalidate the popup since we don't have proper damage tracking when
+            // panes overlap.
+            popup_layout.pane->invalidate_all();
+            render_fn(popup_layout);
+        }
 
         (void) renderer.finish(dius::stdin, cursor.value_or({ .hidden = true }));
     });
