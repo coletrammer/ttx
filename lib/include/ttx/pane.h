@@ -24,34 +24,42 @@ struct CreatePaneArgs {
     di::Optional<di::Path> capture_command_output_path {};
     di::Optional<di::Path> replay_path {};
     di::Optional<di::Path> save_state_path {};
+    di::Optional<di::String> pipe_input {};
+    bool pipe_output { false };
+};
+
+class Pane;
+
+struct PaneHooks {
+    /// @brief Application controlled callback when the internal process exits.
+    di::Function<void(Pane&)> did_exit;
+
+    /// @brief controlled callback when the terminal buffer has updated.
+    di::Function<void(Pane&)> did_update;
+
+    /// @brief Application controlled callback when text is selected.
+    di::Function<void(di::Span<byte const>)> did_selection;
+
+    /// @brief Application controlled callback when APC command is set.
+    di::Function<void(di::StringView)> apc_passthrough;
 };
 
 class Pane {
 public:
     static auto create_from_replay(u64 id, di::PathView replay_path, di::Optional<di::Path> save_state_path,
-                                   Size const& size, di::Function<void(Pane&)> did_exit,
-                                   di::Function<void(Pane&)> did_update,
-                                   di::Function<void(di::Span<byte const>)> did_selection,
-                                   di::Function<void(di::StringView)> apc_passthrough) -> di::Result<di::Box<Pane>>;
-    static auto create(u64 id, CreatePaneArgs args, Size const& size, di::Function<void(Pane&)> did_exit,
-                       di::Function<void(Pane&)> did_update, di::Function<void(di::Span<byte const>)> did_selection,
-                       di::Function<void(di::StringView)> apc_passthrough) -> di::Result<di::Box<Pane>>;
+                                   Size const& size, PaneHooks hooks) -> di::Result<di::Box<Pane>>;
+    static auto create(u64 id, CreatePaneArgs args, Size const& size, PaneHooks hooks) -> di::Result<di::Box<Pane>>;
 
     // For testing, create a mock pane. This doesn't actually create a psuedo terminal or a subprocess.
     static auto create_mock() -> di::Box<Pane>;
 
     explicit Pane(u64 id, dius::SyncFile pty_controller, Size const& size, dius::system::ProcessHandle process,
-                  di::Function<void(Pane&)> did_exit, di::Function<void(Pane&)> did_update,
-                  di::Function<void(di::Span<byte const>)> did_selection,
-                  di::Function<void(di::StringView)> apc_passthrough)
+                  PaneHooks hooks)
         : m_id(id)
         , m_pty_controller(di::move(pty_controller))
         , m_terminal(di::in_place, id, m_pty_controller, size)
         , m_process(process)
-        , m_did_exit(di::move(did_exit))
-        , m_did_update(di::move(did_update))
-        , m_did_selection(di::move(did_selection))
-        , m_apc_passthrough(di::move(apc_passthrough)) {}
+        , m_hooks(di::move(hooks)) {}
     ~Pane();
 
     auto id() const { return m_id; }
@@ -84,20 +92,12 @@ private:
     u32 m_vertical_scroll_offset { 0 };
     u32 m_horizontal_scroll_offset { 0 };
 
-    // Application controlled callback when the internal process exits.
-    di::Function<void(Pane&)> m_did_exit;
-
-    // Application controlled callback when the terminal buffer has updated.
-    di::Function<void(Pane&)> m_did_update;
-
-    // Application controlled callback when text is selected.
-    di::Function<void(di::Span<byte const>)> m_did_selection;
-
-    // Application controlled callback when APC command is set.
-    di::Function<void(di::StringView)> m_apc_passthrough;
+    PaneHooks m_hooks;
 
     // These are declared last, for when dius::Thread calls join() in the destructor.
     dius::Thread m_process_thread;
     dius::Thread m_reader_thread;
+    dius::Thread m_pipe_writer_thread;
+    dius::Thread m_pipe_reader_thread;
 };
 }

@@ -225,8 +225,7 @@ auto Tab::set_is_active(bool b) -> bool {
 
 auto Tab::make_pane(u64 pane_id, CreatePaneArgs args, Size const& size, RenderThread& render_thread)
     -> di::Result<di::Box<Pane>> {
-    return Pane::create(
-        pane_id, di::move(args), size,
+    auto hooks = PaneHooks {
         [this, &render_thread](Pane& pane) {
             render_thread.push_event(PaneExited(this, &pane));
         },
@@ -242,6 +241,8 @@ auto Tab::make_pane(u64 pane_id, CreatePaneArgs args, Size const& size, RenderTh
             // Pass-through APC commands to host terminal. This makes kitty graphics "work".
             auto string = *di::present("\033_{}\033\\"_sv, apc_data);
             render_thread.push_event(WriteString(di::move(string)));
-        });
+        },
+    };
+    return Pane::create(pane_id, di::move(args), size, di::move(hooks));
 }
 }

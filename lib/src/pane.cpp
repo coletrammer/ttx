@@ -18,7 +18,8 @@
 #include "ttx/utf8_stream_decoder.h"
 
 namespace ttx {
-static auto spawn_child(di::Vector<di::TransparentStringView> command, dius::SyncFile& pty, Size const& size)
+static auto spawn_child(di::Vector<di::TransparentStringView> command, dius::SyncFile& pty, Size const& size,
+                        i32 stdin_fd, i32 stdout_fd, di::Vector<i32> const& close_fds)
     -> di::Result<dius::system::ProcessHandle> {
     auto tty_path = TRY(pty.get_psuedo_terminal_path());
 
@@ -30,30 +31,31 @@ static auto spawn_child(di::Vector<di::TransparentStringView> command, dius::Syn
     TRY(pty.set_tty_window_size(size.as_window_size()));
 #endif
 
-    return dius::system::Process(command | di::transform(di::to_owned) | di::to<di::Vector>())
-        .with_new_session()
-        .with_env("TERM"_ts, "xterm-256color"_ts)
-        .with_env("COLORTERM"_ts, "truecolor"_ts)
-        .with_file_open(0, di::move(tty_path), dius::OpenMode::ReadWrite)
-        .with_file_dup(0, 1)
-        .with_file_dup(0, 2)
+    auto result = dius::system::Process(command | di::transform(di::to_owned) | di::to<di::Vector>())
+                      .with_new_session()
+                      .with_env("TERM"_ts, "xterm-256color"_ts)
+                      .with_env("COLORTERM"_ts, "truecolor"_ts)
+                      .with_file_open(2, di::move(tty_path), dius::OpenMode::ReadWrite)
+                      .with_file_dup(stdin_fd, 0)
+                      .with_file_dup(stdout_fd, 1)
 #ifndef __linux__
-        .with_tty_window_size(0, size.as_window_size())
-        .with_controlling_tty(0)
+                      .with_tty_window_size(2, size.as_window_size())
+                      .with_controlling_tty(2)
 #endif
-        .spawn();
+        ;
+    for (auto close_fd : close_fds) {
+        result = di::move(result).with_file_close(close_fd);
+    }
+
+    return di::move(result).spawn();
 }
 
 auto Pane::create_from_replay(u64 id, di::PathView replay_path, di::Optional<di::Path> save_state_path,
-                              Size const& size, di::Function<void(Pane&)> did_exit,
-                              di::Function<void(Pane&)> did_update,
-                              di::Function<void(di::Span<byte const>)> did_selection,
-                              di::Function<void(di::StringView)> apc_passthrough) -> di::Result<di::Box<Pane>> {
+                              Size const& size, PaneHooks hooks) -> di::Result<di::Box<Pane>> {
     auto replay_file = TRY(dius::open_sync(replay_path, dius::OpenMode::Readonly));
 
     // When replaying content, there is no need for any threads, a psudeo terminal or a sub-process.
-    auto pane = di::make_box<Pane>(id, dius::SyncFile(), size, dius::system::ProcessHandle(), di::move(did_exit),
-                                   di::move(did_update), di::move(did_selection), di::move(apc_passthrough));
+    auto pane = di::make_box<Pane>(id, dius::SyncFile(), size, dius::system::ProcessHandle(), di::move(hooks));
 
     // Allow the terminal to use CSI 8; height; width; t. Normally this would be ignored since application
     // shouldn't control this.
@@ -77,8 +79,8 @@ auto Pane::create_from_replay(u64 id, di::PathView replay_path, di::Optional<di:
         auto parser_result = parser.parse_application_escape_sequences(utf8_string);
         di::erase_if(parser_result, [&](auto const& event) {
             if (auto ev = di::get_if<APC>(event)) {
-                if (pane->m_apc_passthrough) {
-                    pane->m_apc_passthrough(ev->data);
+                if (pane->m_hooks.apc_passthrough) {
+                    pane->m_hooks.apc_passthrough(ev->data);
                 }
                 return true;
             }
@@ -92,8 +94,8 @@ auto Pane::create_from_replay(u64 id, di::PathView replay_path, di::Optional<di:
 
         for (auto&& event : events) {
             di::visit(di::overload([&](SetClipboard&& ev) {
-                          if (pane->m_did_selection) {
-                              pane->m_did_selection(ev.data.span());
+                          if (pane->m_hooks.did_selection) {
+                              pane->m_hooks.did_selection(ev.data.span());
                           }
                       }),
                       di::move(event));
@@ -112,12 +114,9 @@ auto Pane::create_from_replay(u64 id, di::PathView replay_path, di::Optional<di:
     return pane;
 }
 
-auto Pane::create(u64 id, CreatePaneArgs args, Size const& size, di::Function<void(Pane&)> did_exit,
-                  di::Function<void(Pane&)> did_update, di::Function<void(di::Span<byte const>)> did_selection,
-                  di::Function<void(di::StringView)> apc_passthrough) -> di::Result<di::Box<Pane>> {
+auto Pane::create(u64 id, CreatePaneArgs args, Size const& size, PaneHooks hooks) -> di::Result<di::Box<Pane>> {
     if (args.replay_path) {
-        return create_from_replay(id, *args.replay_path, di::move(args.save_state_path), size, di::move(did_exit),
-                                  di::move(did_update), di::move(did_selection), di::move(apc_passthrough));
+        return create_from_replay(id, *args.replay_path, di::move(args.save_state_path), size, di::move(hooks));
     }
 
     auto capture_file = di::Optional<dius::SyncFile> {};
@@ -130,16 +129,35 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size, di::Function<vo
     }
 
     auto pty_controller = TRY(dius::open_psuedo_terminal_controller(dius::OpenMode::ReadWrite));
-    auto process = TRY(spawn_child(di::move(args.command), pty_controller, size));
-    auto pane = di::make_box<Pane>(id, di::move(pty_controller), size, process, di::move(did_exit),
-                                   di::move(did_update), di::move(did_selection), di::move(apc_passthrough));
+
+    // This logic allows piping input and output from the shell command. This ends up being very complicated...
+    auto stdin_fd = 2;
+    auto stdout_fd = 2;
+    auto close_fds = di::Vector<i32> {};
+    auto write_pipes = di::Optional<di::Tuple<dius::SyncFile, dius::SyncFile>> {};
+    auto read_pipes = di::Optional<di::Tuple<dius::SyncFile, dius::SyncFile>> {};
+    if (args.pipe_input) {
+        write_pipes = TRY(dius::open_pipe(dius::OpenFlags::KeepAfterExec));
+        stdin_fd = di::get<0>(write_pipes.value()).file_descriptor();
+        close_fds.push_back(di::get<0>(write_pipes.value()).file_descriptor());
+        close_fds.push_back(di::get<1>(write_pipes.value()).file_descriptor());
+    }
+    if (args.pipe_output) {
+        read_pipes = TRY(dius::open_pipe(dius::OpenFlags::KeepAfterExec));
+        stdout_fd = di::get<1>(read_pipes.value()).file_descriptor();
+        close_fds.push_back(di::get<0>(read_pipes.value()).file_descriptor());
+        close_fds.push_back(di::get<1>(read_pipes.value()).file_descriptor());
+    }
+
+    auto process = TRY(spawn_child(di::move(args.command), pty_controller, size, stdin_fd, stdout_fd, close_fds));
+    auto pane = di::make_box<Pane>(id, di::move(pty_controller), size, process, di::move(hooks));
 
     pane->m_process_thread = TRY(dius::Thread::create([&pane = *pane] mutable {
         auto guard = di::ScopeExit([&] {
             pane.m_done.store(true, di::MemoryOrder::Release);
 
-            if (pane.m_did_exit) {
-                pane.m_did_exit(pane);
+            if (pane.m_hooks.did_exit) {
+                pane.m_hooks.did_exit(pane);
             }
         });
 
@@ -173,8 +191,8 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size, di::Function<vo
                 auto parser_result = parser.parse_application_escape_sequences(utf8_string);
                 di::erase_if(parser_result, [&](auto const& event) {
                     if (auto ev = di::get_if<APC>(event)) {
-                        if (pane.m_apc_passthrough) {
-                            pane.m_apc_passthrough(ev->data);
+                        if (pane.m_hooks.apc_passthrough) {
+                            pane.m_hooks.apc_passthrough(ev->data);
                         }
                         return true;
                     }
@@ -188,31 +206,68 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size, di::Function<vo
 
                 for (auto&& event : events) {
                     di::visit(di::overload([&](SetClipboard&& ev) {
-                                  if (pane.m_did_selection) {
-                                      pane.m_did_selection(ev.data.span());
+                                  if (pane.m_hooks.did_selection) {
+                                      pane.m_hooks.did_selection(ev.data.span());
                                   }
                               }),
                               di::move(event));
                 }
 
-                if (pane.m_did_update) {
-                    pane.m_did_update(pane);
+                if (pane.m_hooks.did_update) {
+                    pane.m_hooks.did_update(pane);
                 }
             }
         }));
+
+    if (args.pipe_input) {
+        pane->m_pipe_writer_thread = TRY(dius::Thread::create(
+            [&pane = *pane, pipe = di::move(write_pipes).value(), input = di::move(args.pipe_input).value()] mutable {
+                auto& [read, write] = pipe;
+                (void) read.close();
+                (void) write.write_exactly(di::as_bytes(input.span()));
+                (void) write.close();
+            }));
+    }
+    if (args.pipe_output) {
+        pane->m_pipe_reader_thread =
+            TRY(dius::Thread::create([&pane = *pane, pipe = di::move(read_pipes).value()] mutable {
+                auto& [read, write] = pipe;
+                (void) write.close();
+
+                auto utf8_decoder = Utf8StreamDecoder {};
+
+                auto buffer = di::Vector<byte> {};
+                buffer.resize(16384);
+
+                auto contents = di::String {};
+                while (!pane.m_done.load(di::MemoryOrder::Acquire)) {
+                    auto nread = read.read_some(buffer.span());
+                    if (!nread.has_value()) {
+                        break;
+                    }
+
+                    auto utf8_string = utf8_decoder.decode(buffer | di::take(*nread));
+                    contents.append(utf8_string);
+                }
+
+                (void) read.close();
+            }));
+    }
 
     return pane;
 }
 
 auto Pane::create_mock() -> di::Box<Pane> {
     auto fake_psuedo_terminal = dius::SyncFile();
-    return di::make_box<Pane>(0, di::move(fake_psuedo_terminal), Size(1, 1), dius::system::ProcessHandle(), nullptr,
-                              nullptr, nullptr, nullptr);
+    return di::make_box<Pane>(0, di::move(fake_psuedo_terminal), Size(1, 1), dius::system::ProcessHandle(),
+                              PaneHooks {});
 }
 
 Pane::~Pane() {
     // TODO: timeout/skip waiting for processes to die after sending SIGHUP.
     (void) m_process.signal(dius::Signal::Hangup);
+    (void) m_pipe_reader_thread.join();
+    (void) m_pipe_writer_thread.join();
     (void) m_reader_thread.join();
     (void) m_process_thread.join();
 }
@@ -371,8 +426,8 @@ auto Pane::event(MouseEvent const& event) -> bool {
             terminal.active_screen().screen.clear_selection();
             return result;
         });
-        if (!text.empty() && m_did_selection) {
-            m_did_selection(di::as_bytes(text.span()));
+        if (!text.empty() && m_hooks.did_selection) {
+            m_hooks.did_selection(di::as_bytes(text.span()));
         }
         return true;
     }
