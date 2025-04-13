@@ -9,7 +9,7 @@ struct ActionContext {
     KeyEvent const& key_event;
     di::Synchronized<LayoutState>& layout_state;
     RenderThread& render_thread;
-    di::Vector<di::TransparentStringView> const& command;
+    di::Vector<di::TransparentString> const& command;
     di::Atomic<bool>& done;
 };
 

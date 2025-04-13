@@ -69,6 +69,7 @@ static auto main(Args& args) -> di::Result<void> {
         dius::eprintln("error: ttx requires at least 1 argument to know what file to replay"_sv);
         return di::Unexpected(di::BasicError::InvalidArgument);
     }
+    auto command = args.command | di::transform(di::to_owned) | di::to<di::Vector>();
 
     // Setup - log to file.
     [[maybe_unused]] auto& log = dius::stderr = TRY(dius::open_sync("/tmp/ttx.log"_pv, dius::OpenMode::WriteClobber));
@@ -141,8 +142,7 @@ static auto main(Args& args) -> di::Result<void> {
     });
 
     // Setup - input thread.
-    auto input_thread =
-        TRY(InputThread::create(di::clone(args.command), di::move(key_binds), layout_state, *render_thread));
+    auto input_thread = TRY(InputThread::create(di::clone(command), di::move(key_binds), layout_state, *render_thread));
     auto _ = di::ScopeExit([&] {
         input_thread->request_exit();
     });
@@ -179,7 +179,7 @@ static auto main(Args& args) -> di::Result<void> {
     } else {
         TRY(layout_state.get_assuming_no_concurrent_accesses().add_tab(
             {
-                .command = di::clone(args.command),
+                .command = di::clone(command),
                 .capture_command_output_path = args.capture_command_output_path.transform(di::to_owned),
             },
             *render_thread));

@@ -15,7 +15,7 @@
 #include "ttx/utf8_stream_decoder.h"
 
 namespace ttx {
-auto InputThread::create(di::Vector<di::TransparentStringView> command, di::Vector<KeyBind> key_binds,
+auto InputThread::create(di::Vector<di::TransparentString> command, di::Vector<KeyBind> key_binds,
                          di::Synchronized<LayoutState>& layout_state, RenderThread& render_thread)
     -> di::Result<di::Box<InputThread>> {
     auto result = di::make_box<InputThread>(di::move(command), di::move(key_binds), layout_state, render_thread);
@@ -25,7 +25,7 @@ auto InputThread::create(di::Vector<di::TransparentStringView> command, di::Vect
     return result;
 }
 
-InputThread::InputThread(di::Vector<di::TransparentStringView> command, di::Vector<KeyBind> key_binds,
+InputThread::InputThread(di::Vector<di::TransparentString> command, di::Vector<KeyBind> key_binds,
                          di::Synchronized<LayoutState>& layout_state, RenderThread& render_thread)
     : m_key_binds(di::move(key_binds))
     , m_command(di::move(command))

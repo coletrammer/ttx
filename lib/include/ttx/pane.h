@@ -19,15 +19,6 @@
 #include "ttx/terminal.h"
 
 namespace ttx {
-struct CreatePaneArgs {
-    di::Vector<di::TransparentStringView> command {};
-    di::Optional<di::Path> capture_command_output_path {};
-    di::Optional<di::Path> replay_path {};
-    di::Optional<di::Path> save_state_path {};
-    di::Optional<di::String> pipe_input {};
-    bool pipe_output { false };
-};
-
 class Pane;
 
 struct PaneHooks {
@@ -42,13 +33,26 @@ struct PaneHooks {
 
     /// @brief Application controlled callback when APC command is set.
     di::Function<void(di::StringView)> apc_passthrough;
+
+    /// @brief Callback with the results on reading from the output pipe.
+    di::Function<void(di::StringView)> did_finish_output;
+};
+
+struct CreatePaneArgs {
+    di::Vector<di::TransparentString> command {};
+    di::Optional<di::Path> capture_command_output_path {};
+    di::Optional<di::Path> replay_path {};
+    di::Optional<di::Path> save_state_path {};
+    di::Optional<di::String> pipe_input {};
+    bool pipe_output { false };
+    PaneHooks hooks {};
 };
 
 class Pane {
 public:
     static auto create_from_replay(u64 id, di::PathView replay_path, di::Optional<di::Path> save_state_path,
                                    Size const& size, PaneHooks hooks) -> di::Result<di::Box<Pane>>;
-    static auto create(u64 id, CreatePaneArgs args, Size const& size, PaneHooks hooks) -> di::Result<di::Box<Pane>>;
+    static auto create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<di::Box<Pane>>;
 
     // For testing, create a mock pane. This doesn't actually create a psuedo terminal or a subprocess.
     static auto create_mock() -> di::Box<Pane>;

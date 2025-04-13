@@ -225,24 +225,30 @@ auto Tab::set_is_active(bool b) -> bool {
 
 auto Tab::make_pane(u64 pane_id, CreatePaneArgs args, Size const& size, RenderThread& render_thread)
     -> di::Result<di::Box<Pane>> {
-    auto hooks = PaneHooks {
-        [this, &render_thread](Pane& pane) {
+    if (!args.hooks.did_exit) {
+        args.hooks.did_exit = [this, &render_thread](Pane& pane) {
             render_thread.push_event(PaneExited(this, &pane));
-        },
-        [&render_thread](Pane&) {
+        };
+    }
+    if (!args.hooks.did_update) {
+        args.hooks.did_update = [&render_thread](Pane&) {
             render_thread.request_render();
-        },
-        [&render_thread](di::Span<byte const> data) {
+        };
+    }
+    if (!args.hooks.did_selection) {
+        args.hooks.did_selection = [&render_thread](di::Span<byte const> data) {
             auto base64 = di::Base64View(data);
             auto string = *di::present("\033]52;;{}\033\\"_sv, base64);
             render_thread.push_event(WriteString(di::move(string)));
-        },
-        [&render_thread](di::StringView apc_data) {
+        };
+    }
+    if (!args.hooks.apc_passthrough) {
+        args.hooks.apc_passthrough = [&render_thread](di::StringView apc_data) {
             // Pass-through APC commands to host terminal. This makes kitty graphics "work".
             auto string = *di::present("\033_{}\033\\"_sv, apc_data);
             render_thread.push_event(WriteString(di::move(string)));
-        },
-    };
-    return Pane::create(pane_id, di::move(args), size, di::move(hooks));
+        };
+    }
+    return Pane::create(pane_id, di::move(args), size);
 }
 }

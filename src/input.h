@@ -13,11 +13,11 @@ class RenderThread;
 
 class InputThread {
 public:
-    static auto create(di::Vector<di::TransparentStringView> command, di::Vector<KeyBind> key_binds,
+    static auto create(di::Vector<di::TransparentString> command, di::Vector<KeyBind> key_binds,
                        di::Synchronized<LayoutState>& layout_state, RenderThread& render_thread)
         -> di::Result<di::Box<InputThread>>;
 
-    explicit InputThread(di::Vector<di::TransparentStringView> command, di::Vector<KeyBind> key_binds,
+    explicit InputThread(di::Vector<di::TransparentString> command, di::Vector<KeyBind> key_binds,
                          di::Synchronized<LayoutState>& layout_state, RenderThread& render_thread);
     ~InputThread();
 
@@ -35,7 +35,7 @@ private:
 
     InputMode m_mode { InputMode::Insert };
     di::Vector<KeyBind> m_key_binds;
-    di::Vector<di::TransparentStringView> m_command;
+    di::Vector<di::TransparentString> m_command;
     di::Atomic<bool> m_done { false };
     di::Synchronized<LayoutState>& m_layout_state;
     RenderThread& m_render_thread;

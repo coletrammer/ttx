@@ -2,6 +2,7 @@
 
 #include "action.h"
 #include "di/format/prelude.h"
+#include "fzf.h"
 #include "tab.h"
 #include "ttx/layout.h"
 
@@ -91,6 +92,47 @@ auto switch_tab(usize index) -> Action {
                 context.layout_state.with_lock([&](LayoutState& state) {
                     if (auto tab = state.tabs().at(index - 1)) {
                         state.set_active_tab(tab.value().get());
+                    }
+                });
+                context.render_thread.request_render();
+            },
+    };
+}
+
+auto find_tab() -> Action {
+    return {
+        .description = "Find a tab in the current session by name using fzf"_s,
+        .apply =
+            [](ActionContext const& context) {
+                context.layout_state.with_lock([&](LayoutState& state) {
+                    auto tab_names = di::Vector<di::String>();
+                    for (auto [i, tab] : state.tabs() | di::enumerate) {
+                        tab_names.push_back(*di::present("{} {}"_sv, i + 1, tab->name()));
+                    }
+
+                    auto [create_pane_args, popup_layout] = Fzf()
+                                                                .with_prompt("Switch to tab"_s)
+                                                                .with_title("Tabs"_s)
+                                                                .with_input(di::move(tab_names))
+                                                                .popup_args();
+                    create_pane_args.hooks.did_finish_output = [&layout_state = context.layout_state,
+                                                                &render_thread =
+                                                                    context.render_thread](di::StringView contents) {
+                        // Try to parse the first index. This will fail if contents is empty.
+                        auto maybe_tab_index = di::parse_partial<usize>(contents);
+                        if (!maybe_tab_index || maybe_tab_index == 0) {
+                            return;
+                        }
+                        auto tab_index = maybe_tab_index.value() - 1;
+                        layout_state.with_lock([&](LayoutState& state) {
+                            if (auto tab = state.tabs().at(tab_index)) {
+                                state.set_active_tab(tab.value().get());
+                            }
+                        });
+                        render_thread.request_render();
+                    };
+                    for (auto& tab : state.active_tab()) {
+                        (void) state.popup_pane(tab, popup_layout, di::move(create_pane_args), context.render_thread);
                     }
                 });
                 context.render_thread.request_render();

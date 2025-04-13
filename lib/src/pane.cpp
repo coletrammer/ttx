@@ -18,20 +18,19 @@
 #include "ttx/utf8_stream_decoder.h"
 
 namespace ttx {
-static auto spawn_child(di::Vector<di::TransparentStringView> command, dius::SyncFile& pty, Size const& size,
-                        i32 stdin_fd, i32 stdout_fd, di::Vector<i32> const& close_fds)
-    -> di::Result<dius::system::ProcessHandle> {
+static auto spawn_child(di::Vector<di::TransparentString> command, dius::SyncFile& pty, Size const& size, i32 stdin_fd,
+                        i32 stdout_fd, di::Vector<i32> const& close_fds) -> di::Result<dius::system::ProcessHandle> {
     auto tty_path = TRY(pty.get_psuedo_terminal_path());
 
 #ifdef __linux__
     // On linux, we can set the terminal size in on the controlling pty. On MacOS, we need to do it in
     // the child. Doing so requires using fork() instead of posix_spawn() when spawning the process, so
-    // we try to avoid it. Additionally, opening the psudeo terminal implicitly will make it the controlling
-    // terminal, so there's no need to call ioctl(TIOCSCTTY).
+    // we try to avoid it. Additionally, opening the psudeo terminal on linux implicitly will make it
+    // the controlling terminal, so there's no need to call ioctl(TIOCSCTTY).
     TRY(pty.set_tty_window_size(size.as_window_size()));
 #endif
 
-    auto result = dius::system::Process(command | di::transform(di::to_owned) | di::to<di::Vector>())
+    auto result = dius::system::Process(di::move(command))
                       .with_new_session()
                       .with_env("TERM"_ts, "xterm-256color"_ts)
                       .with_env("COLORTERM"_ts, "truecolor"_ts)
@@ -114,9 +113,9 @@ auto Pane::create_from_replay(u64 id, di::PathView replay_path, di::Optional<di:
     return pane;
 }
 
-auto Pane::create(u64 id, CreatePaneArgs args, Size const& size, PaneHooks hooks) -> di::Result<di::Box<Pane>> {
+auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<di::Box<Pane>> {
     if (args.replay_path) {
-        return create_from_replay(id, *args.replay_path, di::move(args.save_state_path), size, di::move(hooks));
+        return create_from_replay(id, *args.replay_path, di::move(args.save_state_path), size, di::move(args.hooks));
     }
 
     auto capture_file = di::Optional<dius::SyncFile> {};
@@ -150,7 +149,7 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size, PaneHooks hooks
     }
 
     auto process = TRY(spawn_child(di::move(args.command), pty_controller, size, stdin_fd, stdout_fd, close_fds));
-    auto pane = di::make_box<Pane>(id, di::move(pty_controller), size, process, di::move(hooks));
+    auto pane = di::make_box<Pane>(id, di::move(pty_controller), size, process, di::move(args.hooks));
 
     pane->m_process_thread = TRY(dius::Thread::create([&pane = *pane] mutable {
         auto guard = di::ScopeExit([&] {
@@ -251,6 +250,10 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size, PaneHooks hooks
                 }
 
                 (void) read.close();
+
+                if (pane.m_hooks.did_finish_output) {
+                    pane.m_hooks.did_finish_output(contents.view());
+                }
             }));
     }
 
