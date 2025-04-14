@@ -22,10 +22,12 @@ constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<NavigateDirectio
                                                      di::enumerator<"Up", Up>, di::enumerator<"Down", Down>);
 }
 
+class Session;
+
 // Corresponds to tmux window.
-struct Tab {
+class Tab {
 public:
-    explicit Tab(di::String name) : m_name(di::move(name)) {}
+    explicit Tab(Session* session, di::String name) : m_session(session), m_name(di::move(name)) {}
 
     void layout(Size const& size);
     void invalidate_all();
@@ -82,6 +84,7 @@ private:
     auto make_pane(u64 pane_id, CreatePaneArgs args, Size const& size, RenderThread& render_thread)
         -> di::Result<di::Box<Pane>>;
 
+    Session* m_session { nullptr };
     Size m_size;
     di::String m_name;
     LayoutGroup m_layout_root {};

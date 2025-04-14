@@ -1,5 +1,9 @@
 #include "layout_state.h"
 
+#include "render.h"
+#include "session.h"
+#include "ttx/pane.h"
+
 namespace ttx {
 LayoutState::LayoutState(Size const& size, bool hide_status_bar) : m_size(size), m_hide_status_bar(hide_status_bar) {}
 
@@ -10,103 +14,117 @@ void LayoutState::layout(di::Optional<Size> size) {
         m_size = size.value();
     }
 
-    if (!m_active_tab) {
+    if (!m_active_session) {
         return;
     }
     if (hide_status_bar()) {
         // Now status bar when forcing a single pane.
-        m_active_tab->layout(m_size);
+        m_active_session->layout(m_size);
     } else {
-        m_active_tab->layout(m_size.rows_shrinked(1));
+        m_active_session->layout(m_size.rows_shrinked(1));
     }
 }
 
-auto LayoutState::set_active_tab(Tab* tab) -> bool {
-    if (m_active_tab == tab) {
+auto LayoutState::set_active_session(Session* session) -> bool {
+    if (m_active_session == session) {
         return false;
     }
 
-    // Update tab with the new active status, and force layout
-    // when switching ot a new tab. This is needed because size
-    // changes are only sent to the active tab, so the old layout
-    // could be stale.
-    if (m_active_tab) {
-        m_active_tab->set_is_active(false);
+    if (m_active_session) {
+        m_active_session->set_is_active(false);
     }
-    m_active_tab = tab;
-    if (m_active_tab) {
-        m_active_tab->set_is_active(true);
+    m_active_session = session;
+    if (m_active_session) {
+        m_active_session->set_is_active(true);
+        // Force a layout() when switching which session is rendered,
+        // since we resize things only when rendered.
         layout();
     }
     return true;
 }
 
-void LayoutState::remove_tab(Tab& tab) {
-    // For now, ASSERT() there are no panes in the tab. If there were, we'd
-    // need to make sure not to destroy the panes while we hold the lock.
-    ASSERT(tab.empty());
-
-    // Clear active tab.
-    if (m_active_tab == &tab) {
-        auto* it = di::find(m_tabs, &tab, &di::Box<Tab>::get);
-        if (it == m_tabs.end()) {
-            set_active_tab(m_tabs.at(0).transform(&di::Box<Tab>::get).value_or(nullptr));
-        } else if (m_tabs.size() == 1) {
-            set_active_tab(nullptr);
-        } else {
-            auto index = usize(it - m_tabs.begin());
-            if (index == m_tabs.size() - 1) {
-                set_active_tab(m_tabs[index - 1].get());
-            } else {
-                set_active_tab(m_tabs[index + 1].get());
-            }
-        }
-    }
-
-    // Delete tab.
-    di::erase_if(m_tabs, [&](di::Box<Tab> const& pointer) {
-        return pointer.get() == &tab;
-    });
+auto LayoutState::set_active_tab(Session& session, Tab* tab) -> bool {
+    set_active_session(&session);
+    return session.set_active_tab(tab);
 }
 
-auto LayoutState::remove_pane(Tab& tab, Pane* pane) -> di::Box<Pane> {
-    auto result = tab.remove_pane(pane);
-    if (tab.empty()) {
-        remove_tab(tab);
-    } else if (result && &tab == m_active_tab) {
-        layout();
+void LayoutState::remove_tab(Session& session, Tab& tab) {
+    session.remove_tab(tab);
+    if (session.empty()) {
+        remove_session(session);
+    }
+}
+
+auto LayoutState::remove_pane(Session& session, Tab& tab, Pane* pane) -> di::Box<Pane> {
+    auto result = session.remove_pane(tab, pane);
+    if (session.empty()) {
+        remove_session(session);
     }
     return result;
 }
 
-auto LayoutState::add_pane(Tab& tab, CreatePaneArgs args, Direction direction, RenderThread& render_thread)
-    -> di::Result<> {
-    if (hide_status_bar()) {
-        return tab.add_pane(m_next_pane_id++, m_size, di::move(args), direction, render_thread);
+void LayoutState::remove_session(Session& session) {
+    // For now, ASSERT() there are no panes in the session. If there were, we'd
+    // need to make sure not to destroy the panes while we hold the lock.
+    ASSERT(session.empty());
+
+    // Clear active session.
+    if (m_active_session == &session) {
+        auto* it = di::find(m_sessions, &session, [](Session const& session) {
+            return &session;
+        });
+        if (it == m_sessions.end()) {
+            set_active_session(m_sessions.at(0).data());
+        } else if (m_sessions.size() == 1) {
+            set_active_session(nullptr);
+        } else {
+            auto index = usize(it - m_sessions.begin());
+            if (index == m_sessions.size() - 1) {
+                set_active_session(&m_sessions[index - 1]);
+            } else {
+                set_active_session(&m_sessions[index + 1]);
+            }
+        }
     }
-    return tab.add_pane(m_next_pane_id++, m_size.rows_shrinked(1), di::move(args), direction, render_thread);
+
+    // Delete session.
+    di::erase_if(m_sessions, [&](Session const& item) {
+        return &item == &session;
+    });
 }
 
-auto LayoutState::popup_pane(Tab& tab, PopupLayout const& popup_layout, CreatePaneArgs args,
+auto LayoutState::add_pane(Session& session, Tab& tab, CreatePaneArgs args, Direction direction,
+                           RenderThread& render_thread) -> di::Result<> {
+    set_active_session(&session);
+    return session.add_pane(tab, m_next_pane_id++, di::move(args), direction, render_thread);
+}
+
+auto LayoutState::popup_pane(Session& session, Tab& tab, PopupLayout const& popup_layout, CreatePaneArgs args,
                              RenderThread& render_thread) -> di::Result<> {
-    if (hide_status_bar()) {
-        return tab.popup_pane(m_next_pane_id++, popup_layout, m_size, di::move(args), render_thread);
-    }
-    return tab.popup_pane(m_next_pane_id++, popup_layout, m_size.rows_shrinked(1), di::move(args), render_thread);
+    set_active_session(&session);
+    return session.popup_pane(tab, m_next_pane_id++, popup_layout, di::move(args), render_thread);
 }
 
-auto LayoutState::add_tab(CreatePaneArgs args, RenderThread& render_thread) -> di::Result<> {
-    auto name = args.replay_path ? "capture"_s
-                                 : di::back(di::PathView(args.command[0])).value_or(""_tsv) | di::transform([](char c) {
-                                       return c32(c);
-                                   }) | di::to<di::String>();
-    auto tab = di::make_box<Tab>(di::move(name));
-    TRY(add_pane(*tab, di::move(args), Direction::None, render_thread));
+auto LayoutState::add_tab(Session& session, CreatePaneArgs args, RenderThread& render_thread) -> di::Result<> {
+    set_active_session(&session);
+    return session.add_tab(di::move(args), m_next_pane_id++, render_thread);
+}
 
-    set_active_tab(tab.get());
-    m_tabs.push_back(di::move(tab));
+auto LayoutState::add_session(CreatePaneArgs args, RenderThread& render_thread) -> di::Result<> {
+    auto name = di::to_string(m_next_session_id++);
+    auto& session = m_sessions.emplace_back(di::move(name));
+    return add_tab(session, di::move(args), render_thread);
+}
 
-    return {};
+auto LayoutState::active_session() const -> di::Optional<Session&> {
+    if (!m_active_session) {
+        return {};
+    }
+    return *m_active_session;
+}
+
+auto LayoutState::active_tab() const -> di::Optional<Tab&> {
+    return active_session().and_then(&Session::active_tab);
 }
 
 auto LayoutState::active_pane() const -> di::Optional<Pane&> {

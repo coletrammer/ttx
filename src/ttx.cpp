@@ -1,24 +1,13 @@
 #include "di/cli/parser.h"
-#include "di/container/ring/ring.h"
 #include "di/container/string/string_view.h"
 #include "di/io/writer_print.h"
-#include "di/serialization/base64.h"
 #include "di/sync/synchronized.h"
-#include "di/util/construct.h"
-#include "dius/condition_variable.h"
 #include "dius/main.h"
 #include "dius/sync_file.h"
 #include "dius/system/process.h"
-#include "dius/thread.h"
-#include "dius/tty.h"
 #include "input.h"
 #include "layout_state.h"
 #include "render.h"
-#include "ttx/focus_event.h"
-#include "ttx/layout.h"
-#include "ttx/pane.h"
-#include "ttx/terminal_input.h"
-#include "ttx/utf8_stream_decoder.h"
 
 namespace ttx {
 struct Args {
@@ -151,9 +140,18 @@ static auto main(Args& args) -> di::Result<void> {
     auto _ = di::ScopeExit([&] {
         layout_state.with_lock([&](LayoutState& state) {
             while (!state.empty()) {
-                auto& tab = **state.tabs().front();
-                for (auto* pane : tab.panes()) {
-                    state.remove_pane(tab, pane);
+                auto& session = *state.sessions().front();
+                while (!session.empty()) {
+                    auto last_tab = session.tabs().size() == 1;
+                    auto& tab = **session.tabs().front();
+                    for (auto* pane : tab.panes()) {
+                        state.remove_pane(session, tab, pane);
+                    }
+                    // We must explicitly check this because the session object is destroyed
+                    // after the last tab is removed.
+                    if (last_tab) {
+                        break;
+                    }
                 }
             }
         });
@@ -164,7 +162,7 @@ static auto main(Args& args) -> di::Result<void> {
         auto& state = layout_state.get_assuming_no_concurrent_accesses();
         for (auto replay_path : args.command) {
             if (state.empty()) {
-                TRY(state.add_tab(
+                TRY(state.add_session(
                     {
                         .replay_path = di::PathView(replay_path).to_owned(),
                         .save_state_path = args.save_state_path.transform(di::to_owned),
@@ -172,12 +170,13 @@ static auto main(Args& args) -> di::Result<void> {
                     *render_thread));
             } else {
                 // Horizontal split (means vertical layout)
-                TRY(state.add_pane(*state.active_tab(), { .replay_path = di::PathView(replay_path).to_owned() },
-                                   Direction::Vertical, *render_thread));
+                TRY(state.add_pane(*state.active_session(), *state.active_tab(),
+                                   { .replay_path = di::PathView(replay_path).to_owned() }, Direction::Vertical,
+                                   *render_thread));
             }
         }
     } else {
-        TRY(layout_state.get_assuming_no_concurrent_accesses().add_tab(
+        TRY(layout_state.get_assuming_no_concurrent_accesses().add_session(
             {
                 .command = di::clone(command),
                 .capture_command_output_path = args.capture_command_output_path.transform(di::to_owned),

@@ -10,6 +10,7 @@
 
 namespace ttx {
 struct PaneExited {
+    Session* session = nullptr;
     Tab* tab = nullptr;
     Pane* pane = nullptr;
 };

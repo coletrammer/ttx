@@ -227,7 +227,7 @@ auto Tab::make_pane(u64 pane_id, CreatePaneArgs args, Size const& size, RenderTh
     -> di::Result<di::Box<Pane>> {
     if (!args.hooks.did_exit) {
         args.hooks.did_exit = [this, &render_thread](Pane& pane) {
-            render_thread.push_event(PaneExited(this, &pane));
+            render_thread.push_event(PaneExited(m_session, this, &pane));
         };
     }
     if (!args.hooks.did_update) {

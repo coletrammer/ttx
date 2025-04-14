@@ -68,7 +68,7 @@ void RenderThread::render_thread() {
             } else if (auto ev = di::get_if<PaneExited>(event)) {
                 // Exit pane.
                 auto [pane, should_exit] = m_layout_state.with_lock([&](LayoutState& state) {
-                    auto pane = state.remove_pane(*ev->tab, ev->pane);
+                    auto pane = state.remove_pane(*ev->session, *ev->tab, ev->pane);
                     return di::Tuple { di::move(pane), state.empty() };
                 });
                 if (should_exit) {
@@ -165,24 +165,34 @@ void RenderThread::do_render(Renderer& renderer) {
 
         // Status bar.
         if (!state.hide_status_bar()) {
-            auto text = di::enumerate(state.tabs()) | di::transform(di::uncurry([&](usize i, di::Box<Tab> const& tab) {
-                            auto sign = U' ';
-                            if (tab.get() == active_tab.data()) {
-                                if (tab->full_screen_pane()) {
-                                    sign = U'+';
-                                } else {
-                                    sign = U'*';
+            for (auto& session : state.active_session()) {
+                auto text = di::enumerate(session.tabs()) |
+                            di::transform(di::uncurry([&](usize i, di::Box<Tab> const& tab) {
+                                auto sign = U' ';
+                                if (tab.get() == active_tab.data()) {
+                                    if (tab->full_screen_pane()) {
+                                        sign = U'+';
+                                    } else {
+                                        sign = U'*';
+                                    }
                                 }
-                            }
-                            return *di::present("[{}{} {}]"_sv, sign, i + 1, tab->name());
-                        })) |
-                        di::join_with(U' ') | di::to<di::String>();
-            renderer.clear_row(0);
-            renderer.put_text(di::to_string(m_input_status.mode).view(), 0, 0,
-                              GraphicsRendition {
-                                  .font_weight = FontWeight::Bold,
-                              });
-            renderer.put_text(text.view(), 0, 7);
+                                return *di::present("[{}{} {}]"_sv, sign, i + 1, tab->name());
+                            })) |
+                            di::join_with(U' ') | di::to<di::String>();
+                renderer.clear_row(0);
+                renderer.put_text(di::to_string(m_input_status.mode).view(), 0, 0,
+                                  GraphicsRendition {
+                                      .font_weight = FontWeight::Bold,
+                                  });
+                renderer.put_text(text.view(), 0, 7);
+
+                // TODO: horizontal scrolling on overflow
+
+                // TODO: this code isn't correct if the session name contains any multi-code point grapheme clusters.
+                // TODO: handle case where session name is longer than the status bar width.
+                auto session_text = *di::present("[{}]"_sv, session.name());
+                renderer.put_text(session_text.view(), 0, state.size().cols - di::distance(session_text));
+            }
         }
 
         auto cursor = di::Optional<RenderedCursor> {};
