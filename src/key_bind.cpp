@@ -15,6 +15,16 @@ static auto make_switch_tab_binds(di::Vector<KeyBind>& result) {
             .action = switch_tab(i + 1),
         });
     }
+    result.push_back({
+        .key = Key::P,
+        .mode = InputMode::Normal,
+        .action = switch_prev_tab(),
+    });
+    result.push_back({
+        .key = Key::N,
+        .mode = InputMode::Normal,
+        .action = switch_next_tab(),
+    });
 }
 
 static auto make_navigate_binds(di::Vector<KeyBind>& result, InputMode mode, InputMode next_mode) {

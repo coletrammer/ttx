@@ -103,11 +103,11 @@ auto rename_tab() -> Action {
                     create_pane_args.hooks.did_finish_output = di::make_function<void(di::StringView)>(
                         [&layout_state = context.layout_state, &tab,
                          &render_thread = context.render_thread](di::StringView contents) {
-                            if (contents.empty()) {
-                                return;
-                            }
                             while (contents.ends_with(U'\n')) {
                                 contents = contents.substr(contents.begin(), --contents.end());
+                            }
+                            if (contents.empty()) {
+                                return;
                             }
                             layout_state.with_lock([&](LayoutState&) {
                                 // NOTE: we take the layout state lock to prevent data races. Also, the tab is
@@ -135,6 +135,53 @@ auto switch_tab(usize index) -> Action {
                 context.layout_state.with_lock([&](LayoutState& state) {
                     if (auto tab = state.tabs().at(index - 1)) {
                         state.set_active_tab(tab.value().get());
+                    }
+                });
+                context.render_thread.request_render();
+            },
+    };
+}
+
+auto switch_next_tab() -> Action {
+    return {
+        .description = "Switch to the next tab by numeric index"_s,
+        .apply =
+            [](ActionContext const& context) {
+                context.layout_state.with_lock([&](LayoutState& state) {
+                    for (auto& tab : state.active_tab()) {
+                        auto tabs = state.tabs() | di::transform(&di::Box<Tab>::get);
+                        auto it = di::find(tabs, &tab);
+                        if (it == tabs.end()) {
+                            return;
+                        }
+                        auto index = usize(it - tabs.begin());
+                        index++;
+                        index %= tabs.size();
+                        state.set_active_tab(tabs[isize(index)]);
+                    }
+                });
+                context.render_thread.request_render();
+            },
+    };
+}
+
+auto switch_prev_tab() -> Action {
+    return {
+        .description = "Switch to the previous tab by numeric index"_s,
+        .apply =
+            [](ActionContext const& context) {
+                context.layout_state.with_lock([&](LayoutState& state) {
+                    for (auto& tab : state.active_tab()) {
+                        auto tabs = state.tabs() | di::transform(&di::Box<Tab>::get);
+                        auto it = di::find(tabs, &tab);
+                        if (it == tabs.end()) {
+                            return;
+                        }
+                        auto index = usize(it - tabs.begin());
+                        index += tabs.size();
+                        index--;
+                        index %= tabs.size();
+                        state.set_active_tab(tabs[isize(index)]);
                     }
                 });
                 context.render_thread.request_render();

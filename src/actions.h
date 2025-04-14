@@ -12,6 +12,8 @@ auto resize(ResizeDirection direction, i32 amount_in_cells) -> Action;
 auto create_tab() -> Action;
 auto rename_tab() -> Action;
 auto switch_tab(usize index) -> Action;
+auto switch_next_tab() -> Action;
+auto switch_prev_tab() -> Action;
 auto find_tab() -> Action;
 auto quit() -> Action;
 auto save_state(di::Path path) -> Action;
