@@ -15,7 +15,8 @@ auto Fzf::popup_args() && -> di::Tuple<CreatePaneArgs, PopupLayout> {
     // Build the command string based on the configuration. For now, most
     // fields are hard-coded.
     create_pane_args.command = di::Array {
-        "fzf"_ts, "--border"_ts, "--layout"_ts, "reverse"_ts, "--info"_ts, "inline-right"_ts,
+        "fzf"_ts,    "--border"_ts,     "--layout"_ts,   "reverse"_ts,
+        "--info"_ts, "inline-right"_ts, "--no-multi"_ts, "--cycle"_ts,
     } | di::to<di::Vector>();
     if (m_prompt) {
         create_pane_args.command.push_back("--prompt"_ts);

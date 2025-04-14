@@ -197,11 +197,47 @@ auto make_key_binds(Key prefix, di::Path save_state_path, bool replay_mode) -> d
             .action = toggle_full_screen_pane(),
         });
         result.push_back({
-            .key = Key::BackSlash,
+            .key = Key::C,
             .modifiers = Modifiers::Shift,
             .mode = InputMode::Normal,
-            .action = add_pane(Direction::Horizontal),
-        });
+            .action = create_session(),
+        }),
+            result.push_back({
+                .key = Key::_4,
+                .modifiers = Modifiers::Shift,
+                .mode = InputMode::Normal,
+                .action = rename_session(),
+            }),
+            result.push_back({
+                .key = Key::C,
+                .modifiers = Modifiers::Shift,
+                .mode = InputMode::Normal,
+                .action = create_session(),
+            }),
+            result.push_back({
+                .key = Key::F,
+                .modifiers = Modifiers::Shift,
+                .mode = InputMode::Normal,
+                .action = find_session(),
+            }),
+            result.push_back({
+                .key = Key::_9,
+                .modifiers = Modifiers::Shift,
+                .mode = InputMode::Normal,
+                .action = switch_prev_session(),
+            }),
+            result.push_back({
+                .key = Key::_0,
+                .modifiers = Modifiers::Shift,
+                .mode = InputMode::Normal,
+                .action = switch_next_session(),
+            }),
+            result.push_back({
+                .key = Key::BackSlash,
+                .modifiers = Modifiers::Shift,
+                .mode = InputMode::Normal,
+                .action = add_pane(Direction::Horizontal),
+            });
         result.push_back({
             .key = Key::Minus,
             .mode = InputMode::Normal,

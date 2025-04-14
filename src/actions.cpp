@@ -244,6 +244,155 @@ auto find_tab() -> Action {
     };
 }
 
+auto create_session() -> Action {
+    return {
+        .description = "Create a new session"_s,
+        .apply =
+            [](ActionContext const& context) {
+                context.layout_state.with_lock([&](LayoutState& state) {
+                    (void) state.add_session({ .command = di::clone(context.command) }, context.render_thread);
+                });
+                context.render_thread.request_render();
+            },
+    };
+}
+
+auto rename_session() -> Action {
+    return {
+        .description = "Rename the current active session"_s,
+        .apply =
+            [](ActionContext const& context) {
+                context.layout_state.with_lock([&](LayoutState& state) {
+                    for (auto& session : state.active_session()) {
+                        auto [create_pane_args, popup_layout] = Fzf()
+                                                                    .as_text_box()
+                                                                    .with_title("Rename Session"_s)
+                                                                    .with_prompt("Name"_s)
+                                                                    .with_query(session.name().to_owned())
+                                                                    .popup_args();
+                        create_pane_args.hooks.did_finish_output = di::make_function<void(di::StringView)>(
+                            [&layout_state = context.layout_state, &session,
+                             &render_thread = context.render_thread](di::StringView contents) {
+                                while (contents.ends_with(U'\n')) {
+                                    contents = contents.substr(contents.begin(), --contents.end());
+                                }
+                                if (contents.empty()) {
+                                    return;
+                                }
+                                layout_state.with_lock([&](LayoutState&) {
+                                    // NOTE: we take the layout state lock to prevent data races. Also, the session is
+                                    // guaranteed to still be alive because sessions won't be killed until all their
+                                    // panes have exited. And we put the popup in the session.
+                                    session.set_name(contents.to_owned());
+                                });
+                                render_thread.request_render();
+                            });
+                        for (auto& tab : state.active_tab()) {
+                            (void) state.popup_pane(session, tab, popup_layout, di::move(create_pane_args),
+                                                    context.render_thread);
+                        }
+                    }
+                });
+                context.render_thread.request_render();
+            },
+    };
+}
+
+auto switch_next_session() -> Action {
+    return {
+        .description = "Switch to the next session by creation order"_s,
+        .apply =
+            [](ActionContext const& context) {
+                context.layout_state.with_lock([&](LayoutState& state) {
+                    for (auto& session : state.active_session()) {
+                        auto sessions = state.sessions() | di::transform([](Session& session) {
+                                            return &session;
+                                        });
+                        auto it = di::find(sessions, &session);
+                        if (it == sessions.end()) {
+                            return;
+                        }
+                        auto index = usize(it - sessions.begin());
+                        index++;
+                        index %= sessions.size();
+                        state.set_active_session(sessions[isize(index)]);
+                    }
+                });
+                context.render_thread.request_render();
+            },
+    };
+}
+
+auto switch_prev_session() -> Action {
+    return {
+        .description = "Switch to the previous session by creation order"_s,
+        .apply =
+            [](ActionContext const& context) {
+                context.layout_state.with_lock([&](LayoutState& state) {
+                    for (auto& session : state.active_session()) {
+                        auto sessions = state.sessions() | di::transform([](Session& session) {
+                                            return &session;
+                                        });
+                        auto it = di::find(sessions, &session);
+                        if (it == sessions.end()) {
+                            return;
+                        }
+                        auto index = usize(it - sessions.begin());
+                        index += sessions.size();
+                        index--;
+                        index %= sessions.size();
+                        state.set_active_session(sessions[isize(index)]);
+                    }
+                });
+                context.render_thread.request_render();
+            },
+    };
+}
+
+auto find_session() -> Action {
+    return {
+        .description = "Find a session by name using fzf"_s,
+        .apply =
+            [](ActionContext const& context) {
+                context.layout_state.with_lock([&](LayoutState& state) {
+                    auto session_names = di::Vector<di::String>();
+                    for (auto [i, session] : state.sessions() | di::enumerate) {
+                        session_names.push_back(*di::present("{} {}"_sv, i + 1, session.name()));
+                    }
+
+                    auto [create_pane_args, popup_layout] = Fzf()
+                                                                .with_prompt("Switch to session"_s)
+                                                                .with_title("Sessions"_s)
+                                                                .with_input(di::move(session_names))
+                                                                .popup_args();
+                    create_pane_args.hooks.did_finish_output = di::make_function<void(di::StringView)>(
+                        [&layout_state = context.layout_state,
+                         &render_thread = context.render_thread](di::StringView contents) {
+                            // Try to parse the first index. This will fail if contents is empty.
+                            auto maybe_session_index = di::parse_partial<usize>(contents);
+                            if (!maybe_session_index || maybe_session_index == 0) {
+                                return;
+                            }
+                            auto session_index = maybe_session_index.value() - 1;
+                            layout_state.with_lock([&](LayoutState& state) {
+                                if (auto session = state.sessions().at(session_index)) {
+                                    state.set_active_session(&session.value());
+                                }
+                            });
+                            render_thread.request_render();
+                        });
+                    for (auto& session : state.active_session()) {
+                        for (auto& tab : state.active_tab()) {
+                            (void) state.popup_pane(session, tab, popup_layout, di::move(create_pane_args),
+                                                    context.render_thread);
+                        }
+                    }
+                });
+                context.render_thread.request_render();
+            },
+    };
+}
+
 auto quit() -> Action {
     return {
         .description = "Quit ttx"_s,
