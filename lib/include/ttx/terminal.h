@@ -28,6 +28,11 @@ class Terminal {
         terminal::Screen screen;
         di::Optional<terminal::SavedCursor> saved_cursor;
         CursorStyle cursor_style { CursorStyle::SteadyBar };
+
+        // Per https://sw.kovidgoyal.net/kitty/keyboard-protocol/#detection-of-support-for-this-protocol,
+        // the keyboard mode stack and flags are per-screen.
+        KeyReportingFlags m_key_reporting_flags { KeyReportingFlags::None };
+        di::Ring<KeyReportingFlags> m_key_reporting_flags_stack;
     };
 
 public:
@@ -64,7 +69,7 @@ public:
     auto visible_size() const -> Size { return m_available_size; }
 
     auto application_cursor_keys_mode() const -> ApplicationCursorKeysMode { return m_application_cursor_keys_mode; }
-    auto key_reporting_flags() const -> KeyReportingFlags { return m_key_reporting_flags; }
+    auto key_reporting_flags() const -> KeyReportingFlags { return active_screen().m_key_reporting_flags; }
 
     auto alternate_scroll_mode() const -> AlternateScrollMode { return m_alternate_scroll_mode; }
     auto mouse_protocol() const -> MouseProtocol { return m_mouse_protocol; }
@@ -192,8 +197,6 @@ private:
     di::Optional<c32> m_last_graphics_charcter { 0 };
 
     ApplicationCursorKeysMode m_application_cursor_keys_mode { ApplicationCursorKeysMode::Disabled };
-    KeyReportingFlags m_key_reporting_flags { KeyReportingFlags::None };
-    di::Ring<KeyReportingFlags> m_key_reporting_flags_stack;
 
     AlternateScrollMode m_alternate_scroll_mode { AlternateScrollMode::Disabled };
     MouseProtocol m_mouse_protocol { MouseProtocol::None };

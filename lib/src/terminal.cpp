@@ -1059,16 +1059,17 @@ void Terminal::csi_set_key_reporting_flags(Params const& params) {
     auto flags_u32 = params.get(0);
     auto mode = params.get(1, 1);
 
+    auto& screen = active_screen();
     auto flags = KeyReportingFlags(flags_u32) & KeyReportingFlags::All;
     switch (mode) {
         case 1:
-            m_key_reporting_flags = flags;
+            screen.m_key_reporting_flags = flags;
             break;
         case 2:
-            m_key_reporting_flags |= flags;
+            screen.m_key_reporting_flags |= flags;
             break;
         case 3:
-            m_key_reporting_flags &= ~flags;
+            screen.m_key_reporting_flags &= ~flags;
             break;
         default:
             break;
@@ -1078,7 +1079,7 @@ void Terminal::csi_set_key_reporting_flags(Params const& params) {
 // https://sw.kovidgoyal.net/kitty/keyboard-protocol/#progressive-enhancement
 void Terminal::csi_get_key_reporting_flags(Params const&) {
     (void) m_psuedo_terminal.write_exactly(
-        di::as_bytes(di::present("\033[?{}u"_sv, u32(m_key_reporting_flags)).value().span()));
+        di::as_bytes(di::present("\033[?{}u"_sv, u32(active_screen().m_key_reporting_flags)).value().span()));
 }
 
 // https://sw.kovidgoyal.net/kitty/keyboard-protocol/#progressive-enhancement
@@ -1086,11 +1087,12 @@ void Terminal::csi_push_key_reporting_flags(Params const& params) {
     auto flags_u32 = params.get(0);
     auto flags = KeyReportingFlags(flags_u32) & KeyReportingFlags::All;
 
-    if (m_key_reporting_flags_stack.size() >= 100) {
-        m_key_reporting_flags_stack.pop_front();
+    auto& screen = active_screen();
+    if (screen.m_key_reporting_flags_stack.size() >= 100) {
+        screen.m_key_reporting_flags_stack.pop_front();
     }
-    m_key_reporting_flags_stack.push_back(m_key_reporting_flags);
-    m_key_reporting_flags = flags;
+    screen.m_key_reporting_flags_stack.push_back(screen.m_key_reporting_flags);
+    screen.m_key_reporting_flags = flags;
 }
 
 // https://sw.kovidgoyal.net/kitty/keyboard-protocol/#progressive-enhancement
@@ -1099,15 +1101,17 @@ void Terminal::csi_pop_key_reporting_flags(Params const& params) {
     if (n == 0) {
         return;
     }
-    if (n >= m_key_reporting_flags_stack.size()) {
-        m_key_reporting_flags_stack.clear();
-        m_key_reporting_flags = KeyReportingFlags::None;
+
+    auto& screen = active_screen();
+    if (n >= screen.m_key_reporting_flags_stack.size()) {
+        screen.m_key_reporting_flags_stack.clear();
+        screen.m_key_reporting_flags = KeyReportingFlags::None;
         return;
     }
 
-    auto new_stack_size = m_key_reporting_flags_stack.size() - n;
-    m_key_reporting_flags = m_key_reporting_flags_stack[new_stack_size];
-    m_key_reporting_flags_stack.erase(m_key_reporting_flags_stack.begin() + isize(new_stack_size));
+    auto new_stack_size = screen.m_key_reporting_flags_stack.size() - n;
+    screen.m_key_reporting_flags = screen.m_key_reporting_flags_stack[new_stack_size];
+    screen.m_key_reporting_flags_stack.erase(screen.m_key_reporting_flags_stack.begin() + isize(new_stack_size));
 }
 
 void Terminal::set_visible_size(Size const& size) {
@@ -1190,8 +1194,9 @@ void Terminal::soft_reset() {
     m_auto_wrap_mode = terminal::AutoWrapMode::Enabled;
     m_mouse_encoding = MouseEncoding::X10;
     m_mouse_protocol = MouseProtocol::None;
-    m_key_reporting_flags_stack.clear();
-    m_key_reporting_flags = KeyReportingFlags::None;
+    active_screen().m_key_reporting_flags_stack.clear();
+    active_screen().m_key_reporting_flags = KeyReportingFlags::None;
+    m_focus_event_mode = FocusEventMode::Disabled;
     m_cursor_hidden = false;
     m_disable_drawing = false;
 
@@ -1233,10 +1238,30 @@ auto Terminal::state_as_escape_sequences() const -> di::String {
             di::writer_print<di::String::Encoding>(writer, "\033[{} q"_sv, i32(screen.cursor_style));
         };
 
+        auto kitty_key_flags = [&](ScreenState const& screen) {
+            // Kitty key flags
+            auto first = true;
+            auto set_kitty_key_flags = [&](KeyReportingFlags flags) {
+                if (first) {
+                    di::writer_print<di::String::Encoding>(writer, "\033[=1;{}u"_sv, i32(flags));
+                    first = false;
+                } else {
+                    di::writer_print<di::String::Encoding>(writer, "\033[>{}u"_sv, i32(flags));
+                }
+            };
+
+            for (auto flags : screen.m_key_reporting_flags_stack) {
+                set_kitty_key_flags(flags);
+            }
+            set_kitty_key_flags(screen.m_key_reporting_flags);
+        };
+
         print_screen(m_primary_screen);
+        kitty_key_flags(m_primary_screen);
         if (m_alternate_screen) {
             di::writer_print<di::String::Encoding>(writer, "\033[?1049h\033[H\033[2J"_sv);
             print_screen(*m_alternate_screen);
+            kitty_key_flags(*m_alternate_screen);
         }
     }
 
@@ -1264,22 +1289,6 @@ auto Terminal::state_as_escape_sequences() const -> di::String {
         if (m_cursor_hidden) {
             di::writer_print<di::String::Encoding>(writer, "\033[?25l"_sv);
         }
-
-        // Kitty key flags
-        auto first = true;
-        auto set_kitty_key_flags = [&](KeyReportingFlags flags) {
-            if (first) {
-                di::writer_print<di::String::Encoding>(writer, "\033[=1;{}u"_sv, i32(flags));
-                first = false;
-            } else {
-                di::writer_print<di::String::Encoding>(writer, "\033[>{}u"_sv, i32(flags));
-            }
-        };
-
-        for (auto flags : m_key_reporting_flags_stack) {
-            set_kitty_key_flags(flags);
-        }
-        set_kitty_key_flags(m_key_reporting_flags);
 
         // Alternate scroll mode
         if (m_alternate_scroll_mode == AlternateScrollMode::Enabled) {

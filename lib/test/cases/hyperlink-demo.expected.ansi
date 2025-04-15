@@ -1,4 +1,4 @@
-c[4;1280;400t[8;25;80t[?7h[r[0;1mTests for ]8;id=1;https://bugzilla.gnome.org/show_bug.cgi?id=779734\gnome-terminal #779734]8;;\ and ]8;id=2;https://gitlab.com/gnachman/iterm2/issues/5158\iTerm2 #5158
+c[4;1280;384t[8;24;80t[?7h[r[0;1mTests for ]8;id=1;https://bugzilla.gnome.org/show_bug.cgi?id=779734\gnome-terminal #779734]8;;\ and ]8;id=2;https://gitlab.com/gnachman/iterm2/issues/5158\iTerm2 #5158
 [0m]8;;\═════════════════════════════════════════════════
 [C
 [0m[33mcommit ]8;id=3;https://git.gnome.org/browse/vte/commit/?id=a9b0b4c75a6dc7282f7cfcaef71413d69f7f0731\a9b0b4c75a6dc7282f7cfcaef71413d69f7f0731
@@ -48,6 +48,7 @@ Explicit and implicit link: ]8;id=46;http://example.com/under_score\http://exa
 ]8;;\Explicit and implicit link, broken into two lines: ]8;id=48;http://example.com/under_score\http://examp
 le.com/under_score
 [C
+[0;3;4m[31m]8;;\Explicitly underlined links ("\e[4m"):
 
 
 
@@ -71,9 +72,7 @@ le.com/under_score
 
 
 
-
-[H[0;3;4m[31m]8;;\Explicitly underlined links ("\e[4m"):[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C
-[0mExplicit link only: [0;4m]8;id=49;http://example.com/under_score\I'm an explicit link with under_score[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C
+[H[0mExplicit link only: [0;4m]8;id=49;http://example.com/under_score\I'm an explicit link with under_score[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C
 [0m]8;;\Implicit link only: [0;4mhttp://example.com/under_score[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C
 [0mBoth:               [0;4m]8;id=50;http://example.com/under_score\http://example.com/under_score[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C
 [C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C
@@ -96,4 +95,4 @@ Invisible implicit link: «[0;8mhttp://example.com/how_about_me[0m»[C[C[C
 ]8;id=........10........20........30........40........50........60........70........80........90.......100.......110.......120.......130.......140.......150.......160.......170.......180.......190.......200.......210.......220.......230;http://example.com/id\ID of 250 bytes once,]8;;\ ]8;id=........10........20........30........40........50........60........70........80........90.......100.......110.......120.......130.......140.......150.......160.......170.......180.......190.......200.......210.......220.......230;http://example.com/id\twice[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C
 ID of 251 bytes once,]8;;\ ]8;id=........10........20........30........40........50........60........70........80........90.......100.......110.......120.......130.......140.......150.......160.......170.......180.......190.......200.......210.......220.......230;http://example.com/id\twice[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C
 [C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C
-7[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[1;27r8[0m]8;;\[2 q[=1;0u
+7[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[1;26r8[0m]8;;\[2 q[=1;0u
