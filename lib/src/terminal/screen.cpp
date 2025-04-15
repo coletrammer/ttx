@@ -98,7 +98,7 @@ void Screen::resize(Size const& size) {
         if (m_scroll_back_enabled == ScrollBackEnabled::Yes && !m_never_got_input) {
             // When taking rows from the scroll back, we also need to move the cursor down to accomdate the new rows.
             auto rows_to_take = di::min(m_scroll_back.total_rows(), size.rows - rows().size());
-            m_scroll_back.take_rows(m_active_rows, max_width(), 0, rows_to_take);
+            m_scroll_back.take_rows(m_active_rows, size.cols, 0, rows_to_take);
             m_cursor.row += rows_to_take;
 
             // In this case, we may need to adjust the visual scroll offset.
