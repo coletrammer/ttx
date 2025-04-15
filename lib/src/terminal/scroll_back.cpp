@@ -88,7 +88,9 @@ auto ScrollBack::is_last_group_full() const -> bool {
 
 auto ScrollBack::add_group() -> Group& {
     if (m_groups.size() >= max_groups) {
-        m_absolute_row_start += m_groups.front().value().group.total_rows();
+        auto deleted_rows = m_groups.front().value().group.total_rows();
+        m_absolute_row_start += deleted_rows;
+        m_total_rows -= deleted_rows;
         m_groups.pop_front();
     }
     return m_groups.emplace_back();
