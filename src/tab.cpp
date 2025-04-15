@@ -89,6 +89,10 @@ auto Tab::add_pane(u64 pane_id, Size const& size, CreatePaneArgs args, Direction
 
 auto Tab::popup_pane(u64 pane_id, PopupLayout const& popup_layout, Size const& size, CreatePaneArgs args,
                      RenderThread& render_thread) -> di::Result<> {
+    // Prevent creating more than 1 popup.
+    if (m_popup) {
+        return di::Unexpected(di::BasicError::InvalidArgument);
+    }
     m_popup = Popup {
         .pane = nullptr,
         .layout_config = popup_layout,
