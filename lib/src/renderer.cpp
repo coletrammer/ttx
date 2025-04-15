@@ -9,6 +9,49 @@
 #include "ttx/terminal/escapes/osc_8.h"
 
 namespace ttx {
+auto Renderer::setup(dius::SyncFile& output) -> di::Result<> {
+    m_cleanup = {};
+
+    // Setup - alternate screen buffer.
+    di::writer_print<di::String::Encoding>(output, "\033[?1049h\033[H\033[2J"_sv);
+    m_cleanup.push_back("\033[?1049l\033[?25h"_s);
+
+    // Setup - disable autowrap.
+    di::writer_print<di::String::Encoding>(output, "\033[?7l"_sv);
+    m_cleanup.push_back("\033[?7h"_s);
+
+    // Setup - kitty key mode.
+    di::writer_print<di::String::Encoding>(output, "\033[>31u"_sv);
+    m_cleanup.push_back("\033[<u"_s);
+
+    // Setup - capture all mouse events and use SGR mosue reporting.
+    di::writer_print<di::String::Encoding>(output, "\033[?1003h\033[?1006h"_sv);
+    m_cleanup.push_back("\033[?1006l\033[?1003l"_s);
+
+    // Setup - enable focus events.
+    di::writer_print<di::String::Encoding>(output, "\033[?1004h"_sv);
+    m_cleanup.push_back("\033[?1004l"_s);
+
+    // Setup - bracketed paste.
+    di::writer_print<di::String::Encoding>(output, "\033[?2004h"_sv);
+    m_cleanup.push_back("\033[?2004l"_s);
+
+    auto text = di::move(m_buffer).vector();
+    m_buffer = {};
+    return output.write_exactly(di::as_bytes(text.span()));
+}
+
+auto Renderer::cleanup(dius::SyncFile& output) -> di::Result<> {
+    for (auto const& string : m_cleanup | di::reverse) {
+        di::writer_print<di::String::Encoding>(m_buffer, "{}"_sv, string);
+    }
+    m_cleanup.clear();
+
+    auto text = di::move(m_buffer).vector();
+    m_buffer = {};
+    return output.write_exactly(di::as_bytes(text.span()));
+}
+
 void Renderer::start(Size const& size) {
     m_buffer = {};
     m_size = size;

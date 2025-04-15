@@ -69,48 +69,12 @@ static auto main(Args& args) -> di::Result<void> {
     }
 
     // Setup - initial state and terminal size.
-    auto initial_size = args.headless ? Size { 25, 80, 25 * 16, 80 * 16 }
+    auto initial_size = args.headless ? Size { 24, 80, 24 * 16, 80 * 16 }
                                       : Size::from_window_size(TRY(dius::stdin.get_tty_window_size()));
     auto layout_state = di::Synchronized(LayoutState(initial_size, args.hide_status_bar));
 
     // Setup - raw mode
     auto _ = args.headless ? di::ScopeExit(di::Function<void()>([] {})) : TRY(dius::stdin.enter_raw_mode());
-
-    // Setup - alternate screen buffer.
-    di::writer_print<di::String::Encoding>(dius::stdin, "\033[?1049h\033[H\033[2J"_sv);
-    auto _ = di::ScopeExit([&] {
-        di::writer_print<di::String::Encoding>(dius::stdin, "\033[?1049l\033[?25h"_sv);
-    });
-
-    // Setup - disable autowrap.
-    di::writer_print<di::String::Encoding>(dius::stdin, "\033[?7l"_sv);
-    auto _ = di::ScopeExit([&] {
-        di::writer_print<di::String::Encoding>(dius::stdin, "\033[?7h"_sv);
-    });
-
-    // Setup - kitty key mode.
-    di::writer_print<di::String::Encoding>(dius::stdin, "\033[>31u"_sv);
-    auto _ = di::ScopeExit([&] {
-        di::writer_print<di::String::Encoding>(dius::stdin, "\033[<u"_sv);
-    });
-
-    // Setup - capture all mouse events and use SGR mosue reporting.
-    di::writer_print<di::String::Encoding>(dius::stdin, "\033[?1003h\033[?1006h"_sv);
-    auto _ = di::ScopeExit([&] {
-        di::writer_print<di::String::Encoding>(dius::stdin, "\033[?1006l\033[?1003l"_sv);
-    });
-
-    // Setup - enable focus events.
-    di::writer_print<di::String::Encoding>(dius::stdin, "\033[?1004h"_sv);
-    auto _ = di::ScopeExit([&] {
-        di::writer_print<di::String::Encoding>(dius::stdin, "\033[?1004l"_sv);
-    });
-
-    // Setup - bracketed paste.
-    di::writer_print<di::String::Encoding>(dius::stdin, "\033[?2004h"_sv);
-    auto _ = di::ScopeExit([&] {
-        di::writer_print<di::String::Encoding>(dius::stdin, "\033[?2004l"_sv);
-    });
 
     // Setup - block SIGWINCH.
     TRY(dius::system::mask_signal(dius::Signal::WindowChange));

@@ -18,6 +18,9 @@ struct RenderedCursor {
 
 class Renderer {
 public:
+    auto setup(dius::SyncFile& output) -> di::Result<>;
+    auto cleanup(dius::SyncFile& output) -> di::Result<>;
+
     void start(Size const& size);
     auto finish(dius::SyncFile& output, RenderedCursor const& cursor) -> di::Result<>;
 
@@ -41,6 +44,8 @@ private:
 
     di::VectorWriter<> m_buffer;
     Size m_size;
+
+    di::Vector<di::String> m_cleanup;
 
     GraphicsRendition m_last_graphics_rendition;
     di::Optional<terminal::Hyperlink> m_last_hyperlink;

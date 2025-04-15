@@ -35,8 +35,12 @@ void RenderThread::render_thread() {
     });
 
     auto renderer = Renderer();
+    auto _ = di::ScopeExit([&] {
+        (void) renderer.cleanup(dius::stdin);
+    });
 
     auto deadline = dius::SteadyClock::now();
+    auto do_setup = true;
     for (;;) {
         while (deadline < dius::SteadyClock::now()) {
             deadline += di::Milliseconds(25); // 50 FPS
@@ -65,6 +69,11 @@ void RenderThread::render_thread() {
             if (auto ev = di::get_if<Size>(event)) {
                 // Do layout.
                 m_layout_state.lock()->layout(ev.value());
+
+                // Force doing a resetting the terminal mode on SIGWINCH.
+                // This is to enable make putting ttx in a "dumb" session
+                // persistence program (like dtach) work correctly.
+                do_setup = true;
             } else if (auto ev = di::get_if<PaneExited>(event)) {
                 // Exit pane.
                 auto [pane, should_exit] = m_layout_state.with_lock([&](LayoutState& state) {
@@ -84,6 +93,12 @@ void RenderThread::render_thread() {
                 // Exit.
                 return;
             }
+        }
+
+        // Do terminal setup if requested.
+        if (do_setup) {
+            (void) renderer.setup(dius::stdin);
+            do_setup = false;
         }
 
         // Do render.
