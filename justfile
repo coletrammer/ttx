@@ -131,7 +131,7 @@ tidy *args="": ensure_configured
     #!/usr/bin/env bash
     set -euo pipefail
 
-    export ttx_TIDY_ARGS="{{ args }}"
+    export TTX_TIDY_ARGS="{{ args }}"
     cmake --build --preset {{ preset }} -t tidy
 
 # Run static analysis
@@ -139,7 +139,7 @@ analyze *args="": ensure_configured
     #!/usr/bin/env bash
     set -euo pipefail
 
-    export ttx_TIDY_ARGS="{{ args }}"
+    export TTX_TIDY_ARGS="{{ args }}"
     cmake --build --preset {{ preset }} -t analyze
 
 # Run clang-tidy and output failures
@@ -147,7 +147,7 @@ check_tidy *args="": ensure_configured
     #!/usr/bin/env bash
     set -euo pipefail
 
-    export ttx_TIDY_ARGS="{{ args }}"
+    export TTX_TIDY_ARGS="{{ args }}"
     cmake --build --preset {{ preset }} -t check_tidy
 
 # Clean

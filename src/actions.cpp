@@ -120,8 +120,8 @@ auto rename_tab() -> Action {
                                 });
                                 render_thread.request_render();
                             });
-                        for (auto& tab : state.active_tab()) {
-                            (void) state.popup_pane(session, tab, popup_layout, di::move(create_pane_args),
+                        if (auto tab = state.active_tab()) {
+                            (void) state.popup_pane(session, tab.value(), popup_layout, di::move(create_pane_args),
                                                     context.render_thread);
                         }
                     }
@@ -207,8 +207,8 @@ auto find_tab() -> Action {
             [](ActionContext const& context) {
                 context.layout_state.with_lock([&](LayoutState& state) {
                     auto tab_names = di::Vector<di::String>();
-                    for (auto& session : state.active_session()) {
-                        for (auto [i, tab] : session.tabs() | di::enumerate) {
+                    if (auto session = state.active_session()) {
+                        for (auto [i, tab] : session.value().tabs() | di::enumerate) {
                             tab_names.push_back(*di::present("{} {}"_sv, i + 1, tab->name()));
                         }
 
@@ -227,15 +227,15 @@ auto find_tab() -> Action {
                                 }
                                 auto tab_index = maybe_tab_index.value() - 1;
                                 layout_state.with_lock([&](LayoutState& state) {
-                                    if (auto tab = session.tabs().at(tab_index)) {
-                                        state.set_active_tab(session, tab.value().get());
+                                    if (auto tab = session.value().tabs().at(tab_index)) {
+                                        state.set_active_tab(session.value(), tab.value().get());
                                     }
                                 });
                                 render_thread.request_render();
                             });
-                        for (auto& tab : state.active_tab()) {
-                            (void) state.popup_pane(session, tab, popup_layout, di::move(create_pane_args),
-                                                    context.render_thread);
+                        if (auto tab = state.active_tab()) {
+                            (void) state.popup_pane(session.value(), tab.value(), popup_layout,
+                                                    di::move(create_pane_args), context.render_thread);
                         }
                     }
                 });
@@ -287,8 +287,8 @@ auto rename_session() -> Action {
                                 });
                                 render_thread.request_render();
                             });
-                        for (auto& tab : state.active_tab()) {
-                            (void) state.popup_pane(session, tab, popup_layout, di::move(create_pane_args),
+                        if (auto tab = state.active_tab()) {
+                            (void) state.popup_pane(session, tab.value(), popup_layout, di::move(create_pane_args),
                                                     context.render_thread);
                         }
                     }
@@ -381,10 +381,10 @@ auto find_session() -> Action {
                             });
                             render_thread.request_render();
                         });
-                    for (auto& session : state.active_session()) {
-                        for (auto& tab : state.active_tab()) {
-                            (void) state.popup_pane(session, tab, popup_layout, di::move(create_pane_args),
-                                                    context.render_thread);
+                    if (auto session = state.active_session()) {
+                        if (auto tab = state.active_tab()) {
+                            (void) state.popup_pane(session.value(), tab.value(), popup_layout,
+                                                    di::move(create_pane_args), context.render_thread);
                         }
                     }
                 });
