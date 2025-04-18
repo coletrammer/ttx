@@ -3,6 +3,7 @@
 #include "di/container/string/prelude.h"
 #include "di/reflect/prelude.h"
 #include "ttx/layout.h"
+#include "ttx/layout_json.h"
 #include "ttx/pane.h"
 #include "ttx/popup.h"
 
@@ -27,7 +28,7 @@ class Session;
 // Corresponds to tmux window.
 class Tab {
 public:
-    explicit Tab(Session* session, di::String name) : m_session(session), m_name(di::move(name)) {}
+    explicit Tab(Session* session, u64 id, di::String name) : m_session(session), m_id(id), m_name(di::move(name)) {}
 
     void layout(Size const& size);
     void invalidate_all();
@@ -45,6 +46,7 @@ public:
     // Returns true if active pane has changed.
     auto set_active(Pane* pane) -> bool;
 
+    auto id() const { return m_id; }
     auto name() const -> di::StringView { return m_name; }
     auto empty() const -> bool { return m_layout_root.empty() && !m_popup; }
 
@@ -80,11 +82,14 @@ public:
 
     auto popup_layout() const -> di::Optional<LayoutEntry> { return m_popup_layout; }
 
+    auto as_json_v1() const -> json::v1::Tab;
+
 private:
     auto make_pane(u64 pane_id, CreatePaneArgs args, Size const& size, RenderThread& render_thread)
         -> di::Result<di::Box<Pane>>;
 
     Session* m_session { nullptr };
+    u64 m_id { 0 };
     Size m_size;
     di::String m_name;
     LayoutGroup m_layout_root {};

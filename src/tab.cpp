@@ -4,6 +4,8 @@
 #include "dius/print.h"
 #include "render.h"
 #include "ttx/direction.h"
+#include "ttx/layout.h"
+#include "ttx/layout_json.h"
 #include "ttx/popup.h"
 
 namespace ttx {
@@ -254,5 +256,22 @@ auto Tab::make_pane(u64 pane_id, CreatePaneArgs args, Size const& size, RenderTh
         };
     }
     return Pane::create(pane_id, di::move(args), size);
+}
+
+auto Tab::as_json_v1() const -> json::v1::Tab {
+    auto json = json::v1::Tab {};
+    json.name = name().to_owned();
+    json.id = id();
+    for (auto& pane : full_screen_pane()) {
+        json.full_screen_pane_id = pane.id();
+    }
+    for (auto& pane : active()) {
+        json.active_pane_id = pane.id();
+    }
+    for (auto* pane : m_panes_ordered_by_recency) {
+        json.pane_ids_by_recency.push_back(pane->id());
+    }
+    json.pane_layout = m_layout_root.as_json_v1();
+    return json;
 }
 }

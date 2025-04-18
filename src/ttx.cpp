@@ -122,31 +122,35 @@ static auto main(Args& args) -> di::Result<void> {
     });
 
     // Setup - initial tab and pane.
-    if (replay_mode) {
-        auto& state = layout_state.get_assuming_no_concurrent_accesses();
-        for (auto replay_path : args.command) {
-            if (state.empty()) {
-                TRY(state.add_session(
-                    {
-                        .replay_path = di::PathView(replay_path).to_owned(),
-                        .save_state_path = args.save_state_path.transform(di::to_owned),
-                    },
-                    *render_thread));
-            } else {
-                // Horizontal split (means vertical layout)
-                TRY(state.add_pane(*state.active_session(), *state.active_tab(),
-                                   { .replay_path = di::PathView(replay_path).to_owned() }, Direction::Vertical,
-                                   *render_thread));
+    TRY(layout_state.with_lock([&](LayoutState& state) -> di::Result<> {
+        if (replay_mode) {
+            for (auto replay_path : args.command) {
+                if (state.empty()) {
+                    TRY(state.add_session(
+                        {
+                            .replay_path = di::PathView(replay_path).to_owned(),
+                            .save_state_path = args.save_state_path.transform(di::to_owned),
+                        },
+                        *render_thread));
+                } else {
+                    // Horizontal split (means vertical layout)
+                    TRY(state.add_pane(*state.active_session(), *state.active_tab(),
+                                       { .replay_path = di::PathView(replay_path).to_owned() }, Direction::Vertical,
+                                       *render_thread));
+                }
             }
+        } else {
+            TRY(state.add_session(
+                {
+                    .command = di::clone(command),
+                    .capture_command_output_path = args.capture_command_output_path.transform(di::to_owned),
+                },
+                *render_thread));
         }
-    } else {
-        TRY(layout_state.get_assuming_no_concurrent_accesses().add_session(
-            {
-                .command = di::clone(command),
-                .capture_command_output_path = args.capture_command_output_path.transform(di::to_owned),
-            },
-            *render_thread));
-    }
+        auto json = ttx::json::Layout(state.as_json_v1());
+        auto result = TRY(di::to_json_string(json, di::JsonSerializerConfig().pretty().indent_width(4)));
+        return {};
+    }));
 
     // In headless mode, exit immediately.
     if (args.headless) {

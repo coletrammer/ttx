@@ -8,6 +8,7 @@
 #include "di/vocab/pointer/box.h"
 #include "di/vocab/variant/get_if.h"
 #include "di/vocab/variant/holds_alternative.h"
+#include "ttx/layout_json.h"
 
 namespace ttx {
 struct FindPaneInLayoutGroup {
@@ -534,5 +535,34 @@ auto LayoutGroup::layout(Size const& size, u32 row_offset, u32 col_offset) -> di
     }
 
     return node;
+}
+
+struct ToJsonV1 {
+    static auto operator()(LayoutGroup const& node) -> json::v1::PaneLayoutNode {
+        auto json = json::v1::PaneLayoutNode {};
+        json.direction = node.direction();
+        json.relative_size = node.relative_size();
+        for (auto const& child : node.m_children) {
+            json.children.push_back(di::visit<json::v1::PaneLayoutVariant>(ToJsonV1 {}, child));
+        }
+        return json;
+    }
+
+    static auto operator()(di::Box<LayoutGroup> const& node) -> di::Box<json::v1::PaneLayoutNode> {
+        return di::make_box<json::v1::PaneLayoutNode>(ToJsonV1::operator()(*node));
+    }
+
+    static auto operator()(di::Box<LayoutPane> const& node) -> json::v1::Pane {
+        auto json = json::v1::Pane {};
+        if (node->pane) {
+            json.id = node->pane->id();
+        }
+        json.relative_size = node->relative_size;
+        return json;
+    }
+};
+
+auto LayoutGroup::as_json_v1() const -> json::v1::PaneLayoutNode {
+    return ToJsonV1::operator()(*this);
 }
 }

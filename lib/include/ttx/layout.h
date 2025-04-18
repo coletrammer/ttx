@@ -4,6 +4,7 @@
 #include "di/reflect/prelude.h"
 #include "di/vocab/pointer/box.h"
 #include "direction.h"
+#include "ttx/layout_json.h"
 #include "ttx/pane.h"
 #include "ttx/size.h"
 
@@ -88,6 +89,7 @@ public:
     constexpr auto empty() const -> bool { return m_children.empty(); }
     constexpr auto single() const -> bool { return m_children.size() == 1; }
     constexpr auto relative_size() -> i64& { return m_relative_size; }
+    constexpr auto relative_size() const -> i64 { return m_relative_size; }
 
     // NOTE: this method returns the correct size for the new pane, and a lvalue reference where
     // the caller should store its newly created Pane. We need this akward API so that we can
@@ -106,8 +108,11 @@ public:
     // new size.
     auto layout(Size const& size, u32 row_offset, u32 col_offset) -> di::Box<LayoutNode>;
 
+    auto as_json_v1() const -> json::v1::PaneLayoutNode;
+
 private:
     friend struct FindPaneInLayoutGroup;
+    friend struct ToJsonV1;
 
     void redistribute_space(di::Variant<di::Box<LayoutGroup>, di::Box<LayoutPane>>* new_child,
                             i64 original_size_available, i64 new_size_available);

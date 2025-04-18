@@ -1,9 +1,11 @@
 #pragma once
 
 #include "di/container/vector/vector.h"
+#include "di/serialization/json_value.h"
 #include "session.h"
 #include "tab.h"
 #include "ttx/layout.h"
+#include "ttx/layout_json.h"
 #include "ttx/popup.h"
 
 namespace ttx {
@@ -38,11 +40,14 @@ public:
 
     auto active_popup() const -> di::Optional<Popup&>;
 
+    auto as_json_v1() const -> json::v1::LayoutState;
+
 private:
     Size m_size;
     di::Vector<Session> m_sessions;
     Session* m_active_session { nullptr };
     u64 m_next_pane_id { 1 };
+    u64 m_next_tab_id { 1 };
     u64 m_next_session_id { 1 };
     bool m_hide_status_bar { false };
 };

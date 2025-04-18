@@ -1,5 +1,6 @@
 #include "session.h"
 
+#include "ttx/layout_json.h"
 #include "ttx/pane.h"
 
 namespace ttx {
@@ -82,12 +83,12 @@ auto Session::popup_pane(Tab& tab, u64 pane_id, PopupLayout const& popup_layout,
     return tab.popup_pane(pane_id, popup_layout, m_size, di::move(args), render_thread);
 }
 
-auto Session::add_tab(CreatePaneArgs args, u64 pane_id, RenderThread& render_thread) -> di::Result<> {
+auto Session::add_tab(CreatePaneArgs args, u64 tab_id, u64 pane_id, RenderThread& render_thread) -> di::Result<> {
     auto name = args.replay_path ? "capture"_s
                                  : di::back(di::PathView(args.command[0])).value_or(""_tsv) | di::transform([](char c) {
                                        return c32(c);
                                    }) | di::to<di::String>();
-    auto tab = di::make_box<Tab>(this, di::move(name));
+    auto tab = di::make_box<Tab>(this, tab_id, di::move(name));
     TRY(add_pane(*tab, pane_id, di::move(args), Direction::None, render_thread));
 
     set_active_tab(tab.get());
@@ -131,5 +132,18 @@ auto Session::set_is_active(bool b) -> bool {
         m_active_tab->set_is_active(true);
     }
     return true;
+}
+
+auto Session::as_json_v1() const -> json::v1::Session {
+    auto json = json::v1::Session {};
+    json.name = name().to_owned();
+    json.id = id();
+    for (auto& tab : active_tab()) {
+        json.active_tab_id = tab.id();
+    }
+    for (auto const& tab : m_tabs) {
+        json.tabs.push_back(tab->as_json_v1());
+    }
+    return json;
 }
 }

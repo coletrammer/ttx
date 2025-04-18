@@ -2,6 +2,7 @@
 
 #include "render.h"
 #include "session.h"
+#include "ttx/layout_json.h"
 #include "ttx/pane.h"
 
 namespace ttx {
@@ -107,12 +108,13 @@ auto LayoutState::popup_pane(Session& session, Tab& tab, PopupLayout const& popu
 
 auto LayoutState::add_tab(Session& session, CreatePaneArgs args, RenderThread& render_thread) -> di::Result<> {
     set_active_session(&session);
-    return session.add_tab(di::move(args), m_next_pane_id++, render_thread);
+    return session.add_tab(di::move(args), m_next_tab_id++, m_next_pane_id++, render_thread);
 }
 
 auto LayoutState::add_session(CreatePaneArgs args, RenderThread& render_thread) -> di::Result<> {
-    auto name = di::to_string(m_next_session_id++);
-    auto& session = m_sessions.emplace_back(di::move(name));
+    auto id = m_next_session_id++;
+    auto name = di::to_string(id);
+    auto& session = m_sessions.emplace_back(di::move(name), id);
     return add_tab(session, di::move(args), render_thread);
 }
 
@@ -139,5 +141,16 @@ auto LayoutState::full_screen_pane() const -> di::Optional<Pane&> {
         return {};
     }
     return active_tab()->full_screen_pane();
+}
+
+auto LayoutState::as_json_v1() const -> json::v1::LayoutState {
+    auto json = json::v1::LayoutState {};
+    if (m_active_session) {
+        json.active_session_id = m_active_session->id();
+    }
+    for (auto const& session : m_sessions) {
+        json.sessions.push_back(session.as_json_v1());
+    }
+    return json;
 }
 }
