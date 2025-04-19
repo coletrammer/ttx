@@ -159,6 +159,12 @@ auto make_key_binds(Key prefix, di::Path save_state_path, bool replay_mode) -> d
             .action = quit(),
         });
         result.push_back({
+            .key = Key::S,
+            .modifiers = Modifiers::Shift,
+            .mode = InputMode::Normal,
+            .action = save_layout(),
+        });
+        result.push_back({
             .key = Key::F,
             .mode = InputMode::Normal,
             .action = find_tab(),

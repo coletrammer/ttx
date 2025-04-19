@@ -21,6 +21,7 @@ auto switch_next_session() -> Action;
 auto switch_prev_session() -> Action;
 auto find_session() -> Action;
 auto quit() -> Action;
+auto save_layout() -> Action;
 auto save_state(di::Path path) -> Action;
 auto stop_capture() -> Action;
 auto exit_pane() -> Action;
