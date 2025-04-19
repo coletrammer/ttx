@@ -40,9 +40,12 @@ public:
 
     auto active_popup() const -> di::Optional<Popup&>;
 
+    void set_layout_did_update(di::Function<void()> layout_did_update);
+    void layout_did_update();
     auto as_json_v1() const -> json::v1::LayoutState;
 
 private:
+    di::Function<void()> m_layout_did_update;
     Size m_size;
     di::Vector<Session> m_sessions;
     Session* m_active_session { nullptr };

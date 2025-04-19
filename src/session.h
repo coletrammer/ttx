@@ -6,10 +6,13 @@
 #include "ttx/popup.h"
 
 namespace ttx {
+class LayoutState;
+
 /// @brief Represents a "session" (like in tmux)
 class Session {
 public:
-    explicit Session(di::String name, u64 id) : m_name(di::move(name)), m_id(id) {}
+    explicit Session(LayoutState* layout_state, di::String name, u64 id)
+        : m_layout_state(layout_state), m_name(di::move(name)), m_id(id) {}
 
     void layout(di::Optional<Size> size = {});
     auto set_active_tab(Tab* tab) -> bool;
@@ -38,9 +41,11 @@ public:
     auto is_active() const -> bool { return m_is_active; }
     auto set_is_active(bool b) -> bool;
 
+    void layout_did_update();
     auto as_json_v1() const -> json::v1::Session;
 
 private:
+    LayoutState* m_layout_state { nullptr };
     di::String m_name;
     Size m_size;
     u64 m_id { 0 };

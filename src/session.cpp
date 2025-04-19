@@ -1,5 +1,6 @@
 #include "session.h"
 
+#include "layout_state.h"
 #include "ttx/layout_json.h"
 #include "ttx/pane.h"
 
@@ -132,6 +133,10 @@ auto Session::set_is_active(bool b) -> bool {
         m_active_tab->set_is_active(true);
     }
     return true;
+}
+
+void Session::layout_did_update() {
+    m_layout_state->layout_did_update();
 }
 
 auto Session::as_json_v1() const -> json::v1::Session {

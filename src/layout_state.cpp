@@ -31,6 +31,7 @@ auto LayoutState::set_active_session(Session* session) -> bool {
         return false;
     }
 
+    auto _ = di::ScopeExit(di::bind_front(&LayoutState::layout_did_update, this));
     if (m_active_session) {
         m_active_session->set_is_active(false);
     }
@@ -45,11 +46,15 @@ auto LayoutState::set_active_session(Session* session) -> bool {
 }
 
 auto LayoutState::set_active_tab(Session& session, Tab* tab) -> bool {
+    auto _ = di::ScopeExit(di::bind_front(&LayoutState::layout_did_update, this));
+
     set_active_session(&session);
     return session.set_active_tab(tab);
 }
 
 void LayoutState::remove_tab(Session& session, Tab& tab) {
+    auto _ = di::ScopeExit(di::bind_front(&LayoutState::layout_did_update, this));
+
     session.remove_tab(tab);
     if (session.empty()) {
         remove_session(session);
@@ -57,6 +62,8 @@ void LayoutState::remove_tab(Session& session, Tab& tab) {
 }
 
 auto LayoutState::remove_pane(Session& session, Tab& tab, Pane* pane) -> di::Box<Pane> {
+    auto _ = di::ScopeExit(di::bind_front(&LayoutState::layout_did_update, this));
+
     auto result = session.remove_pane(tab, pane);
     if (session.empty()) {
         remove_session(session);
@@ -65,6 +72,8 @@ auto LayoutState::remove_pane(Session& session, Tab& tab, Pane* pane) -> di::Box
 }
 
 void LayoutState::remove_session(Session& session) {
+    auto _ = di::ScopeExit(di::bind_front(&LayoutState::layout_did_update, this));
+
     // For now, ASSERT() there are no panes in the session. If there were, we'd
     // need to make sure not to destroy the panes while we hold the lock.
     ASSERT(session.empty());
@@ -96,6 +105,8 @@ void LayoutState::remove_session(Session& session) {
 
 auto LayoutState::add_pane(Session& session, Tab& tab, CreatePaneArgs args, Direction direction,
                            RenderThread& render_thread) -> di::Result<> {
+    auto _ = di::ScopeExit(di::bind_front(&LayoutState::layout_did_update, this));
+
     set_active_session(&session);
     return session.add_pane(tab, m_next_pane_id++, di::move(args), direction, render_thread);
 }
@@ -107,14 +118,18 @@ auto LayoutState::popup_pane(Session& session, Tab& tab, PopupLayout const& popu
 }
 
 auto LayoutState::add_tab(Session& session, CreatePaneArgs args, RenderThread& render_thread) -> di::Result<> {
+    auto _ = di::ScopeExit(di::bind_front(&LayoutState::layout_did_update, this));
+
     set_active_session(&session);
     return session.add_tab(di::move(args), m_next_tab_id++, m_next_pane_id++, render_thread);
 }
 
 auto LayoutState::add_session(CreatePaneArgs args, RenderThread& render_thread) -> di::Result<> {
+    auto _ = di::ScopeExit(di::bind_front(&LayoutState::layout_did_update, this));
+
     auto id = m_next_session_id++;
     auto name = di::to_string(id);
-    auto& session = m_sessions.emplace_back(di::move(name), id);
+    auto& session = m_sessions.emplace_back(this, di::move(name), id);
     return add_tab(session, di::move(args), render_thread);
 }
 
@@ -141,6 +156,16 @@ auto LayoutState::full_screen_pane() const -> di::Optional<Pane&> {
         return {};
     }
     return active_tab()->full_screen_pane();
+}
+
+void LayoutState::set_layout_did_update(di::Function<void()> layout_did_update) {
+    m_layout_did_update = di::move(layout_did_update);
+}
+
+void LayoutState::layout_did_update() {
+    if (m_layout_did_update) {
+        m_layout_did_update();
+    }
 }
 
 auto LayoutState::as_json_v1() const -> json::v1::LayoutState {

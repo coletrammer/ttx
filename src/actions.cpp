@@ -63,6 +63,7 @@ auto resize(ResizeDirection direction, i32 amount_in_cells) -> Action {
                         tab.value().layout_group().resize(*layout, pane.data(), direction, amount_in_cells);
                     if (need_relayout) {
                         state.layout();
+                        state.layout_did_update();
                     }
                 });
                 context.render_thread.request_render();

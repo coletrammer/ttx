@@ -192,6 +192,8 @@ auto Tab::set_active(Pane* pane) -> bool {
         return false;
     }
 
+    auto _ = di::ScopeExit(di::bind_front(&Tab::layout_did_update, this));
+
     // Clear full screen pane, if said pane is no longer focused.
     if (m_full_screen_pane && m_full_screen_pane != pane) {
         m_full_screen_pane = nullptr;
@@ -256,6 +258,10 @@ auto Tab::make_pane(u64 pane_id, CreatePaneArgs args, Size const& size, RenderTh
         };
     }
     return Pane::create(pane_id, di::move(args), size);
+}
+
+void Tab::layout_did_update() {
+    m_session->layout_did_update();
 }
 
 auto Tab::as_json_v1() const -> json::v1::Tab {

@@ -8,6 +8,7 @@
 #include "input.h"
 #include "layout_state.h"
 #include "render.h"
+#include "save_layout.h"
 
 namespace ttx {
 struct Args {
@@ -17,6 +18,7 @@ struct Args {
     bool print_keybinds { false };
     di::Optional<di::PathView> save_state_path;
     di::Optional<di::PathView> capture_command_output_path;
+    di::Optional<di::TransparentStringView> layout_save_name;
     bool replay { false };
     bool headless { false };
     bool help { false };
@@ -33,10 +35,34 @@ struct Args {
             .option<&Args::headless>('h', "headless"_tsv, "Headless mode"_sv)
             .option<&Args::replay>('r', "replay-path"_tsv,
                                    "Replay capture output (file paths are passed via positional args)"_sv)
+            .option<&Args::layout_save_name>('l', "layout-save"_tsv,
+                                             "Name of a saved layout, automatically synced by ttx"_sv)
             .argument<&Args::command>("COMMAND"_sv, "Program to run in terminal"_sv)
             .help();
     }
 };
+
+static auto get_session_save_path(di::TransparentStringView name) -> di::Result<di::Path> {
+    auto const& env = dius::system::get_environment();
+    auto data_home = env.at("XDG_STATE_HOME"_tsv)
+                         .transform([&](di::TransparentStringView path) {
+                             return di::PathView(path).to_owned();
+                         })
+                         .or_else([&] {
+                             return env.at("HOME"_tsv).transform([&](di::TransparentStringView home) {
+                                 return di::PathView(home).to_owned() / ".local"_tsv / "state"_tsv;
+                             });
+                         });
+    if (!data_home) {
+        return di::Unexpected(di::BasicError::NoSuchFileOrDirectory);
+    }
+
+    auto& result = data_home.value();
+    result /= "ttx"_tsv;
+    result /= name;
+    result += ".json"_tsv;
+    return di::move(result);
+}
 
 static auto main(Args& args) -> di::Result<void> {
     auto const replay_mode = args.replay;
@@ -121,6 +147,25 @@ static auto main(Args& args) -> di::Result<void> {
         });
     });
 
+    // Setup - layout save thread.
+    auto layout_save_thread = TRY([&] -> di::Result<di::Optional<di::Box<SaveLayoutThread>>> {
+        if (!args.layout_save_name) {
+            return {};
+        }
+        return TRY(SaveLayoutThread::create(layout_state, TRY(get_session_save_path(args.layout_save_name.value()))));
+    }());
+    auto _ = di::ScopeExit([&] {
+        if (layout_save_thread) {
+            layout_save_thread.value()->request_exit();
+            layout_state.lock()->set_layout_did_update(nullptr);
+        }
+    });
+    if (layout_save_thread) {
+        layout_state.get_assuming_no_concurrent_accesses().set_layout_did_update([&] {
+            layout_save_thread.value()->request_save_layout();
+        });
+    }
+
     // Setup - initial tab and pane.
     TRY(layout_state.with_lock([&](LayoutState& state) -> di::Result<> {
         if (replay_mode) {
@@ -147,8 +192,6 @@ static auto main(Args& args) -> di::Result<void> {
                 },
                 *render_thread));
         }
-        auto json = ttx::json::Layout(state.as_json_v1());
-        auto result = TRY(di::to_json_string(json, di::JsonSerializerConfig().pretty().indent_width(4)));
         return {};
     }));
 
