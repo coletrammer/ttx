@@ -4,6 +4,7 @@
 #include "key_bind.h"
 #include "layout_state.h"
 #include "render.h"
+#include "save_layout.h"
 #include "tab.h"
 #include "ttx/focus_event.h"
 #include "ttx/key_event.h"
@@ -16,9 +17,10 @@
 
 namespace ttx {
 auto InputThread::create(di::Vector<di::TransparentString> command, di::Vector<KeyBind> key_binds,
-                         di::Synchronized<LayoutState>& layout_state, RenderThread& render_thread)
-    -> di::Result<di::Box<InputThread>> {
-    auto result = di::make_box<InputThread>(di::move(command), di::move(key_binds), layout_state, render_thread);
+                         di::Synchronized<LayoutState>& layout_state, RenderThread& render_thread,
+                         SaveLayoutThread& save_layout_thread) -> di::Result<di::Box<InputThread>> {
+    auto result = di::make_box<InputThread>(di::move(command), di::move(key_binds), layout_state, render_thread,
+                                            save_layout_thread);
     result->m_thread = TRY(dius::Thread::create([&self = *result.get()] {
         self.input_thread();
     }));
@@ -26,11 +28,13 @@ auto InputThread::create(di::Vector<di::TransparentString> command, di::Vector<K
 }
 
 InputThread::InputThread(di::Vector<di::TransparentString> command, di::Vector<KeyBind> key_binds,
-                         di::Synchronized<LayoutState>& layout_state, RenderThread& render_thread)
+                         di::Synchronized<LayoutState>& layout_state, RenderThread& render_thread,
+                         SaveLayoutThread& save_layout_thread)
     : m_key_binds(di::move(key_binds))
     , m_command(di::move(command))
     , m_layout_state(layout_state)
-    , m_render_thread(render_thread) {}
+    , m_render_thread(render_thread)
+    , m_save_layout_thread(save_layout_thread) {}
 
 InputThread::~InputThread() {
     request_exit();
@@ -103,6 +107,7 @@ void InputThread::handle_event(KeyEvent const& event) {
                 .key_event = event,
                 .layout_state = m_layout_state,
                 .render_thread = m_render_thread,
+                .save_layout_thread = m_save_layout_thread,
                 .command = m_command,
                 .done = m_done,
             });

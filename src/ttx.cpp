@@ -42,15 +42,15 @@ struct Args {
     }
 };
 
-static auto get_session_save_path(di::TransparentStringView name) -> di::Result<di::Path> {
+static auto get_session_save_dir() -> di::Result<di::Path> {
     auto const& env = dius::system::get_environment();
-    auto data_home = env.at("XDG_STATE_HOME"_tsv)
+    auto data_home = env.at("XDG_DATA_HOME"_tsv)
                          .transform([&](di::TransparentStringView path) {
                              return di::PathView(path).to_owned();
                          })
                          .or_else([&] {
                              return env.at("HOME"_tsv).transform([&](di::TransparentStringView home) {
-                                 return di::PathView(home).to_owned() / ".local"_tsv / "state"_tsv;
+                                 return di::PathView(home).to_owned() / ".local"_tsv / "share"_tsv;
                              });
                          });
     if (!data_home) {
@@ -59,8 +59,7 @@ static auto get_session_save_path(di::TransparentStringView name) -> di::Result<
 
     auto& result = data_home.value();
     result /= "ttx"_tsv;
-    result /= name;
-    result += ".json"_tsv;
+    result /= "layouts"_tsv;
     return di::move(result);
 }
 
@@ -114,6 +113,20 @@ static auto main(Args& args) -> di::Result<void> {
         }
     };
 
+    // Setup - layout save thread.
+    auto layout_save_thread = TRY([&] -> di::Result<di::Box<SaveLayoutThread>> {
+        return TRY(SaveLayoutThread::create(layout_state, TRY(get_session_save_dir()),
+                                            args.layout_save_name.transform(di::to_owned)));
+    }());
+    auto _ = di::ScopeExit([&] {
+        layout_save_thread->request_exit();
+    });
+    if (args.layout_save_name) {
+        layout_state.get_assuming_no_concurrent_accesses().set_layout_did_update([&] {
+            layout_save_thread->request_save_layout();
+        });
+    }
+
     // Setup - render thread.
     auto render_thread = TRY(RenderThread::create(layout_state, set_done));
     auto _ = di::ScopeExit([&] {
@@ -121,13 +134,15 @@ static auto main(Args& args) -> di::Result<void> {
     });
 
     // Setup - input thread.
-    auto input_thread = TRY(InputThread::create(di::clone(command), di::move(key_binds), layout_state, *render_thread));
+    auto input_thread = TRY(
+        InputThread::create(command.clone(), di::move(key_binds), layout_state, *render_thread, *layout_save_thread));
     auto _ = di::ScopeExit([&] {
         input_thread->request_exit();
     });
 
     // Setup - remove all panes and tabs on exit.
     auto _ = di::ScopeExit([&] {
+        layout_state.lock()->set_layout_did_update(nullptr);
         layout_state.with_lock([&](LayoutState& state) {
             while (!state.empty()) {
                 auto& session = *state.sessions().front();
@@ -146,25 +161,6 @@ static auto main(Args& args) -> di::Result<void> {
             }
         });
     });
-
-    // Setup - layout save thread.
-    auto layout_save_thread = TRY([&] -> di::Result<di::Optional<di::Box<SaveLayoutThread>>> {
-        if (!args.layout_save_name) {
-            return {};
-        }
-        return TRY(SaveLayoutThread::create(layout_state, TRY(get_session_save_path(args.layout_save_name.value()))));
-    }());
-    auto _ = di::ScopeExit([&] {
-        if (layout_save_thread) {
-            layout_save_thread.value()->request_exit();
-            layout_state.lock()->set_layout_did_update(nullptr);
-        }
-    });
-    if (layout_save_thread) {
-        layout_state.get_assuming_no_concurrent_accesses().set_layout_did_update([&] {
-            layout_save_thread.value()->request_save_layout();
-        });
-    }
 
     // Setup - initial tab and pane.
     TRY(layout_state.with_lock([&](LayoutState& state) -> di::Result<> {
@@ -202,7 +198,6 @@ static auto main(Args& args) -> di::Result<void> {
 
     render_thread->request_render();
 
-    // For testing, exit immediately after writing the replaying content and writing the save state.
 #ifndef __linux__
     // On MacOS, we need to install a useless signal handlers for sigwait() to
     // actually work...

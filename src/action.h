@@ -2,6 +2,7 @@
 
 #include "layout_state.h"
 #include "render.h"
+#include "save_layout.h"
 #include "ttx/key_event.h"
 
 namespace ttx {
@@ -9,6 +10,7 @@ struct ActionContext {
     KeyEvent const& key_event;
     di::Synchronized<LayoutState>& layout_state;
     RenderThread& render_thread;
+    SaveLayoutThread& save_layout_thread;
     di::Vector<di::TransparentString> const& command;
     di::Atomic<bool>& done;
 };

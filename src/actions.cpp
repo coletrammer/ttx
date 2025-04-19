@@ -2,6 +2,7 @@
 
 #include "action.h"
 #include "di/format/prelude.h"
+#include "di/util/construct.h"
 #include "fzf.h"
 #include "tab.h"
 #include "ttx/layout.h"
@@ -400,6 +401,37 @@ auto quit() -> Action {
         .apply =
             [](ActionContext const& context) {
                 context.done.store(true, di::MemoryOrder::Release);
+            },
+    };
+}
+
+auto save_layout() -> Action {
+    return {
+        .description = "Create a manual layout save"_s,
+        .apply =
+            [](ActionContext const& context) {
+                auto [create_pane_args, popup_layout] =
+                    Fzf().as_text_box().with_title("Save Layout To File"_s).with_prompt("Name"_s).popup_args();
+                create_pane_args.hooks.did_finish_output = di::make_function<void(di::StringView)>(
+                    [&save_layout_thread = context.save_layout_thread](di::StringView contents) {
+                        while (contents.ends_with(U'\n')) {
+                            contents = contents.substr(contents.begin(), --contents.end());
+                        }
+                        if (contents.empty()) {
+                            return;
+                        }
+                        auto raw_string =
+                            contents.span() | di::transform(di::construct<char>) | di::to<di::TransparentString>();
+                        save_layout_thread.request_save_layout(di::move(raw_string));
+                    });
+                context.layout_state.with_lock([&](LayoutState& state) {
+                    if (auto session = state.active_session()) {
+                        if (auto tab = state.active_tab()) {
+                            (void) state.popup_pane(session.value(), tab.value(), popup_layout,
+                                                    di::move(create_pane_args), context.render_thread);
+                        }
+                    }
+                });
             },
     };
 }
