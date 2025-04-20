@@ -22,7 +22,8 @@ void Tab::layout(Size const& size) {
         m_layout_tree =
             di::make_box<LayoutNode>(0, 0, size, di::Vector<di::Variant<di::Box<LayoutNode>, LayoutEntry>> {}, nullptr,
                                      &m_layout_root, Direction::None);
-        m_layout_tree->children.emplace_back(LayoutEntry { 0, 0, size, m_layout_tree.get(), m_full_screen_pane });
+        m_layout_tree->children.emplace_back(
+            LayoutEntry { 0, 0, size, m_layout_tree.get(), nullptr, m_full_screen_pane });
     } else {
         m_layout_tree = m_layout_root.layout(size, 0, 0);
     }
@@ -279,5 +280,65 @@ auto Tab::as_json_v1() const -> json::v1::Tab {
     }
     json.pane_layout = m_layout_root.as_json_v1();
     return json;
+}
+
+auto Tab::from_json_v1(json::v1::Tab const& json, Session* session, Size size, CreatePaneArgs args,
+                       RenderThread& render_thread) -> di::Result<di::Box<Tab>> {
+    // This is needed because the JSON parser will accept missing fields for default constructible types.
+    if (json.id == 0) {
+        return di::Unexpected(di::BasicError::InvalidArgument);
+    }
+
+    auto result = di::make_box<Tab>(session, json.id, json.name.clone());
+    result->m_size = size;
+
+    auto panes = di::Vector<Pane*> {};
+    result->m_layout_root = TRY(LayoutGroup::from_json_v1(
+        json.pane_layout, size, [&](u64 pane_id, Size const& pane_size) -> di::Result<di::Box<Pane>> {
+            auto pane = result->make_pane(pane_id, args.clone(), pane_size, render_thread);
+            if (pane) {
+                panes.push_back(pane.value().get());
+            }
+            return pane;
+        }));
+
+    // If there are any panes missing from the list, add them to the end.
+    auto counted_panes = result->m_panes_ordered_by_recency | di::to<di::TreeSet>();
+    for (auto* pane : panes) {
+        if (!counted_panes.contains(pane)) {
+            result->m_panes_ordered_by_recency.push_back(pane);
+        }
+    }
+
+    // Full screen pane should always be active.
+    if (json.full_screen_pane_id) {
+        auto* it = di::find(panes, json.full_screen_pane_id.value(), &Pane::id);
+        if (it != panes.end()) {
+            result->set_full_screen_pane(*it);
+        }
+    } else if (json.active_pane_id) {
+        auto* it = di::find(panes, json.active_pane_id.value(), &Pane::id);
+        if (it != panes.end()) {
+            result->set_active(*it);
+        }
+    }
+
+    if (result->m_panes_ordered_by_recency.empty()) {
+        return result;
+    }
+
+    // Fallback case: set the first pane as active.
+    if (!result->m_active) {
+        result->set_active(result->m_panes_ordered_by_recency[0]);
+    }
+
+    return result;
+}
+
+auto Tab::max_pane_id() const -> u64 {
+    if (m_panes_ordered_by_recency.empty()) {
+        return 1;
+    }
+    return di::max(m_panes_ordered_by_recency | di::transform(&Pane::id));
 }
 }

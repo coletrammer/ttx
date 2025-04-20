@@ -10,6 +10,7 @@
 
 namespace ttx {
 struct LayoutNode;
+struct LayoutPane;
 class LayoutGroup;
 
 // Represents the layout result for a single pane. The row and col
@@ -19,15 +20,16 @@ struct LayoutEntry {
     u32 col { 0 };
     Size size;
     LayoutNode* parent { nullptr };
+    LayoutPane const* ref { nullptr };
     Pane* pane { nullptr };
 
     auto operator==(LayoutEntry const&) const -> bool = default;
 
     constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<LayoutEntry>) {
-        return di::make_fields<"LayoutEntry">(di::field<"row", &LayoutEntry::row>, di::field<"col", &LayoutEntry::col>,
-                                              di::field<"size", &LayoutEntry::size>,
-                                              di::field<"parent", &LayoutEntry::parent>,
-                                              di::field<"pane", &LayoutEntry::pane>);
+        return di::make_fields<"LayoutEntry">(
+            di::field<"row", &LayoutEntry::row>, di::field<"col", &LayoutEntry::col>,
+            di::field<"size", &LayoutEntry::size>, di::field<"parent", &LayoutEntry::parent>,
+            di::field<"ref", &LayoutEntry::ref>, di::field<"pane", &LayoutEntry::pane>);
     }
 };
 
@@ -43,6 +45,7 @@ struct LayoutNode {
     Direction direction { Direction::None };
 
     auto find_pane(Pane* pane) -> di::Optional<LayoutEntry&>;
+    auto find_pane_by_id(u64 id) -> di::Optional<LayoutEntry&>;
     auto hit_test(u32 row, u32 col) -> di::Optional<LayoutEntry&>;
 
     auto hit_test_horizontal_line(u32 row, u32 col_start, u32 col_end) -> di::TreeSet<LayoutEntry*>;
@@ -64,6 +67,7 @@ constexpr inline auto max_layout_precision = i64(100'000);
 // necessary for layout.
 struct LayoutPane {
     di::Box<Pane> pane {};
+    u64 pane_id { 0 };
     i64 relative_size { max_layout_precision };
 };
 
@@ -91,6 +95,10 @@ public:
     constexpr auto relative_size() -> i64& { return m_relative_size; }
     constexpr auto relative_size() const -> i64 { return m_relative_size; }
 
+    static auto from_json_v1(json::v1::PaneLayoutNode const& json, Size const& size,
+                             di::FunctionRef<di::Result<di::Box<Pane>>(u64 id, Size const&)> make_pane)
+        -> di::Result<LayoutGroup>;
+
     // NOTE: this method returns the correct size for the new pane, and a lvalue reference where
     // the caller should store its newly created Pane. We need this akward API so that we can
     // create a Pane with a sane initial size.
@@ -113,6 +121,8 @@ public:
 private:
     friend struct FindPaneInLayoutGroup;
     friend struct ToJsonV1;
+    friend struct FromJsonV1;
+    friend struct MakePane;
 
     void redistribute_space(di::Variant<di::Box<LayoutGroup>, di::Box<LayoutPane>>* new_child,
                             i64 original_size_available, i64 new_size_available);

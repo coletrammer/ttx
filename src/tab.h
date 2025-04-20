@@ -30,8 +30,13 @@ class Tab {
 public:
     explicit Tab(Session* session, u64 id, di::String name) : m_session(session), m_id(id), m_name(di::move(name)) {}
 
+    static auto from_json_v1(json::v1::Tab const& json, Session* session, Size size, CreatePaneArgs args,
+                             RenderThread& render_thread) -> di::Result<di::Box<Tab>>;
+
     void layout(Size const& size);
     void invalidate_all();
+
+    auto max_pane_id() const -> u64;
 
     // Returns the removed pane, if found.
     auto remove_pane(Pane* pane) -> di::Box<Pane>;

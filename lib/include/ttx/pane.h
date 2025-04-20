@@ -39,6 +39,17 @@ struct PaneHooks {
 };
 
 struct CreatePaneArgs {
+    auto clone() const -> CreatePaneArgs {
+        // NOTE: the hooks aren't cloned.
+        return { command.clone(),
+                 capture_command_output_path.clone(),
+                 replay_path.clone(),
+                 save_state_path.clone(),
+                 pipe_input.clone(),
+                 pipe_output,
+                 {} };
+    }
+
     di::Vector<di::TransparentString> command {};
     di::Optional<di::Path> capture_command_output_path {};
     di::Optional<di::Path> replay_path {};

@@ -34,6 +34,7 @@ static auto spawn_child(di::Vector<di::TransparentString> command, dius::SyncFil
                       .with_new_session()
                       .with_env("TERM"_ts, "xterm-256color"_ts)
                       .with_env("COLORTERM"_ts, "truecolor"_ts)
+                      .with_env("TERM_PROGRAM"_ts, "ttx"_ts)
                       .with_file_open(2, di::move(tty_path), dius::OpenMode::ReadWrite)
                       .with_file_dup(stdin_fd, 0)
                       .with_file_dup(stdout_fd, 1)

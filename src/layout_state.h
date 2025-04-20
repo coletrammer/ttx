@@ -24,7 +24,7 @@ public:
                     RenderThread& render_thread) -> di::Result<>;
     auto add_tab(Session& session, CreatePaneArgs args, RenderThread& render_thread) -> di::Result<>;
 
-    auto sessions() -> di::Vector<Session>& { return m_sessions; }
+    auto sessions() -> di::Vector<di::Box<Session>>& { return m_sessions; }
     auto add_session(CreatePaneArgs args, RenderThread& render_thread) -> di::Result<>;
     void remove_session(Session& session);
     auto set_active_session(Session* session) -> bool;
@@ -43,11 +43,15 @@ public:
     void set_layout_did_update(di::Function<void()> layout_did_update);
     void layout_did_update();
     auto as_json_v1() const -> json::v1::LayoutState;
+    auto as_json() const -> json::Layout;
+    auto restore_json_v1(json::v1::LayoutState const& json, CreatePaneArgs args, RenderThread& render_thread)
+        -> di::Result<>;
+    auto restore_json(json::Layout const& json, CreatePaneArgs args, RenderThread& render_thread) -> di::Result<>;
 
 private:
     di::Function<void()> m_layout_did_update;
     Size m_size;
-    di::Vector<Session> m_sessions;
+    di::Vector<di::Box<Session>> m_sessions;
     Session* m_active_session { nullptr };
     u64 m_next_pane_id { 1 };
     u64 m_next_tab_id { 1 };

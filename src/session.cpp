@@ -1,6 +1,7 @@
 #include "session.h"
 
 #include "layout_state.h"
+#include "tab.h"
 #include "ttx/layout_json.h"
 #include "ttx/pane.h"
 
@@ -150,5 +151,51 @@ auto Session::as_json_v1() const -> json::v1::Session {
         json.tabs.push_back(tab->as_json_v1());
     }
     return json;
+}
+
+auto Session::from_json_v1(json::v1::Session const& json, LayoutState* layout_state, Size size, CreatePaneArgs args,
+                           RenderThread& render_thread) -> di::Result<di::Box<Session>> {
+    // This is needed because the JSOn parser will accept missing fields for default constructible types.
+    if (json.id == 0) {
+        return di::Unexpected(di::BasicError::InvalidArgument);
+    }
+
+    auto result = di::make_box<Session>(layout_state, json.name.clone(), json.id);
+    result->m_size = size;
+
+    // Restore tabs
+    for (auto const& tab_json : json.tabs) {
+        result->m_tabs.push_back(TRY(Tab::from_json_v1(tab_json, result.get(), size, args.clone(), render_thread)));
+    }
+
+    // Find the active tab by id
+    for (auto id : json.active_tab_id) {
+        auto* it = di::find(result->m_tabs, id, &Tab::id);
+        if (it != result->m_tabs.end()) {
+            result->set_active_tab(it->get());
+        }
+    }
+
+    if (result->m_tabs.empty()) {
+        return result;
+    }
+
+    // Fallback case: set the first tab as active
+    if (!result->m_active_tab) {
+        result->set_active_tab(result->m_tabs[0].get());
+    }
+
+    return result;
+}
+
+auto Session::max_tab_id() const -> u64 {
+    if (m_tabs.empty()) {
+        return 1;
+    }
+    return di::max(m_tabs | di::transform(&Tab::id));
+}
+
+auto Session::max_pane_id() const -> u64 {
+    return di::max(m_tabs | di::transform(&Tab::max_pane_id));
 }
 }

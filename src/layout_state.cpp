@@ -80,26 +80,26 @@ void LayoutState::remove_session(Session& session) {
 
     // Clear active session.
     if (m_active_session == &session) {
-        auto* it = di::find(m_sessions, &session, [](Session const& session) {
-            return &session;
+        auto* it = di::find(m_sessions, &session, [](di::Box<Session> const& session) {
+            return session.get();
         });
         if (it == m_sessions.end()) {
-            set_active_session(m_sessions.at(0).data());
+            set_active_session(m_sessions.at(0).transform(&di::Box<Session>::get).value_or(nullptr));
         } else if (m_sessions.size() == 1) {
             set_active_session(nullptr);
         } else {
             auto index = usize(it - m_sessions.begin());
             if (index == m_sessions.size() - 1) {
-                set_active_session(&m_sessions[index - 1]);
+                set_active_session(m_sessions[index - 1].get());
             } else {
-                set_active_session(&m_sessions[index + 1]);
+                set_active_session(m_sessions[index + 1].get());
             }
         }
     }
 
     // Delete session.
-    di::erase_if(m_sessions, [&](Session const& item) {
-        return &item == &session;
+    di::erase_if(m_sessions, [&](di::Box<Session> const& item) {
+        return item.get() == &session;
     });
 }
 
@@ -129,8 +129,8 @@ auto LayoutState::add_session(CreatePaneArgs args, RenderThread& render_thread) 
 
     auto id = m_next_session_id++;
     auto name = di::to_string(id);
-    auto& session = m_sessions.emplace_back(this, di::move(name), id);
-    return add_tab(session, di::move(args), render_thread);
+    auto& session = m_sessions.push_back(di::make_box<Session>(this, di::move(name), id));
+    return add_tab(*session, di::move(args), render_thread);
 }
 
 auto LayoutState::active_session() const -> di::Optional<Session&> {
@@ -174,8 +174,54 @@ auto LayoutState::as_json_v1() const -> json::v1::LayoutState {
         json.active_session_id = m_active_session->id();
     }
     for (auto const& session : m_sessions) {
-        json.sessions.push_back(session.as_json_v1());
+        json.sessions.push_back(session->as_json_v1());
     }
     return json;
+}
+
+auto LayoutState::as_json() const -> json::Layout {
+    return as_json_v1();
+}
+
+auto LayoutState::restore_json_v1(json::v1::LayoutState const& json, CreatePaneArgs args, RenderThread& render_thread)
+    -> di::Result<> {
+    auto size = m_hide_status_bar ? m_size : m_size.rows_shrinked(1);
+    for (auto const& session_json : json.sessions) {
+        m_sessions.push_back(TRY(Session::from_json_v1(session_json, this, size, args.clone(), render_thread)));
+    }
+
+    // Find the active session by id
+    for (auto id : json.active_session_id) {
+        auto* it = di::find(m_sessions, id, &Session::id);
+        if (it != m_sessions.end()) {
+            set_active_session(it->get());
+        }
+    }
+
+    if (m_sessions.empty()) {
+        return {};
+    }
+
+    // Fallback case: set the first session as active
+    if (!m_active_session) {
+        set_active_session(m_sessions[0].get());
+    }
+
+    // Update next ids
+    m_next_session_id = di::max(m_sessions | di::transform(&Session::id)) + 1;
+    m_next_tab_id = di::max(m_sessions | di::transform(&Session::max_tab_id)) + 1;
+    m_next_pane_id = di::max(m_sessions | di::transform(&Session::max_pane_id)) + 1;
+
+    // TODO: validate all ids are unique
+
+    return {};
+}
+
+auto LayoutState::restore_json(json::Layout const& json, CreatePaneArgs args, RenderThread& render_thread)
+    -> di::Result<> {
+    return di::visit(di::overload([&](json::v1::LayoutState const& state) {
+                         return restore_json_v1(state, di::move(args), render_thread);
+                     }),
+                     json);
 }
 }

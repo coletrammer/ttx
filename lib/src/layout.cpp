@@ -8,7 +8,9 @@
 #include "di/vocab/pointer/box.h"
 #include "di/vocab/variant/get_if.h"
 #include "di/vocab/variant/holds_alternative.h"
+#include "dius/print.h"
 #include "ttx/layout_json.h"
+#include "ttx/size.h"
 
 namespace ttx {
 struct FindPaneInLayoutGroup {
@@ -61,6 +63,29 @@ auto LayoutNode::find_pane(Pane* pane) -> di::Optional<LayoutEntry&> {
                                     },
                                     [&](di::Box<LayoutNode>& node) -> di::Optional<LayoutEntry&> {
                                         return node->find_pane(pane);
+                                    }),
+                                child);
+        if (result) {
+            return result;
+        }
+    }
+    return {};
+}
+
+auto LayoutNode::find_pane_by_id(u64 id) -> di::Optional<LayoutEntry&> {
+    for (auto& child : children) {
+        auto result = di::visit(di::overload(
+                                    [&](LayoutEntry& entry) -> di::Optional<LayoutEntry&> {
+                                        if (entry.pane && entry.pane->id() == id) {
+                                            return entry;
+                                        }
+                                        if (entry.ref && entry.ref->pane_id == id) {
+                                            return entry;
+                                        }
+                                        return {};
+                                    },
+                                    [&](di::Box<LayoutNode>& node) -> di::Optional<LayoutEntry&> {
+                                        return node->find_pane_by_id(id);
                                     }),
                                 child);
         if (result) {
@@ -462,7 +487,7 @@ auto LayoutGroup::layout(Size const& size, u32 row_offset, u32 col_offset) -> di
 
             resize_pane(pane.value()->pane.get(), size);
             node->children.push_back(
-                LayoutEntry { row_offset, col_offset, size, node.get(), pane.value()->pane.get() });
+                LayoutEntry { row_offset, col_offset, size, node.get(), pane.value().get(), pane.value()->pane.get() });
         }
         return node;
     }
@@ -518,6 +543,7 @@ auto LayoutGroup::layout(Size const& size, u32 row_offset, u32 col_offset) -> di
                               col,
                               size,
                               node.get(),
+                              layout_pane.get(),
                               layout_pane->pane.get(),
                           });
                       },
@@ -564,5 +590,67 @@ struct ToJsonV1 {
 
 auto LayoutGroup::as_json_v1() const -> json::v1::PaneLayoutNode {
     return ToJsonV1::operator()(*this);
+}
+
+struct FromJsonV1 {
+    static auto operator()(json::v1::PaneLayoutNode const& json) -> di::Result<LayoutGroup> {
+        auto result = LayoutGroup();
+        result.m_direction = json.direction;
+        result.m_relative_size = json.relative_size;
+        for (auto const& child : json.children) {
+            result.m_children.push_back(TRY(
+                di::visit<di::Result<di::Variant<di::Box<LayoutGroup>, di::Box<LayoutPane>>>>(FromJsonV1 {}, child)));
+        }
+        return result;
+    }
+
+    static auto operator()(di::Box<json::v1::PaneLayoutNode> const& json) -> di::Result<di::Box<LayoutGroup>> {
+        if (!json) {
+            return di::Unexpected(di::BasicError::InvalidArgument);
+        }
+        return di::make_box<LayoutGroup>(TRY(FromJsonV1::operator()(*json)));
+    }
+
+    static auto operator()(json::v1::Pane const& json) -> di::Result<di::Box<LayoutPane>> {
+        if (json.id == 0) {
+            return di::Unexpected(di::BasicError::InvalidArgument);
+        }
+        return di::make_box<LayoutPane>(nullptr, json.id, json.relative_size);
+    }
+};
+
+struct MakePane {
+    LayoutNode& layout;
+    di::FunctionRef<di::Result<di::Box<Pane>>(u64 id, Size const&)> make_pane;
+
+    auto operator()(LayoutGroup& node) const -> di::Result<> {
+        for (auto& child : node.m_children) {
+            TRY(di::visit(*this, child));
+        }
+        return {};
+    }
+
+    auto operator()(di::Box<LayoutGroup>& node) const -> di::Result<> { return (*this)(*node); }
+
+    auto operator()(di::Box<LayoutPane>& node) const -> di::Result<> {
+        auto entry = layout.find_pane_by_id(node->pane_id);
+        if (!entry) {
+            // Use a default size. If there's no layout, the pane was too small. So
+            // make a 1x10 pane.
+            node->pane = TRY(make_pane(node->pane_id, Size { 1, 10, 12, 160 }));
+        } else {
+            node->pane = TRY(make_pane(node->pane_id, entry->size));
+        }
+        return {};
+    }
+};
+
+auto LayoutGroup::from_json_v1(json::v1::PaneLayoutNode const& json, Size const& size,
+                               di::FunctionRef<di::Result<di::Box<Pane>>(u64 id, Size const&)> make_pane)
+    -> di::Result<LayoutGroup> {
+    auto group = TRY(FromJsonV1::operator()(json));
+    auto layout = group.layout(size, 0, 0);
+    TRY(MakePane(*layout, make_pane)(group));
+    return group;
 }
 }

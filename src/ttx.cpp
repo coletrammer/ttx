@@ -114,8 +114,9 @@ static auto main(Args& args) -> di::Result<void> {
     };
 
     // Setup - layout save thread.
+    auto session_save_dir = TRY(get_session_save_dir());
     auto layout_save_thread = TRY([&] -> di::Result<di::Box<SaveLayoutThread>> {
-        return TRY(SaveLayoutThread::create(layout_state, TRY(get_session_save_dir()),
+        return TRY(SaveLayoutThread::create(layout_state, session_save_dir.clone(),
                                             args.layout_save_name.transform(di::to_owned)));
     }());
     auto _ = di::ScopeExit([&] {
@@ -146,11 +147,11 @@ static auto main(Args& args) -> di::Result<void> {
         layout_state.with_lock([&](LayoutState& state) {
             while (!state.empty()) {
                 auto& session = *state.sessions().front();
-                while (!session.empty()) {
-                    auto last_tab = session.tabs().size() == 1;
-                    auto& tab = **session.tabs().front();
+                while (!session->empty()) {
+                    auto last_tab = session->tabs().size() == 1;
+                    auto& tab = **session->tabs().front();
                     for (auto* pane : tab.panes()) {
-                        state.remove_pane(session, tab, pane);
+                        state.remove_pane(*session, tab, pane);
                     }
                     // We must explicitly check this because the session object is destroyed
                     // after the last tab is removed.
@@ -181,12 +182,34 @@ static auto main(Args& args) -> di::Result<void> {
                 }
             }
         } else {
-            TRY(state.add_session(
-                {
-                    .command = di::clone(command),
-                    .capture_command_output_path = args.capture_command_output_path.transform(di::to_owned),
-                },
-                *render_thread));
+            // Attempt to restore layout when running in auto-layout mode
+            if (args.layout_save_name) {
+                auto path = session_save_dir.clone();
+                path /= args.layout_save_name.value();
+                path += ".json"_tsv;
+
+                // Ignore errors, like the file not existing.
+                if (auto file = dius::open_sync(path, dius::OpenMode::Readonly)) {
+                    auto string = TRY(di::read_to_string(file.value()));
+                    auto json = TRY(di::from_json_string<json::Layout>(string));
+                    TRY(state.restore_json(
+                        json,
+                        {
+                            .command = di::clone(command),
+                            .capture_command_output_path = args.capture_command_output_path.transform(di::to_owned),
+                        },
+                        *render_thread));
+                }
+            }
+
+            if (state.empty()) {
+                TRY(state.add_session(
+                    {
+                        .command = di::clone(command),
+                        .capture_command_output_path = args.capture_command_output_path.transform(di::to_owned),
+                    },
+                    *render_thread));
+            }
         }
         return {};
     }));

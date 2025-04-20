@@ -14,10 +14,16 @@ public:
     explicit Session(LayoutState* layout_state, di::String name, u64 id)
         : m_layout_state(layout_state), m_name(di::move(name)), m_id(id) {}
 
+    static auto from_json_v1(json::v1::Session const& json, LayoutState* layout_state, Size size, CreatePaneArgs args,
+                             RenderThread& render_thread) -> di::Result<di::Box<Session>>;
+
     void layout(di::Optional<Size> size = {});
     auto set_active_tab(Tab* tab) -> bool;
     void remove_tab(Tab& tab);
     auto remove_pane(Tab& tab, Pane* pane) -> di::Box<Pane>;
+
+    auto max_tab_id() const -> u64;
+    auto max_pane_id() const -> u64;
 
     auto id() const { return m_id; }
     void set_name(di::String name) { m_name = di::move(name); }

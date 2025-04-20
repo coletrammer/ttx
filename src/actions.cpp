@@ -307,8 +307,8 @@ auto switch_next_session() -> Action {
             [](ActionContext const& context) {
                 context.layout_state.with_lock([&](LayoutState& state) {
                     for (auto& session : state.active_session()) {
-                        auto sessions = state.sessions() | di::transform([](Session& session) {
-                                            return &session;
+                        auto sessions = state.sessions() | di::transform([](di::Box<Session>& session) {
+                                            return session.get();
                                         });
                         auto it = di::find(sessions, &session);
                         if (it == sessions.end()) {
@@ -332,8 +332,8 @@ auto switch_prev_session() -> Action {
             [](ActionContext const& context) {
                 context.layout_state.with_lock([&](LayoutState& state) {
                     for (auto& session : state.active_session()) {
-                        auto sessions = state.sessions() | di::transform([](Session& session) {
-                                            return &session;
+                        auto sessions = state.sessions() | di::transform([](di::Box<Session>& session) {
+                                            return session.get();
                                         });
                         auto it = di::find(sessions, &session);
                         if (it == sessions.end()) {
@@ -359,7 +359,7 @@ auto find_session() -> Action {
                 context.layout_state.with_lock([&](LayoutState& state) {
                     auto session_names = di::Vector<di::String>();
                     for (auto [i, session] : state.sessions() | di::enumerate) {
-                        session_names.push_back(*di::present("{} {}"_sv, i + 1, session.name()));
+                        session_names.push_back(*di::present("{} {}"_sv, i + 1, session->name()));
                     }
 
                     auto [create_pane_args, popup_layout] = Fzf()
@@ -378,7 +378,7 @@ auto find_session() -> Action {
                             auto session_index = maybe_session_index.value() - 1;
                             layout_state.with_lock([&](LayoutState& state) {
                                 if (auto session = state.sessions().at(session_index)) {
-                                    state.set_active_session(&session.value());
+                                    state.set_active_session(session.value().get());
                                 }
                             });
                             render_thread.request_render();

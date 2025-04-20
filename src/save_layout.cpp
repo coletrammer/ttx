@@ -31,7 +31,7 @@ void SaveLayoutThread::push_event(SaveLayoutEvent event) {
 
 auto SaveLayoutThread::save_layout(di::TransparentStringView layout_name) -> di::Result<> {
     auto state = m_layout_state.with_lock([&](LayoutState const& state) {
-        return state.as_json_v1();
+        return state.as_json();
     });
     auto json_string = TRY(di::to_json_string(state, di::JsonSerializerConfig().pretty().indent_width(4)));
 
