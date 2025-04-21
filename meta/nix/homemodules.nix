@@ -31,19 +31,33 @@
             prefix = lib.mkOption {
               type = with lib.types; str;
               default = "B";
-              description = "Prefix key for key bindings. The control modifier is always applied.";
+              description = ''Prefix key for key bindings. The control modifier is always applied.'';
+            };
+
+            autolayout = lib.mkOption {
+              type = with lib.types; nullOr str;
+              default = null;
+              description = ''Enable auto-layout with specific name'';
             };
           };
         };
       };
 
-      config = lib.mkIf config.programs.ttx.enable {
-        home.packages =
-          if config.programs.ttx.package == null then [ ] else [ config.programs.ttx.package ];
+      config =
+        let
+          autolayout =
+            if config.programs.ttx.settings.autolayout != null then
+              " --layout-save ${config.programs.ttx.settings.autolayout}"
+            else
+              "";
+        in
+        lib.mkIf config.programs.ttx.enable {
+          home.packages =
+            if config.programs.ttx.package == null then [ ] else [ config.programs.ttx.package ];
 
-        home.shellAliases = {
-          ttx = "ttx --prefix ${config.programs.ttx.settings.prefix} ${config.programs.ttx.settings.shell}";
+          home.shellAliases = {
+            ttx = "ttx --prefix ${config.programs.ttx.settings.prefix}${autolayout} ${config.programs.ttx.settings.shell}";
+          };
         };
-      };
     };
 }
