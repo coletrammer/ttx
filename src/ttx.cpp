@@ -116,13 +116,18 @@ static auto main(Args& args) -> di::Result<void> {
     // Setup - layout save thread.
     auto session_save_dir = TRY(get_session_save_dir());
     auto layout_save_thread = TRY([&] -> di::Result<di::Box<SaveLayoutThread>> {
-        return TRY(SaveLayoutThread::create(layout_state, session_save_dir.clone(),
-                                            args.layout_save_name.transform(di::to_owned)));
+        if (args.headless) {
+            return nullptr;
+        }
+        return SaveLayoutThread::create(layout_state, session_save_dir.clone(),
+                                        args.layout_save_name.transform(di::to_owned));
     }());
     auto _ = di::ScopeExit([&] {
-        layout_save_thread->request_exit();
+        if (layout_save_thread) {
+            layout_save_thread->request_exit();
+        }
     });
-    if (args.layout_save_name) {
+    if (layout_save_thread && args.layout_save_name) {
         layout_state.get_assuming_no_concurrent_accesses().set_layout_did_update([&] {
             layout_save_thread->request_save_layout();
         });
@@ -135,10 +140,17 @@ static auto main(Args& args) -> di::Result<void> {
     });
 
     // Setup - input thread.
-    auto input_thread = TRY(
-        InputThread::create(command.clone(), di::move(key_binds), layout_state, *render_thread, *layout_save_thread));
+    auto input_thread = TRY([&] -> di::Result<di::Box<InputThread>> {
+        if (args.headless) {
+            return nullptr;
+        }
+        return InputThread::create(command.clone(), di::move(key_binds), layout_state, *render_thread,
+                                   *layout_save_thread);
+    }());
     auto _ = di::ScopeExit([&] {
-        input_thread->request_exit();
+        if (input_thread) {
+            input_thread->request_exit();
+        }
     });
 
     // Setup - remove all panes and tabs on exit.
