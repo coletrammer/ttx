@@ -19,6 +19,7 @@ struct Args {
     di::Optional<di::PathView> save_state_path;
     di::Optional<di::PathView> capture_command_output_path;
     di::Optional<di::TransparentStringView> layout_save_name;
+    di::Optional<di::TransparentStringView> layout_restore_name;
     bool replay { false };
     bool headless { false };
     bool help { false };
@@ -35,8 +36,11 @@ struct Args {
             .option<&Args::headless>('h', "headless"_tsv, "Headless mode"_sv)
             .option<&Args::replay>('r', "replay-path"_tsv,
                                    "Replay capture output (file paths are passed via positional args)"_sv)
-            .option<&Args::layout_save_name>('l', "layout-save"_tsv,
-                                             "Name of a saved layout, automatically synced by ttx"_sv)
+            .option<&Args::layout_save_name>(
+                'l', "layout-save"_tsv,
+                "Name of a saved layout, automatically synced by ttx (including restore at startup)"_sv)
+            .option<&Args::layout_restore_name>('R', "layout-restore"_tsv,
+                                                "Name of a saved layout, to be restored on startup"_sv)
             .argument<&Args::command>("COMMAND"_sv, "Program to run in terminal"_sv)
             .help();
     }
@@ -194,14 +198,16 @@ static auto main(Args& args) -> di::Result<void> {
                 }
             }
         } else {
-            // Attempt to restore layout when running in auto-layout mode
-            if (args.layout_save_name) {
+            // Attempt to restore layout when running in auto-layout mode, or when specifically requested.
+            if (args.layout_save_name || args.layout_restore_name) {
                 auto path = session_save_dir.clone();
-                path /= args.layout_save_name.value();
+                path /= args.layout_restore_name.has_value() ? args.layout_restore_name.value()
+                                                             : args.layout_save_name.value();
                 path += ".json"_tsv;
 
-                // Ignore errors, like the file not existing.
-                if (auto file = dius::open_sync(path, dius::OpenMode::Readonly)) {
+                // Ignore errors, like the file not existing, when in auto-layout mode.
+                auto file = dius::open_sync(path, dius::OpenMode::Readonly);
+                if (file) {
                     auto string = TRY(di::read_to_string(file.value()));
                     auto json = TRY(di::from_json_string<json::Layout>(string));
                     TRY(state.restore_json(
@@ -211,6 +217,8 @@ static auto main(Args& args) -> di::Result<void> {
                             .capture_command_output_path = args.capture_command_output_path.transform(di::to_owned),
                         },
                         *render_thread));
+                } else if (args.layout_restore_name) {
+                    return di::Unexpected(di::move(file).error());
                 }
             }
 
