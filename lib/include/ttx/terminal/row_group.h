@@ -78,7 +78,7 @@ public:
     auto iterate_row(u32 row) const {
         ASSERT_LT(row, total_rows());
 
-        auto& row_object = rows()[row];
+        auto const& row_object = rows()[row];
 
         // Fetch the indirect data fields for every cell in the row (text, graphics, and hyperlink). This uses
         // cache_last() so that the transform() can can maintain a mutable text offset counter safely, which

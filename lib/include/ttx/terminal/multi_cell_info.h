@@ -12,7 +12,7 @@ struct MultiCellInfo {
     u8 vertical_alignment { 0 };           ///< Vertical fractional scale alignment
     u8 horizontal_alignment { 0 };         ///< Horizontal fractional scale alignment
 
-    constexpr u8 compute_width() const { return scale * width; }
+    constexpr auto compute_width() const -> u8 { return scale * width; }
 
     auto operator==(MultiCellInfo const&) const -> bool = default;
     auto operator<=>(MultiCellInfo const&) const = default;

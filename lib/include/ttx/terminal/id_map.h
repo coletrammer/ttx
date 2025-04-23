@@ -11,6 +11,7 @@ namespace detail {
     struct DefaultOpsImpl {
         using Key = T;
 
+        // NOLINTNEXTLINE(bugprone-return-const-ref-from-parameter)
         constexpr static auto get_key(T const& t) -> T const& { return t; }
     };
 
