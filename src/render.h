@@ -36,6 +36,7 @@ public:
 
     static auto create(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit)
         -> di::Result<di::Box<RenderThread>>;
+    static auto create_mock(di::Synchronized<LayoutState>& layout_state) -> RenderThread;
 
     void push_event(RenderEvent event);
     void request_render() { push_event(DoRender {}); }

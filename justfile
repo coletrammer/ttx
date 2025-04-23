@@ -4,11 +4,13 @@ alias c := configure
 alias b := build
 alias t := test
 alias ut := unit_test
+alias uta := unit_test_app
 alias tt := terminal_test
 alias gtt := generate_terminal_test
 alias cb := configure_build
 alias bt := build_test
 alias but := build_unit_test
+alias buta := build_unit_test_app
 alias cbt := configure_build_test
 alias r := run
 alias br := build_run
@@ -32,7 +34,7 @@ build *args="": ensure_configured
 test *args="": ensure_configured
     ctest --preset {{ preset }} {{ args }}
 
-# Run unit tests
+# Run unit tests (library)
 unit_test *args="": ensure_configured
     #!/usr/bin/env bash
     set -euo pipefail
@@ -42,7 +44,19 @@ unit_test *args="": ensure_configured
             sed s/\${sourceDir}/./g
     )
 
-    $build_directory/lib/test/ttx_test {{ args }}
+    $build_directory/lib/test/libttx_test {{ args }}
+
+# Run unit tests (application)
+unit_test_app *args="": ensure_configured
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    build_directory=$(
+        jq -rc '.configurePresets.[] | select(.name == "{{ preset }}") | .binaryDir' CMakePresets.json CMakeUserPresets.json |
+            sed s/\${sourceDir}/./g
+    )
+
+    $build_directory/test/ttx_test {{ args }}
 
 # Run terminal tests
 terminal_test *args="": ensure_configured
@@ -87,10 +101,15 @@ build_test *args="":
     @just preset={{ preset }} build
     @just preset={{ preset }} test {{ args }}
 
-# Build and run unit tests
+# Build and run unit tests (library)
 build_unit_test *args="":
-    @just preset={{ preset }} build -t ttx_test
+    @just preset={{ preset }} build -t libttx_test
     @just preset={{ preset }} unit_test {{ args }}
+
+# Build and run unit tests (application)
+build_unit_test_app *args="":
+    @just preset={{ preset }} build -t ttx_test
+    @just preset={{ preset }} unit_test_app {{ args }}
 
 # Configure and build and test
 configure_build_test *args="":

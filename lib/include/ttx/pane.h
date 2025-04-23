@@ -47,6 +47,7 @@ struct CreatePaneArgs {
                  save_state_path.clone(),
                  pipe_input.clone(),
                  pipe_output,
+                 mock,
                  {} };
     }
 
@@ -56,6 +57,7 @@ struct CreatePaneArgs {
     di::Optional<di::Path> save_state_path {};
     di::Optional<di::String> pipe_input {};
     bool pipe_output { false };
+    bool mock { false };
     PaneHooks hooks {};
 };
 
@@ -66,7 +68,7 @@ public:
     static auto create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<di::Box<Pane>>;
 
     // For testing, create a mock pane. This doesn't actually create a psuedo terminal or a subprocess.
-    static auto create_mock() -> di::Box<Pane>;
+    static auto create_mock(u64 id = 0) -> di::Box<Pane>;
 
     explicit Pane(u64 id, dius::SyncFile pty_controller, Size const& size, dius::system::ProcessHandle process,
                   PaneHooks hooks)

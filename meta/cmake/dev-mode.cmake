@@ -1,6 +1,7 @@
 include(CTest)
 if(BUILD_TESTING)
     add_subdirectory(lib/test)
+    add_subdirectory(test)
 
     include(meta/cmake/terminal-test.cmake)
 endif()

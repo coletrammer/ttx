@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(libttxTests LANGUAGES CXX)
+project(ttxTests LANGUAGES CXX)
 
 # ---- Dependencies ----
 
@@ -13,8 +13,8 @@ endif()
 # ---- Unit Tests ----
 
 file(GLOB sources CONFIGURE_DEPENDS src/*.cpp)
-add_executable(libttx_test ${sources})
+add_executable(ttx_test ${sources})
 
-target_link_libraries(libttx_test PRIVATE ttx::ttx dius::dius_test_main)
+target_link_libraries(ttx_test PRIVATE ttx::ttx_app_lib dius::dius_test_main)
 
-add_test(NAME libttx_test COMMAND libttx_test)
+add_test(NAME ttx_test COMMAND ttx_test)

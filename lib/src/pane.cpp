@@ -115,6 +115,10 @@ auto Pane::create_from_replay(u64 id, di::PathView replay_path, di::Optional<di:
 }
 
 auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<di::Box<Pane>> {
+    if (args.mock) {
+        return create_mock(id);
+    }
+
     if (args.replay_path) {
         return create_from_replay(id, *args.replay_path, di::move(args.save_state_path), size, di::move(args.hooks));
     }
@@ -261,9 +265,9 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
     return pane;
 }
 
-auto Pane::create_mock() -> di::Box<Pane> {
+auto Pane::create_mock(u64 id) -> di::Box<Pane> {
     auto fake_psuedo_terminal = dius::SyncFile();
-    return di::make_box<Pane>(0, di::move(fake_psuedo_terminal), Size(1, 1), dius::system::ProcessHandle(),
+    return di::make_box<Pane>(id, di::move(fake_psuedo_terminal), Size(1, 1), dius::system::ProcessHandle(),
                               PaneHooks {});
 }
 

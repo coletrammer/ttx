@@ -13,6 +13,10 @@ auto RenderThread::create(di::Synchronized<LayoutState>& layout_state, di::Funct
     return result;
 }
 
+auto RenderThread::create_mock(di::Synchronized<LayoutState>& layout_state) -> RenderThread {
+    return RenderThread(layout_state, nullptr);
+}
+
 RenderThread::RenderThread(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit)
     : m_layout_state(layout_state), m_did_exit(di::move(did_exit)) {}
 

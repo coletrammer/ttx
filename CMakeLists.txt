@@ -45,16 +45,46 @@ endif()
 # ---- Declare executable ----
 
 if(NOT ttx_LIB_ONLY)
+
+    # ---- Ttx app object lib ----
+
     file(
         GLOB_RECURSE sources CONFIGURE_DEPENDS
         RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
         "src/*.cpp"
     )
-    add_executable(ttx_app ${sources})
+    list(FILTER sources EXCLUDE REGEX src/ttx.cpp)
+    file(
+        GLOB_RECURSE headers CONFIGURE_DEPENDS
+        RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
+        "src/*.h"
+    )
 
+    add_library(ttx_ttx_app_lib OBJECT ${sources})
+    add_library(ttx::ttx_app_lib ALIAS ttx_ttx_app_lib)
+    set_property(TARGET ttx_ttx_app_lib PROPERTY EXPORT_NAME ttx_app_lib)
+
+    target_include_directories(
+        ttx_ttx_app_lib ${warning_guard} INTERFACE "\$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>"
+    )
+    target_sources(
+        ttx_ttx_app_lib
+        INTERFACE FILE_SET
+                  HEADERS
+                  TYPE
+                  HEADERS
+                  BASE_DIRS
+                  src
+                  FILES
+                  ${headers}
+    )
+    target_link_libraries(ttx_ttx_app_lib PUBLIC ttx::ttx)
+
+    # ---- Ttx app ----
+
+    add_executable(ttx_app src/ttx.cpp)
     set_property(TARGET ttx_app PROPERTY OUTPUT_NAME ttx)
-
-    target_link_libraries(ttx_app PRIVATE ttx::ttx)
+    target_link_libraries(ttx_app PRIVATE ttx::ttx_app_lib)
 endif()
 
 # ---- Install rules ----
