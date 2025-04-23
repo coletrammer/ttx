@@ -76,7 +76,7 @@ auto Tab::add_pane(u64 pane_id, Size const& size, CreatePaneArgs args, Direction
         return di::Unexpected(di::BasicError::InvalidArgument);
     }
 
-    auto maybe_pane = make_pane(pane_id, di::move(args), size, render_thread);
+    auto maybe_pane = make_pane(pane_id, di::move(args), pane_layout->size, render_thread);
     if (!maybe_pane) {
         m_layout_root.remove_pane(nullptr);
         return di::Unexpected(di::move(maybe_pane).error());

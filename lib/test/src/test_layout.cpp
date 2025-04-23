@@ -173,6 +173,70 @@ static void remove_pane() {
     }
 }
 
+static void remove_then_split() {
+    constexpr auto size = Size(64, 128, 1280, 640);
+
+    {
+        auto root = LayoutGroup {};
+
+        // Initial pane
+        auto [pane0, _] = add_pane(root, size, nullptr, Direction::None);
+
+        // Horizontal split
+        auto [pane1, _] = add_pane(root, size, &pane0, Direction::Vertical);
+
+        // Horitzontal split above
+        auto [pane2, _] = add_pane(root, size, &pane0, Direction::Horizontal);
+
+        // Horizontal split below
+        auto [pane3, _] = add_pane(root, size, &pane1, Direction::Horizontal);
+
+        // Now the layout looks something like this:
+        // |---------|--------|
+        // |0        |2       |
+        // |---------|--------|
+        // |1        |3       |
+        // |------------------|
+
+        auto l0 = root.layout(size, 0, 0);
+        validate_layout_for_pane(pane0, *l0, 0, 0, { 32, 64 });
+        validate_layout_for_pane(pane1, *l0, 33, 0, { 31, 64 });
+        validate_layout_for_pane(pane2, *l0, 0, 65, { 32, 63 });
+        validate_layout_for_pane(pane3, *l0, 33, 65, { 31, 63 });
+
+        // Remove pane 2, which should cause a layout group to be collapsed.
+        root.remove_pane(&pane2);
+
+        // Now the layout looks something like this:
+        // |------------------|
+        // |0                 |
+        // |---------|--------|
+        // |1        |3       |
+        // |------------------|
+
+        auto l1 = root.layout(size, 0, 0);
+        validate_layout_for_pane(pane0, *l1, 0, 0, { 32, 128 });
+        validate_layout_for_pane(pane1, *l1, 33, 0, { 31, 64 });
+        validate_layout_for_pane(pane3, *l1, 33, 65, { 31, 63 });
+
+        // Add pane 5 to replace the old pane 2.
+        auto [pane5, _] = add_pane(root, size, &pane0, Direction::Horizontal);
+
+        // Now the layout looks something like this:
+        // |---------|--------|
+        // |0        |5       |
+        // |---------|--------|
+        // |1        |3       |
+        // |------------------|
+
+        auto l2 = root.layout(size, 0, 0);
+        validate_layout_for_pane(pane0, *l2, 0, 0, { 32, 64 });
+        validate_layout_for_pane(pane1, *l2, 33, 0, { 31, 64 });
+        validate_layout_for_pane(pane5, *l2, 0, 65, { 32, 63 });
+        validate_layout_for_pane(pane3, *l2, 33, 65, { 31, 63 });
+    }
+}
+
 static void hit_test() {
     constexpr auto size = Size(64, 128, 1280, 640);
 
@@ -337,6 +401,7 @@ static void resize_to_zero() {
 TEST(layout, splits)
 TEST(layout, many_splits)
 TEST(layout, remove_pane)
+TEST(layout, remove_then_split)
 TEST(layout, hit_test)
 TEST(layout, resize)
 TEST(layout, resize_to_zero)

@@ -354,6 +354,15 @@ auto LayoutGroup::remove_pane(Pane* pane) -> di::Box<Pane> {
             continue;
         }
 
+        // If singular, and the sole child is a pane, promote the pane to this level.
+        if (group.value()->single() && di::holds_alternative<di::Box<LayoutPane>>(group.value()->m_children[0])) {
+            auto original_size = group.value()->relative_size();
+            auto save = di::get<di::Box<LayoutGroup>>(di::move(*it));
+            *it = di::move(save->m_children[0]);
+            di::get<di::Box<LayoutPane>>(*it)->relative_size = original_size;
+            continue;
+        }
+
         // If our child is a layout group with the same direction as us, we need to
         // absorb all its children.
         if (group.value()->direction() == this->direction()) {
