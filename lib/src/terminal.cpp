@@ -54,6 +54,10 @@ void Terminal::on_parser_result(OSC const& osc) {
     }
 
     auto ps = osc.data.substr(osc.data.begin(), ps_end.begin());
+    if (ps == "7"_sv) {
+        osc_7(osc.data.substr(ps_end.end()));
+        return;
+    }
     if (ps == "8"_sv) {
         osc_8(osc.data.substr(ps_end.end()));
         return;
@@ -461,6 +465,20 @@ void Terminal::dcs_decrqss(Params const&, di::StringView data) {
     } else {
         (void) m_psuedo_terminal.write_exactly(di::as_bytes("\033P0$r\033\\"_sv.span()));
     }
+}
+
+// OSC 7 - Current working directory report
+void Terminal::osc_7(di::StringView data) {
+    // For full correctness, OSC should receive unencoded data.
+    auto unencoded_data = data.span() | di::transform(di::construct<char>) | di::to<di::TransparentString>();
+
+    auto result = terminal::OSC7::parse(unencoded_data);
+    if (!result) {
+        return;
+    }
+
+    m_cwd = result.clone();
+    m_outgoing_events.push_back(di::move(result).value());
 }
 
 // OSC 8 - https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda
@@ -1339,6 +1357,11 @@ auto Terminal::state_as_escape_sequences() const -> di::String {
         // Bracketed paste
         if (m_bracketed_paste_mode == BracketedPasteMode::Enabled) {
             di::writer_print<di::String::Encoding>(writer, "\033[?2004h"_sv);
+        }
+
+        // Current working directory (OSC 7)
+        for (auto const& cwd : m_cwd) {
+            di::writer_print<di::String::Encoding>(writer, "{}"_sv, cwd.serialize());
         }
     }
 

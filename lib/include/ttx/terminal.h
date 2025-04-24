@@ -11,6 +11,7 @@
 #include "ttx/params.h"
 #include "ttx/paste_event_io.h"
 #include "ttx/size.h"
+#include "ttx/terminal/escapes/osc_7.h"
 #include "ttx/terminal/screen.h"
 
 namespace ttx {
@@ -18,7 +19,7 @@ struct SetClipboard {
     di::Vector<byte> data;
 };
 
-using TerminalEvent = di::Variant<SetClipboard>;
+using TerminalEvent = di::Variant<SetClipboard, terminal::OSC7>;
 
 class Terminal {
     struct ScreenState {
@@ -131,6 +132,7 @@ private:
 
     void dcs_decrqss(Params const& params, di::StringView data);
 
+    void osc_7(di::StringView data);
     void osc_8(di::StringView data);
     void osc_52(di::StringView data);
 
@@ -204,6 +206,7 @@ private:
     FocusEventMode m_focus_event_mode { FocusEventMode::Disabled };
 
     BracketedPasteMode m_bracketed_paste_mode { false };
+    di::Optional<terminal::OSC7> m_cwd;
 
     di::Vector<TerminalEvent> m_outgoing_events;
 

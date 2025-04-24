@@ -20,6 +20,8 @@ struct OSC7 {
 
     static auto parse(di::TransparentStringView data) -> di::Optional<OSC7>;
 
+    auto clone() const -> OSC7 { return { hostname.clone(), path.clone() }; }
+
     auto serialize() const -> di::String;
 
     auto operator==(OSC7 const& other) const -> bool = default;
