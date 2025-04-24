@@ -591,6 +591,9 @@ struct ToJsonV1 {
         auto json = json::v1::Pane {};
         if (node->pane) {
             json.id = node->pane->id();
+            json.current_working_directory = node->pane->current_working_directory().transform([](di::PathView path) {
+                return di::PercentEncoded<>::from_raw_data(path.data().to_owned());
+            });
         }
         json.relative_size = node->relative_size;
         return json;
@@ -624,13 +627,17 @@ struct FromJsonV1 {
         if (json.id == 0) {
             return di::Unexpected(di::BasicError::InvalidArgument);
         }
-        return di::make_box<LayoutPane>(nullptr, json.id, json.relative_size);
+        return di::make_box<LayoutPane>(nullptr, json.id,
+                                        json.current_working_directory.transform([](di::PercentEncoded<> const& data) {
+                                            return di::Path(data.underlying_string().clone());
+                                        }),
+                                        json.relative_size);
     }
 };
 
 struct MakePane {
     LayoutNode& layout;
-    di::FunctionRef<di::Result<di::Box<Pane>>(u64 id, Size const&)> make_pane;
+    di::FunctionRef<di::Result<di::Box<Pane>>(u64 id, di::Optional<di::Path>, Size const&)> make_pane;
 
     auto operator()(LayoutGroup& node) const -> di::Result<> {
         for (auto& child : node.m_children) {
@@ -646,16 +653,17 @@ struct MakePane {
         if (!entry) {
             // Use a default size. If there's no layout, the pane was too small. So
             // make a 1x10 pane.
-            node->pane = TRY(make_pane(node->pane_id, Size { 1, 10, 12, 160 }));
+            node->pane = TRY(make_pane(node->pane_id, di::move(node->cwd), Size { 1, 10, 12, 160 }));
         } else {
-            node->pane = TRY(make_pane(node->pane_id, entry->size));
+            node->pane = TRY(make_pane(node->pane_id, di::move(node->cwd), entry->size));
         }
         return {};
     }
 };
 
-auto LayoutGroup::from_json_v1(json::v1::PaneLayoutNode const& json, Size const& size,
-                               di::FunctionRef<di::Result<di::Box<Pane>>(u64 id, Size const&)> make_pane)
+auto LayoutGroup::from_json_v1(
+    json::v1::PaneLayoutNode const& json, Size const& size,
+    di::FunctionRef<di::Result<di::Box<Pane>>(u64 id, di::Optional<di::Path>, Size const&)> make_pane)
     -> di::Result<LayoutGroup> {
     auto group = TRY(FromJsonV1::operator()(json));
     auto layout = group.layout(size, 0, 0);

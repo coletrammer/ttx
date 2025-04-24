@@ -16,7 +16,8 @@ constexpr auto test_layout = R"(
                                 {
                                     "json::v1::Pane": {
                                         "relative_size": 77120,
-                                        "id": 1
+                                        "id": 1,
+                                        "current_working_directory": "%2Fhome%2FWorkspace"
                                     }
                                 },
                                 {

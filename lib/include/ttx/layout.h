@@ -68,6 +68,7 @@ constexpr inline auto max_layout_precision = i64(100'000);
 struct LayoutPane {
     di::Box<Pane> pane {};
     u64 pane_id { 0 };
+    di::Optional<di::Path> cwd {}; // Used when restoring a pane.
     i64 relative_size { max_layout_precision };
 };
 
@@ -95,8 +96,9 @@ public:
     constexpr auto relative_size() -> i64& { return m_relative_size; }
     constexpr auto relative_size() const -> i64 { return m_relative_size; }
 
-    static auto from_json_v1(json::v1::PaneLayoutNode const& json, Size const& size,
-                             di::FunctionRef<di::Result<di::Box<Pane>>(u64 id, Size const&)> make_pane)
+    static auto
+    from_json_v1(json::v1::PaneLayoutNode const& json, Size const& size,
+                 di::FunctionRef<di::Result<di::Box<Pane>>(u64, di::Optional<di::Path>, Size const&)> make_pane)
         -> di::Result<LayoutGroup>;
 
     // NOTE: this method returns the correct size for the new pane, and a lvalue reference where

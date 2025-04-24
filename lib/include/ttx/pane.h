@@ -17,6 +17,7 @@
 #include "ttx/renderer.h"
 #include "ttx/size.h"
 #include "ttx/terminal.h"
+#include "ttx/terminal/escapes/osc_7.h"
 
 namespace ttx {
 class Pane;
@@ -36,6 +37,9 @@ struct PaneHooks {
 
     /// @brief Callback with the results on reading from the output pipe.
     di::Function<void(di::StringView)> did_finish_output;
+
+    /// @brief Callback when the pane's current working directory changes.
+    di::Function<void()> did_update_cwd;
 };
 
 struct CreatePaneArgs {
@@ -46,6 +50,7 @@ struct CreatePaneArgs {
                  replay_path.clone(),
                  save_state_path.clone(),
                  pipe_input.clone(),
+                 cwd.clone(),
                  pipe_output,
                  mock,
                  {} };
@@ -56,6 +61,7 @@ struct CreatePaneArgs {
     di::Optional<di::Path> replay_path {};
     di::Optional<di::Path> save_state_path {};
     di::Optional<di::String> pipe_input {};
+    di::Optional<di::Path> cwd {};
     bool pipe_output { false };
     bool mock { false };
     PaneHooks hooks {};
@@ -63,19 +69,21 @@ struct CreatePaneArgs {
 
 class Pane {
 public:
-    static auto create_from_replay(u64 id, di::PathView replay_path, di::Optional<di::Path> save_state_path,
-                                   Size const& size, PaneHooks hooks) -> di::Result<di::Box<Pane>>;
+    static auto create_from_replay(u64 id, di::Optional<di::Path> cwd, di::PathView replay_path,
+                                   di::Optional<di::Path> save_state_path, Size const& size, PaneHooks hooks)
+        -> di::Result<di::Box<Pane>>;
     static auto create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<di::Box<Pane>>;
 
     // For testing, create a mock pane. This doesn't actually create a psuedo terminal or a subprocess.
-    static auto create_mock(u64 id = 0) -> di::Box<Pane>;
+    static auto create_mock(u64 id = 0, di::Optional<di::Path> cwd = {}) -> di::Box<Pane>;
 
-    explicit Pane(u64 id, dius::SyncFile pty_controller, Size const& size, dius::system::ProcessHandle process,
-                  PaneHooks hooks)
+    explicit Pane(u64 id, di::Optional<di::Path> cwd, dius::SyncFile pty_controller, Size const& size,
+                  dius::system::ProcessHandle process, PaneHooks hooks)
         : m_id(id)
         , m_pty_controller(di::move(pty_controller))
         , m_terminal(di::in_place, id, m_pty_controller, size)
         , m_process(process)
+        , m_cwd(di::move(cwd))
         , m_hooks(di::move(hooks)) {}
     ~Pane();
 
@@ -95,7 +103,15 @@ public:
     void soft_reset();
     void exit();
 
+    /// @brief Get the pane's current working directory
+    ///
+    /// In the future, this method could fall back to (or prefer) scanning the procfs
+    /// to determine this information. For now, this value is determined via OSC 7
+    /// reports, which require shell integration to work.
+    auto current_working_directory() const -> di::Optional<di::PathView> { return m_cwd.transform(&di::Path::view); }
+
 private:
+    void update_cwd(terminal::OSC7&& path_with_hostname);
     void reset_viewport_scroll();
 
     u64 m_id { 0 };
@@ -109,6 +125,7 @@ private:
     u32 m_vertical_scroll_offset { 0 };
     u32 m_horizontal_scroll_offset { 0 };
 
+    di::Optional<di::Path> m_cwd;
     PaneHooks m_hooks;
 
     // These are declared last, for when dius::Thread calls join() in the destructor.

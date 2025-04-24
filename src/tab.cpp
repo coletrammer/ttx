@@ -258,6 +258,11 @@ auto Tab::make_pane(u64 pane_id, CreatePaneArgs args, Size const& size, RenderTh
             render_thread.push_event(WriteString(di::move(string)));
         };
     }
+    if (!args.hooks.did_update_cwd) {
+        args.hooks.did_update_cwd = [this] {
+            layout_did_update();
+        };
+    }
     return Pane::create(pane_id, di::move(args), size);
 }
 
@@ -294,8 +299,11 @@ auto Tab::from_json_v1(json::v1::Tab const& json, Session* session, Size size, C
 
     auto panes = di::Vector<Pane*> {};
     result->m_layout_root = TRY(LayoutGroup::from_json_v1(
-        json.pane_layout, size, [&](u64 pane_id, Size const& pane_size) -> di::Result<di::Box<Pane>> {
-            auto pane = result->make_pane(pane_id, args.clone(), pane_size, render_thread);
+        json.pane_layout, size,
+        [&](u64 pane_id, di::Optional<di::Path> cwd, Size const& pane_size) -> di::Result<di::Box<Pane>> {
+            auto cloned_args = args.clone();
+            cloned_args.cwd = di::move(cwd);
+            auto pane = result->make_pane(pane_id, di::move(cloned_args), pane_size, render_thread);
             if (pane) {
                 panes.push_back(pane.value().get());
             }

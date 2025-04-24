@@ -79,7 +79,13 @@ auto create_tab() -> Action {
             [](ActionContext const& context) {
                 context.layout_state.with_lock([&](LayoutState& state) {
                     for (auto& session : state.active_session()) {
-                        (void) state.add_tab(session, { .command = di::clone(context.command) }, context.render_thread);
+                        auto cwd = session.active_pane().and_then(&Pane::current_working_directory);
+                        (void) state.add_tab(session,
+                                             {
+                                                 .command = di::clone(context.command),
+                                                 .cwd = cwd.transform(di::to_owned),
+                                             },
+                                             context.render_thread);
                     }
                 });
                 context.render_thread.request_render();
@@ -523,8 +529,13 @@ auto add_pane(Direction direction) -> Action {
                 context.layout_state.with_lock([&](LayoutState& state) {
                     for (auto& session : state.active_session()) {
                         for (auto& tab : session.active_tab()) {
-                            (void) state.add_pane(session, tab, { .command = di::clone(context.command) }, direction,
-                                                  context.render_thread);
+                            auto cwd = tab.active().and_then(&Pane::current_working_directory);
+                            (void) state.add_pane(session, tab,
+                                                  {
+                                                      .command = di::clone(context.command),
+                                                      .cwd = cwd.transform(di::to_owned),
+                                                  },
+                                                  direction, context.render_thread);
                         }
                     }
                 });

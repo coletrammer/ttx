@@ -4,18 +4,21 @@
 #include "di/reflect/prelude.h"
 #include "di/serialization/json_deserializer.h"
 #include "di/serialization/json_serializer.h"
+#include "di/serialization/percent_encoded.h"
 #include "ttx/direction.h"
 
 namespace ttx::json::v1 {
 struct Pane {
     i64 relative_size { 0 };
     u64 id { 0 };
+    di::Optional<di::PercentEncoded<>> current_working_directory;
 
     auto operator==(Pane const&) const -> bool = default;
 
     constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<Pane>) {
-        return di::make_fields<"json::v1::Pane">(di::field<"relative_size", &Pane::relative_size>,
-                                                 di::field<"id", &Pane::id>);
+        return di::make_fields<"json::v1::Pane">(
+            di::field<"relative_size", &Pane::relative_size>, di::field<"id", &Pane::id>,
+            di::field<"current_working_directory", &Pane::current_working_directory>);
     }
 };
 

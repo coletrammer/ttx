@@ -15,16 +15,16 @@ This project is currently in very early development, so there is a lot of the fe
 yet been implemented. This list focuses only on higher level features, leaving out a lot of the lower level
 details.
 
-- [ ] Platform support
+- [x] Platform support
   - [x] Linux
   - [x] MacOS
-  - [ ] Windows
-- [ ] Basic multiplexing functionality
+  - [ ] Windows (not a priority)
+- [x] Basic multiplexing functionality
   - [x] Layout tree with horizontal and vertical splits
   - [x] Multiple tabs (tmux windows)
-  - [ ] Multiple sessions
-  - [ ] Popup windows
-  - [ ] Support session/window/pane switcher via Fzf popup
+  - [x] Multiple sessions
+  - [x] Popup windows
+  - [x] Support session/window/pane switcher via Fzf popup
 - [ ] Graphics
   - [x] Kitty image protocol (APC passthrough)
     - [x] Proper Unicode handling (specifically 0 width characters)
@@ -35,9 +35,9 @@ details.
 - [ ] Daemon Mode
   - [ ] Terminal sessions are managed by a background process, allowing sessions to be saved after closing the terminal
         or dropping the SSH connection.
-- [ ] Session Persistence Across Reboots
-  - [ ] Manual save/restore (tmux-resurrect)
-  - [ ] Automatic save/restore (tmux-continuum)
+- [-] Session Persistence Across Reboots
+  - [x] Manual save/restore (tmux-resurrect) (partial support (layout+cwd only, not processes or scrollback))
+  - [x] Automatic save/restore (tmux-continuum) (partial support (layout+cwd only, not processes or scrollback))
 - [ ] Remote Machines
   - [ ] Support ephemeral connections via ssh
   - [ ] Support persistent connections via ssh

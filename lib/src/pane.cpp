@@ -18,8 +18,9 @@
 #include "ttx/utf8_stream_decoder.h"
 
 namespace ttx {
-static auto spawn_child(di::Vector<di::TransparentString> command, dius::SyncFile& pty, Size const& size, i32 stdin_fd,
-                        i32 stdout_fd, di::Vector<i32> const& close_fds) -> di::Result<dius::system::ProcessHandle> {
+static auto spawn_child(di::Vector<di::TransparentString> command, di::Optional<di::Path> cwd, dius::SyncFile& pty,
+                        Size const& size, i32 stdin_fd, i32 stdout_fd, di::Vector<i32> const& close_fds)
+    -> di::Result<dius::system::ProcessHandle> {
     auto tty_path = TRY(pty.get_psuedo_terminal_path());
 
 #ifdef __linux__
@@ -30,17 +31,21 @@ static auto spawn_child(di::Vector<di::TransparentString> command, dius::SyncFil
     TRY(pty.set_tty_window_size(size.as_window_size()));
 #endif
 
-    auto result = dius::system::Process(di::move(command))
-                      .with_new_session()
-                      .with_env("TERM"_ts, "xterm-256color"_ts)
-                      .with_env("COLORTERM"_ts, "truecolor"_ts)
-                      .with_env("TERM_PROGRAM"_ts, "ttx"_ts)
-                      .with_file_open(2, di::move(tty_path), dius::OpenMode::ReadWrite)
-                      .with_file_dup(stdin_fd, 0)
-                      .with_file_dup(stdout_fd, 1)
+    auto result = dius::system::Process(di::move(command));
+    if (cwd) {
+        result = di::move(result).with_optional_current_working_directory(di::move(cwd).value());
+    }
+    result = di::move(result)
+                 .with_new_session()
+                 .with_env("TERM"_ts, "xterm-256color"_ts)
+                 .with_env("COLORTERM"_ts, "truecolor"_ts)
+                 .with_env("TERM_PROGRAM"_ts, "ttx"_ts)
+                 .with_file_open(2, di::move(tty_path), dius::OpenMode::ReadWrite)
+                 .with_file_dup(stdin_fd, 0)
+                 .with_file_dup(stdout_fd, 1)
 #ifndef __linux__
-                      .with_tty_window_size(2, size.as_window_size())
-                      .with_controlling_tty(2)
+                 .with_tty_window_size(2, size.as_window_size())
+                 .with_controlling_tty(2)
 #endif
         ;
     for (auto close_fd : close_fds) {
@@ -50,12 +55,14 @@ static auto spawn_child(di::Vector<di::TransparentString> command, dius::SyncFil
     return di::move(result).spawn();
 }
 
-auto Pane::create_from_replay(u64 id, di::PathView replay_path, di::Optional<di::Path> save_state_path,
-                              Size const& size, PaneHooks hooks) -> di::Result<di::Box<Pane>> {
+auto Pane::create_from_replay(u64 id, di::Optional<di::Path> cwd, di::PathView replay_path,
+                              di::Optional<di::Path> save_state_path, Size const& size, PaneHooks hooks)
+    -> di::Result<di::Box<Pane>> {
     auto replay_file = TRY(dius::open_sync(replay_path, dius::OpenMode::Readonly));
 
     // When replaying content, there is no need for any threads, a psudeo terminal or a sub-process.
-    auto pane = di::make_box<Pane>(id, dius::SyncFile(), size, dius::system::ProcessHandle(), di::move(hooks));
+    auto pane =
+        di::make_box<Pane>(id, di::move(cwd), dius::SyncFile(), size, dius::system::ProcessHandle(), di::move(hooks));
 
     // Allow the terminal to use CSI 8; height; width; t. Normally this would be ignored since application
     // shouldn't control this.
@@ -118,11 +125,12 @@ auto Pane::create_from_replay(u64 id, di::PathView replay_path, di::Optional<di:
 
 auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<di::Box<Pane>> {
     if (args.mock) {
-        return create_mock(id);
+        return create_mock(id, di::move(args.cwd));
     }
 
     if (args.replay_path) {
-        return create_from_replay(id, *args.replay_path, di::move(args.save_state_path), size, di::move(args.hooks));
+        return create_from_replay(id, di::move(args.cwd), *args.replay_path, di::move(args.save_state_path), size,
+                                  di::move(args.hooks));
     }
 
     auto capture_file = di::Optional<dius::SyncFile> {};
@@ -155,8 +163,10 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
         close_fds.push_back(di::get<1>(read_pipes.value()).file_descriptor());
     }
 
-    auto process = TRY(spawn_child(di::move(args.command), pty_controller, size, stdin_fd, stdout_fd, close_fds));
-    auto pane = di::make_box<Pane>(id, di::move(pty_controller), size, process, di::move(args.hooks));
+    auto process = TRY(
+        spawn_child(di::move(args.command), args.cwd.clone(), pty_controller, size, stdin_fd, stdout_fd, close_fds));
+    auto pane =
+        di::make_box<Pane>(id, di::move(args.cwd), di::move(pty_controller), size, process, di::move(args.hooks));
 
     pane->m_process_thread = TRY(dius::Thread::create([&pane = *pane] mutable {
         auto guard = di::ScopeExit([&] {
@@ -217,7 +227,9 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
                                           pane.m_hooks.did_selection(ev.data.span());
                                       }
                                   },
-                                  [&](terminal::OSC7&&) {}),
+                                  [&](terminal::OSC7&& osc7) {
+                                      pane.update_cwd(di::move(osc7));
+                                  }),
                               di::move(event));
                 }
 
@@ -269,10 +281,10 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
     return pane;
 }
 
-auto Pane::create_mock(u64 id) -> di::Box<Pane> {
+auto Pane::create_mock(u64 id, di::Optional<di::Path> cwd) -> di::Box<Pane> {
     auto fake_psuedo_terminal = dius::SyncFile();
-    return di::make_box<Pane>(id, di::move(fake_psuedo_terminal), Size(1, 1), dius::system::ProcessHandle(),
-                              PaneHooks {});
+    return di::make_box<Pane>(id, di::move(cwd), di::move(fake_psuedo_terminal), Size(1, 1),
+                              dius::system::ProcessHandle(), PaneHooks {});
 }
 
 Pane::~Pane() {
@@ -556,6 +568,24 @@ void Pane::soft_reset() {
     m_terminal.with_lock([&](Terminal& terminal) {
         terminal.soft_reset();
     });
+}
+
+void Pane::update_cwd(terminal::OSC7&& path_with_hostname) {
+    // First, validate the host name. This ensures we don't mistakenly
+    // set the cwd in sesssions connected over ssh.
+    auto expected_hostname = dius::system::get_hostname();
+    if (path_with_hostname.hostname != expected_hostname) {
+        return;
+    }
+
+    if (path_with_hostname.path == m_cwd) {
+        return;
+    }
+
+    m_cwd = di::move(path_with_hostname).path;
+    if (m_hooks.did_update_cwd) {
+        m_hooks.did_update_cwd();
+    }
 }
 
 void Pane::exit() {
