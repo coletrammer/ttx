@@ -48,7 +48,7 @@ auto OSC8::serialize() const -> di::String {
                              return *di::present("{}={}"_sv, key, value);
                          }) |
                          di::join_with(U':') | di::to<di::String>();
-    return *di::present("\33]8;{};{}\033\\"_sv, params_string, uri);
+    return *di::present("\033]8;{};{}\033\\"_sv, params_string, uri);
 }
 
 auto OSC8::to_hyperlink(di::FunctionRef<di::String(di::Optional<di::StringView>)> make_id) const

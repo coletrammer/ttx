@@ -7,6 +7,9 @@
 #include "ttx/terminal/hyperlink.h"
 
 namespace ttx::terminal {
+/// @brief Represents a terminal hyperlink escape sequence
+///
+/// This is specified [here](https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda).
 struct OSC8 {
     di::TreeMap<di::String, di::String> params;
     di::String uri;
