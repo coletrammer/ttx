@@ -13,7 +13,7 @@
     };
 
     dius = {
-      url = "github:coletrammer/dius";
+      url = "github:coletrammer/dius/unicode";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.di.follows = "di";
       inputs.flake-parts.follows = "flake-parts";
