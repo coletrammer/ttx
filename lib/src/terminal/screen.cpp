@@ -394,7 +394,7 @@ void Screen::delete_characters(u32 count) {
     row.text.erase(text_start.value(), text_end.value());
 
     // Mark any cells which have moved as dirty.
-    for (auto& cell : row.cells | di::drop(m_cursor.col + max_to_delete)) {
+    for (auto& cell : row.cells | di::drop(m_cursor.col)) {
         cell.stale = false;
     }
 
@@ -662,8 +662,8 @@ void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
 }
 
 void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode) {
-    // Sanity check - if the text size is larger than 2^15, ignore.
-    if (text.size_bytes() > di::NumericLimits<u16>::max / 2) {
+    // Sanity check - if the text size is too large, ignore.
+    if (text.size_bytes() > Cell::max_text_size) {
         return;
     }
 

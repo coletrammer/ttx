@@ -25,7 +25,7 @@ void ScrollBack::add_rows(RowGroup& from, usize row_index, usize row_count) {
 
         auto cells_taken = to.group.transfer_from(from, row_index, to.group.total_rows(), rows_to_take);
 
-        row_index += rows_to_take;
+        // NOTE: row index remains unchanged because the "old" rows have now been deleted.
         row_count -= rows_to_take;
         m_total_rows += rows_to_take;
         to.cell_count += cells_taken;
