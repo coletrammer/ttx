@@ -119,6 +119,7 @@ private:
     di::Atomic<bool> m_capture { true };
     di::Optional<MousePosition> m_last_mouse_position;
     dius::SyncFile m_pty_controller;
+    di::Function<void()> m_restore_termios;
     di::Synchronized<Terminal> m_terminal;
     dius::system::ProcessHandle m_process;
 

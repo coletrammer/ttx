@@ -143,6 +143,9 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
     }
 
     auto pty_controller = TRY(dius::open_psuedo_terminal_controller(dius::OpenMode::ReadWrite));
+#ifdef __linux__
+    auto restore_termios = TRY(pty_controller.get_termios_restorer());
+#endif
 
     // This logic allows piping input and output from the shell command. This ends up being very complicated...
     auto stdin_fd = 2;
@@ -167,6 +170,9 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
         spawn_child(di::move(args.command), args.cwd.clone(), pty_controller, size, stdin_fd, stdout_fd, close_fds));
     auto pane =
         di::make_box<Pane>(id, di::move(args.cwd), di::move(pty_controller), size, process, di::move(args.hooks));
+#ifdef __linux__
+    pane->m_restore_termios = di::move(restore_termios);
+#endif
 
     pane->m_process_thread = TRY(dius::Thread::create([&pane = *pane] mutable {
         auto guard = di::ScopeExit([&] {
@@ -568,6 +574,10 @@ void Pane::soft_reset() {
     m_terminal.with_lock([&](Terminal& terminal) {
         terminal.soft_reset();
     });
+
+    if (m_restore_termios) {
+        m_restore_termios();
+    }
 }
 
 void Pane::update_cwd(terminal::OSC7&& path_with_hostname) {
