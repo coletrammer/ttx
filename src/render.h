@@ -53,6 +53,7 @@ public:
 private:
     void render_thread();
     void do_render(Renderer& renderer);
+    void render_status_bar(LayoutState const& state, Renderer& renderer);
 
     struct PendingStatusMessage {
         di::String message;

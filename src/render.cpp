@@ -1,5 +1,7 @@
 #include "render.h"
 
+#include "dius/system/process.h"
+#include "input_mode.h"
 #include "layout_state.h"
 #include "ttx/graphics_rendition.h"
 #include "ttx/layout.h"
@@ -177,6 +179,114 @@ struct Render {
     }
 };
 
+void RenderThread::render_status_bar(LayoutState const& state, Renderer& renderer) {
+    auto const dark_bg = Color(0x11, 0x11, 0x1b);
+    auto const light_bg = Color(0x31, 0x32, 0x44);
+    auto const dark_fg = Color(0x1e, 0x1e, 0x2e);
+    auto const active_color = Color(Color::Palette::Yellow);
+    auto const inactive_color = Color(Color::Palette::Blue);
+    auto const separator = U'█';
+    for (auto& session : state.active_session()) {
+        auto offset = 0u;
+        renderer.clear_row(0, GraphicsRendition { .bg = dark_bg });
+
+        {
+            auto color = [&] {
+                switch (m_input_status.mode) {
+                    case ttx::InputMode::Switch:
+                        return Color(Color::Palette::Yellow);
+                    case ttx::InputMode::Insert:
+                        return Color(Color::Palette::Blue);
+                    case ttx::InputMode::Normal:
+                        return Color(Color::Palette::Green);
+                    case ttx::InputMode::Resize:
+                        return Color(Color::Palette::Red);
+                }
+                return Color(Color::Palette::Blue);
+            }();
+            renderer.put_text(separator, 0, offset++, { .fg = color, .bg = color });
+            renderer.put_text(di::to_string(m_input_status.mode).view(), 0, offset,
+                              GraphicsRendition {
+                                  .fg = dark_fg,
+                                  .bg = color,
+                                  .font_weight = FontWeight::Bold,
+                              });
+            offset += 6;
+            renderer.put_text(separator, 0, offset++, { .fg = color, .bg = color });
+            offset += 1;
+        }
+
+        if (!m_pending_status_message) {
+            for (auto [i, tab] : di::enumerate(session.tabs())) {
+                auto color = inactive_color;
+                auto sign = U' ';
+                if (tab.get() == state.active_tab().data()) {
+                    color = active_color;
+                    if (tab->full_screen_pane()) {
+                        sign = U'󰁌';
+                    } else {
+                        sign = U'󰖯';
+                    }
+                }
+
+                auto num_string = di::to_string(i + 1);
+                renderer.put_text(separator, 0, offset++, { .fg = color, .bg = color });
+                renderer.put_text(num_string.view(), 0, offset, { .fg = dark_fg, .bg = color });
+                offset += num_string.size_bytes();
+                renderer.put_text(separator, 0, offset++, { .fg = color, .bg = color });
+                renderer.put_text(separator, 0, offset++, { .fg = light_bg, .bg = light_bg });
+                renderer.put_text(tab->name(), 0, offset, { .bg = light_bg });
+                offset += tab->name().size_bytes();
+                if (sign != ' ') {
+                    renderer.put_text(' ', 0, offset++, { .bg = light_bg });
+                    renderer.put_text(sign, 0, offset++, { .bg = light_bg });
+                    renderer.put_text(' ', 0, offset++, { .bg = light_bg });
+                }
+                renderer.put_text(separator, 0, offset++, { .fg = light_bg, .bg = light_bg });
+                offset++;
+            }
+        } else {
+            renderer.put_text(m_pending_status_message->message.view(), 0, offset, GraphicsRendition { .bg = dark_bg });
+        }
+
+        // TODO: horizontal scrolling on overflow
+
+        // TODO: this code isn't correct if the session name contains any multi-code point grapheme clusters.
+        // TODO: handle case where session name is longer than the status bar width.
+        {
+            // 5 padding cols (including icon) per section.
+            auto hostname = dius::system::get_hostname().value_or("unknown"_ts);
+            auto rhs_size = 5_usize * 2 + session.name().size_bytes() + hostname.size();
+            if (rhs_size >= state.size().cols || state.size().cols - rhs_size < offset) {
+                return;
+            }
+            offset = state.size().cols - rhs_size;
+
+            {
+                auto color = Color(Color::Palette::Green);
+                renderer.put_text(separator, 0, offset++, { .fg = color, .bg = color });
+                renderer.put_text(U'', 0, offset++, { .fg = dark_fg, .bg = color });
+                renderer.put_text(' ', 0, offset++, { .bg = color });
+                renderer.put_text(separator, 0, offset++, { .fg = light_bg, .bg = light_bg });
+                renderer.put_text(session.name().view(), 0, offset, { .bg = light_bg });
+                offset += session.name().size_bytes();
+                renderer.put_text(separator, 0, offset++, { .fg = light_bg, .bg = light_bg });
+            }
+
+            {
+                auto color = Color(Color::Palette::Magenta);
+                renderer.put_text(separator, 0, offset++, { .fg = color, .bg = color });
+                renderer.put_text(U'󰒋', 0, offset++, { .fg = dark_fg, .bg = color });
+                renderer.put_text(' ', 0, offset++, { .bg = color });
+                renderer.put_text(separator, 0, offset++, { .fg = light_bg, .bg = light_bg });
+                renderer.put_text(di::to_string(hostname).view(), 0, offset, { .bg = light_bg });
+                offset += hostname.size_bytes();
+                renderer.put_text(separator, 0, offset++, { .fg = light_bg, .bg = light_bg });
+            }
+        }
+    }
+}
+
 void RenderThread::do_render(Renderer& renderer) {
     m_layout_state.with_lock([&](LayoutState& state) {
         // Ignore if there is no layout.
@@ -195,38 +305,7 @@ void RenderThread::do_render(Renderer& renderer) {
 
         // Status bar.
         if (!state.hide_status_bar()) {
-            for (auto& session : state.active_session()) {
-                renderer.clear_row(0);
-                renderer.put_text(di::to_string(m_input_status.mode).view(), 0, 0,
-                                  GraphicsRendition {
-                                      .font_weight = FontWeight::Bold,
-                                  });
-                if (!m_pending_status_message) {
-                    auto text = di::enumerate(session.tabs()) |
-                                di::transform(di::uncurry([&](usize i, di::Box<Tab> const& tab) {
-                                    auto sign = U' ';
-                                    if (tab.get() == active_tab.data()) {
-                                        if (tab->full_screen_pane()) {
-                                            sign = U'+';
-                                        } else {
-                                            sign = U'*';
-                                        }
-                                    }
-                                    return *di::present("[{}{} {}]"_sv, sign, i + 1, tab->name());
-                                })) |
-                                di::join_with(U' ') | di::to<di::String>();
-                    renderer.put_text(text.view(), 0, 7);
-                } else {
-                    renderer.put_text(m_pending_status_message->message.view(), 0, 7);
-                }
-
-                // TODO: horizontal scrolling on overflow
-
-                // TODO: this code isn't correct if the session name contains any multi-code point grapheme clusters.
-                // TODO: handle case where session name is longer than the status bar width.
-                auto session_text = *di::present("[{}]"_sv, session.name());
-                renderer.put_text(session_text.view(), 0, state.size().cols - di::distance(session_text));
-            }
+            render_status_bar(state, renderer);
         }
 
         auto cursor = di::Optional<RenderedCursor> {};
