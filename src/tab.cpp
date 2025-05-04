@@ -249,6 +249,7 @@ auto Tab::make_pane(u64 pane_id, CreatePaneArgs args, Size const& size, RenderTh
             auto base64 = di::Base64View(data);
             auto string = *di::present("\033]52;;{}\033\\"_sv, base64);
             render_thread.push_event(WriteString(di::move(string)));
+            render_thread.status_message("Copied text"_s);
         };
     }
     if (!args.hooks.apc_passthrough) {
