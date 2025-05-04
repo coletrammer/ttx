@@ -1,5 +1,6 @@
 #include "input.h"
 
+#include "dius/print.h"
 #include "input_mode.h"
 #include "key_bind.h"
 #include "layout_state.h"
@@ -10,6 +11,7 @@
 #include "ttx/key_event.h"
 #include "ttx/layout.h"
 #include "ttx/modifiers.h"
+#include "ttx/mouse.h"
 #include "ttx/mouse_event.h"
 #include "ttx/paste_event.h"
 #include "ttx/terminal_input.h"
@@ -119,6 +121,16 @@ void InputThread::handle_event(KeyEvent const& event) {
 
 void InputThread::handle_event(MouseEvent const& event) {
     m_layout_state.with_lock([&](LayoutState& state) {
+        // Check if the event intersects with the status bar.
+        if (!state.hide_status_bar() && event.position().in_cells().y() == 0) {
+            return;
+        }
+
+        // Check if we should clear the drag origin (we got anything other than a mouse move with left held).
+        if (event.type() != MouseEventType::Move || event.button() != MouseButton::Left) {
+            m_drag_origin = {};
+        }
+
         if (!state.active_tab()) {
             return;
         }
@@ -142,6 +154,41 @@ void InputThread::handle_event(MouseEvent const& event) {
             }
         }
 
+        // Check if the user is dragging the pane edge.
+        if (m_drag_origin) {
+            // The intended amount the user wants to move is determined by the amount of motion between the drag
+            // origin and the current position. Each mouse event is consolidated into single ticks where the cursor
+            // only moves by 1 cell at a time.
+            auto current_position = m_drag_origin.value();
+            auto end_position = ev.position().in_cells();
+
+            auto do_drag = [&](MouseCoordinate const& coordinate) {
+                if (handle_drag(state, coordinate)) {
+                    state.layout();
+                    state.layout_did_update();
+                }
+            };
+
+            while (current_position.y() < end_position.y()) {
+                current_position = { current_position.x(), current_position.y() + 1 };
+                do_drag(current_position);
+            }
+            while (current_position.y() > end_position.y()) {
+                current_position = { current_position.x(), current_position.y() - 1 };
+                do_drag(current_position);
+            }
+            while (current_position.x() < end_position.x()) {
+                current_position = { current_position.x() + 1, current_position.y() };
+                do_drag(current_position);
+            }
+            while (current_position.x() > end_position.x()) {
+                current_position = { current_position.x() - 1, current_position.y() };
+                do_drag(current_position);
+            }
+            ASSERT_EQ(current_position, end_position);
+            return;
+        }
+
         // Check if the event interests with any pane.
         for (auto const& entry :
              tab.layout_tree()->hit_test(ev.position().in_cells().y(), ev.position().in_cells().x())) {
@@ -158,6 +205,12 @@ void InputThread::handle_event(MouseEvent const& event) {
                     m_render_thread.request_render();
                 }
             }
+            return;
+        }
+
+        // Check if the user is attempting to drag an edge.
+        if (ev.type() == MouseEventType::Press && ev.button() == MouseButton::Left) {
+            m_drag_origin = ev.position().in_cells();
         }
     });
 }
@@ -176,5 +229,42 @@ void InputThread::handle_event(PasteEvent const& event) {
             pane->event(event);
         }
     });
+}
+
+auto InputThread::handle_drag(LayoutState& state, MouseCoordinate const& coordinate) -> bool {
+    auto _ = di::ScopeExit([&] {
+        m_drag_origin = coordinate;
+    });
+
+    auto y_amount = i32(m_drag_origin.value().y()) - i32(coordinate.y());
+    auto x_amount = i32(m_drag_origin.value().x()) - i32(coordinate.x());
+    if (y_amount == 0 && x_amount == 0) {
+        return false;
+    }
+    ASSERT(x_amount == 0 || y_amount == 0);
+
+    auto& tab = state.active_tab().value();
+    auto direct_entry = tab.layout_tree()->hit_test(coordinate.y(), coordinate.x());
+    for (auto const& entry : direct_entry) {
+        if (di::abs(y_amount) > 0 &&
+            (m_drag_origin.value().y() == entry.row - 1 || m_drag_origin.value().y() == entry.row + entry.size.rows)) {
+            auto y_edge = m_drag_origin.value().y() <= entry.row ? ResizeDirection::Top : ResizeDirection::Bottom;
+            if (y_edge == ResizeDirection::Bottom) {
+                y_amount *= -1;
+            }
+            return tab.layout_group().resize(*tab.layout_tree(), entry.pane, y_edge, y_amount);
+        }
+
+        if (di::abs(x_amount) > 0 &&
+            (m_drag_origin.value().x() == entry.col - 1 || m_drag_origin.value().x() == entry.col + entry.size.cols)) {
+            auto x_edge = m_drag_origin.value().x() <= entry.col ? ResizeDirection::Left : ResizeDirection::Right;
+            if (x_edge == ResizeDirection::Right) {
+                x_amount *= -1;
+            }
+            return tab.layout_group().resize(*tab.layout_tree(), entry.pane, x_edge, x_amount);
+        }
+    }
+
+    return false;
 }
 }

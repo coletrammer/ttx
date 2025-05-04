@@ -7,6 +7,7 @@
 #include "save_layout.h"
 #include "ttx/focus_event.h"
 #include "ttx/key_event.h"
+#include "ttx/mouse.h"
 #include "ttx/paste_event.h"
 
 namespace ttx {
@@ -35,10 +36,13 @@ private:
     void handle_event(FocusEvent const& event);
     void handle_event(PasteEvent const& event);
 
+    auto handle_drag(LayoutState& state, MouseCoordinate const& coordinate) -> bool;
+
     InputMode m_mode { InputMode::Insert };
     di::Vector<KeyBind> m_key_binds;
     di::Vector<di::TransparentString> m_command;
     di::Atomic<bool> m_done { false };
+    di::Optional<MouseCoordinate> m_drag_origin;
     di::Synchronized<LayoutState>& m_layout_state;
     RenderThread& m_render_thread;
     SaveLayoutThread& m_save_layout_thread;
