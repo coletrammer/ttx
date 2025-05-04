@@ -60,9 +60,8 @@ struct SavedCursor {
 /// the graphics rendition, hyperlink, and multi cell info indirectly referenced by the
 /// Cell class.
 ///
-/// When the screen scrolls due to autowrapping, when scroll back is enabled scrolled
-/// rows will be moved to a separate vector of rows. The caller is expected to
-/// evenually migrate these rows into a different storage location.
+/// When the screen scrolls due to autowrapping, and scroll back is enabled, scrolled
+/// rows will be moved to the internal scroll back object.
 class Screen {
 public:
     enum class ScrollBackEnabled { No, Yes };
@@ -137,9 +136,15 @@ public:
     void visual_scroll_down();
     void visual_scroll_to_bottom();
 
+    enum class BeginSelectionMode {
+        Empty,
+        Word,
+        Line,
+    };
+
     auto selection() const -> di::Optional<Selection> { return m_selection; }
     void clear_selection();
-    void begin_selection(SelectionPoint const& point);
+    void begin_selection(SelectionPoint const& point, BeginSelectionMode mode);
     void update_selection(SelectionPoint const& point);
     auto in_selection(SelectionPoint const& point) const -> bool;
     auto selected_text() const -> di::String;
