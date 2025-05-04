@@ -20,6 +20,7 @@ static void serialize() {
         MouseProtocol protocol { MouseProtocol::AnyEvent };
         di::Optional<MousePosition> prev_event_position {};
         MouseScrollProtocol scroll_protocol {};
+        ShiftEscapeOptions shift_escape_options { ShiftEscapeOptions::AlwaysForward };
         Size size {};
     };
 
@@ -208,6 +209,7 @@ static void serialize() {
             MouseProtocol::AnyEvent,
             {},
             {},
+            {},
             { 100, 100, 1000, 1600 },
         },
 
@@ -290,11 +292,22 @@ static void serialize() {
                MousePosition({ 0, 0 }, MouseCoordinate { 6, 6 }) },
         Case { MouseEvent::press(MouseButton::Left, MousePosition({ 0, 0 })), "\033[<0;1;1M"_tsv, MouseEncoding::SGR,
                MouseProtocol::AnyEvent, MousePosition({ 0, 0 }) },
+
+        // Shift escape options (mouse shift events are in default mode)
+        Case { MouseEvent::press(MouseButton::Left, MousePosition({ 0, 0 }), Modifiers::Shift),
+               {},
+               MouseEncoding::SGR,
+               MouseProtocol::AnyEvent,
+               MousePosition({ 0, 0 }),
+               {},
+               ShiftEscapeOptions::OverrideApplication },
+
     };
 
     for (auto const& test_case : cases) {
         auto result = serialize_mouse_event(test_case.event, test_case.protocol, test_case.encoding,
-                                            test_case.prev_event_position, test_case.scroll_protocol, test_case.size);
+                                            test_case.prev_event_position, test_case.scroll_protocol,
+                                            test_case.shift_escape_options, test_case.size);
         ASSERT_EQ(test_case.expected, result);
     }
 }

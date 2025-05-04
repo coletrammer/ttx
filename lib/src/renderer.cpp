@@ -24,6 +24,10 @@ auto Renderer::setup(dius::SyncFile& output) -> di::Result<> {
     di::writer_print<di::String::Encoding>(output, "\033[>31u"_sv);
     m_cleanup.push_back("\033[<u"_s);
 
+    // Setup - capture mouse events with shift held
+    di::writer_print<di::String::Encoding>(output, "\033[>1s"_sv);
+    m_cleanup.push_back("\033[>0s"_s);
+
     // Setup - capture all mouse events and use SGR mosue reporting.
     di::writer_print<di::String::Encoding>(output, "\033[?1003h\033[?1006h"_sv);
     m_cleanup.push_back("\033[?1006l\033[?1003l"_s);

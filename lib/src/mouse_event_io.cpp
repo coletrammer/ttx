@@ -139,7 +139,14 @@ static auto serialize_as_sgr(MouseEventType type, MouseButton button, MouseCoord
 
 auto serialize_mouse_event(MouseEvent const& event, MouseProtocol protocol, MouseEncoding encoding,
                            di::Optional<MousePosition> prev_event_position, MouseScrollProtocol const& scroll_protocol,
-                           Size const& size) -> di::Optional<di::TransparentString> {
+                           ShiftEscapeOptions shift_escape_options, Size const& size)
+    -> di::Optional<di::TransparentString> {
+    // Process shift escape options. By default, we don't report  events when shift is held.
+    if (!!(event.modifiers() & Modifiers::Shift) && (shift_escape_options == ShiftEscapeOptions::NeverForward ||
+                                                     shift_escape_options == ShiftEscapeOptions::OverrideApplication)) {
+        return {};
+    }
+
     // Check if mouse scroll protocol applies. This means the base mouse protocol woulnt't report the scroll event.
     if ((protocol == MouseProtocol::None || protocol == MouseProtocol::X10) && event.is_vertical_scroll() &&
         event.type() == MouseEventType::Press) {

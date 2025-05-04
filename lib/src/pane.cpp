@@ -397,7 +397,7 @@ auto Pane::event(KeyEvent const& event) -> bool {
 auto Pane::event(MouseEvent const& event) -> bool {
     auto consecutive_clicks = m_mouse_click_tracker.track(event);
 
-    auto [application_cursor_keys_mode, alternate_scroll_mode, mouse_protocol, mouse_encoding,
+    auto [application_cursor_keys_mode, alternate_scroll_mode, mouse_protocol, mouse_encoding, shift_escape_options,
           in_alternate_screen_buffer, window_size, row_offset, selection] =
         m_terminal.with_lock([&](Terminal& terminal) {
             return di::Tuple {
@@ -405,6 +405,7 @@ auto Pane::event(MouseEvent const& event) -> bool {
                 terminal.alternate_scroll_mode(),
                 terminal.mouse_protocol(),
                 terminal.mouse_encoding(),
+                terminal.shift_escape_options(),
                 terminal.in_alternate_screen_buffer(),
                 terminal.size(),
                 terminal.visual_scroll_offset(),
@@ -412,9 +413,10 @@ auto Pane::event(MouseEvent const& event) -> bool {
             };
         });
 
-    auto serialized_event = serialize_mouse_event(
-        event, mouse_protocol, mouse_encoding, m_last_mouse_position,
-        { alternate_scroll_mode, application_cursor_keys_mode, in_alternate_screen_buffer }, window_size);
+    auto serialized_event =
+        serialize_mouse_event(event, mouse_protocol, mouse_encoding, m_last_mouse_position,
+                              { alternate_scroll_mode, application_cursor_keys_mode, in_alternate_screen_buffer },
+                              shift_escape_options, window_size);
     if (serialized_event.has_value()) {
         (void) m_pty_controller.write_exactly(di::as_bytes(serialized_event.value().span()));
         return true;
