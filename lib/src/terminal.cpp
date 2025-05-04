@@ -136,6 +136,10 @@ void Terminal::on_parser_result(CSI const& csi) {
                 csi_da2(csi.params);
                 return;
             }
+            case 's': {
+                csi_xshiftescape(csi.params);
+                return;
+            }
             case 'u': {
                 csi_push_key_reporting_flags(csi.params);
                 return;
@@ -1014,6 +1018,16 @@ void Terminal::csi_decstr(Params const&) {
     soft_reset();
 }
 
+// Shift-escape options -
+// https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h4-Functions-using-CSI-_-ordered-by-the-final-character-lparen-s-rparen:CSI-gt-Ps-s.1DBB
+void Terminal::csi_xshiftescape(Params const& params) {
+    auto command = params.get(0, 0);
+    if (command >= 3) {
+        return;
+    }
+    m_shift_escape_options = ShiftEscapeOptions(command);
+}
+
 // Window manipulation -
 // https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h4-Functions-using-CSI-_-ordered-by-the-final-character-lparen-s-rparen:CSI-Ps;Ps;Ps-t.1EB0
 void Terminal::csi_xtwinops(Params const& params) {
@@ -1357,6 +1371,11 @@ auto Terminal::state_as_escape_sequences() const -> di::String {
         // Bracketed paste
         if (m_bracketed_paste_mode == BracketedPasteMode::Enabled) {
             di::writer_print<di::String::Encoding>(writer, "\033[?2004h"_sv);
+        }
+
+        // Shift escape options
+        if (m_shift_escape_options != ShiftEscapeOptions::OverrideApplication) {
+            di::writer_print<di::String::Encoding>(writer, "\033[>{}s"_sv, i32(m_shift_escape_options));
         }
 
         // Current working directory (OSC 7)

@@ -77,6 +77,7 @@ public:
     auto mouse_encoding() const -> MouseEncoding { return m_mouse_encoding; }
     auto in_alternate_screen_buffer() const -> bool { return !!m_alternate_screen; }
     auto focus_event_mode() const -> FocusEventMode { return m_focus_event_mode; }
+    auto shift_escape_options() const -> ShiftEscapeOptions { return m_shift_escape_options; }
 
     void reset_mouse_reporting() { m_mouse_protocol = MouseProtocol::None; }
 
@@ -170,6 +171,7 @@ private:
     void csi_scosc(Params const& params);
     void csi_scorc(Params const& params);
     void csi_decstr(Params const& params);
+    void csi_xshiftescape(Params const& params);
     void csi_xtwinops(Params const& params);
 
     void csi_set_key_reporting_flags(Params const& params);
@@ -204,6 +206,7 @@ private:
     MouseProtocol m_mouse_protocol { MouseProtocol::None };
     MouseEncoding m_mouse_encoding { MouseEncoding::X10 };
     FocusEventMode m_focus_event_mode { FocusEventMode::Disabled };
+    ShiftEscapeOptions m_shift_escape_options { ShiftEscapeOptions::OverrideApplication };
 
     BracketedPasteMode m_bracketed_paste_mode { false };
     di::Optional<terminal::OSC7> m_cwd;

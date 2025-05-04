@@ -22,6 +22,23 @@ constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<AlternateScrollM
                                                        di::enumerator<"Enabled", Enabled>);
 }
 
+// Shift escape options - depending on the mode, the terminal will not forward mouse events
+// with shift held to the application.
+enum class ShiftEscapeOptions {
+    OverrideApplication,  // Application mouse mode is ignored when shift is held.
+    ConditionallyForward, // We treat this as always forwarding to the application.
+    AlwaysForward,        // Exists for compatibility with xterm, treated the same as conditional.
+    NeverForward,         // Exists for compatibility with xterm, treated the same as override.
+};
+
+constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<ShiftEscapeOptions>) {
+    using enum ShiftEscapeOptions;
+    return di::make_enumerators<"ShiftEscapeOptions">(di::enumerator<"OverrideApplication", OverrideApplication>,
+                                                      di::enumerator<"ConditionallyForward", ConditionallyForward>,
+                                                      di::enumerator<"AlwaysForward", AlwaysForward>,
+                                                      di::enumerator<"NeverForward", NeverForward>);
+}
+
 // Mouse protocol - determines which mouse events are forwarded to the application.
 //   The enum values are determined by the terminal mode which enables them.
 enum class MouseProtocol {
@@ -66,7 +83,8 @@ struct MouseScrollProtocol {
 
 auto serialize_mouse_event(MouseEvent const& event, MouseProtocol protocol, MouseEncoding encoding,
                            di::Optional<MousePosition> prev_event_position, MouseScrollProtocol const& scroll_protocol,
-                           Size const& size) -> di::Optional<di::TransparentString>;
+                           ShiftEscapeOptions shift_escape_options, Size const& size)
+    -> di::Optional<di::TransparentString>;
 auto mouse_event_from_csi(CSI const& csi, di::Optional<Size const&> size_if_using_pixels = {})
     -> di::Optional<MouseEvent>;
 }
