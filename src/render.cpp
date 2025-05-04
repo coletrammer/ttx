@@ -1,6 +1,7 @@
 #include "render.h"
 
 #include "layout_state.h"
+#include "ttx/graphics_rendition.h"
 #include "ttx/layout.h"
 
 namespace ttx {
@@ -87,6 +88,11 @@ void RenderThread::render_thread() {
                 if (should_exit) {
                     return;
                 }
+            } else if (auto ev = di::get_if<StatusMessage>(event)) {
+                m_pending_status_message = {
+                    di::move(ev->message),
+                    dius::SteadyClock::now() + ev->duration,
+                };
             } else if (auto ev = di::get_if<InputStatus>(event)) {
                 m_input_status = *ev;
             } else if (auto ev = di::get_if<WriteString>(event)) {
@@ -103,6 +109,11 @@ void RenderThread::render_thread() {
         if (do_setup) {
             (void) renderer.setup(dius::stdin);
             do_setup = false;
+        }
+
+        // Maybe expire pending status message.
+        if (m_pending_status_message && dius::SteadyClock::now() > m_pending_status_message.value().expiration) {
+            m_pending_status_message.reset();
         }
 
         // Do render.
@@ -185,25 +196,29 @@ void RenderThread::do_render(Renderer& renderer) {
         // Status bar.
         if (!state.hide_status_bar()) {
             for (auto& session : state.active_session()) {
-                auto text = di::enumerate(session.tabs()) |
-                            di::transform(di::uncurry([&](usize i, di::Box<Tab> const& tab) {
-                                auto sign = U' ';
-                                if (tab.get() == active_tab.data()) {
-                                    if (tab->full_screen_pane()) {
-                                        sign = U'+';
-                                    } else {
-                                        sign = U'*';
-                                    }
-                                }
-                                return *di::present("[{}{} {}]"_sv, sign, i + 1, tab->name());
-                            })) |
-                            di::join_with(U' ') | di::to<di::String>();
                 renderer.clear_row(0);
                 renderer.put_text(di::to_string(m_input_status.mode).view(), 0, 0,
                                   GraphicsRendition {
                                       .font_weight = FontWeight::Bold,
                                   });
-                renderer.put_text(text.view(), 0, 7);
+                if (!m_pending_status_message) {
+                    auto text = di::enumerate(session.tabs()) |
+                                di::transform(di::uncurry([&](usize i, di::Box<Tab> const& tab) {
+                                    auto sign = U' ';
+                                    if (tab.get() == active_tab.data()) {
+                                        if (tab->full_screen_pane()) {
+                                            sign = U'+';
+                                        } else {
+                                            sign = U'*';
+                                        }
+                                    }
+                                    return *di::present("[{}{} {}]"_sv, sign, i + 1, tab->name());
+                                })) |
+                                di::join_with(U' ') | di::to<di::String>();
+                    renderer.put_text(text.view(), 0, 7);
+                } else {
+                    renderer.put_text(m_pending_status_message->message.view(), 0, 7);
+                }
 
                 // TODO: horizontal scrolling on overflow
 

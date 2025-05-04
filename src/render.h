@@ -27,7 +27,12 @@ struct WriteString {
     di::String string;
 };
 
-using RenderEvent = di::Variant<Size, PaneExited, InputStatus, WriteString, DoRender, Exit>;
+struct StatusMessage {
+    di::String message;
+    dius::SteadyClock::Duration duration {};
+};
+
+using RenderEvent = di::Variant<Size, PaneExited, InputStatus, WriteString, StatusMessage, DoRender, Exit>;
 
 class RenderThread {
 public:
@@ -41,12 +46,21 @@ public:
     void push_event(RenderEvent event);
     void request_render() { push_event(DoRender {}); }
     void request_exit() { push_event(Exit {}); }
+    void status_message(di::String message, dius::SteadyClock::Duration duration = di::Seconds(1)) {
+        push_event(StatusMessage { di::move(message), duration });
+    }
 
 private:
     void render_thread();
     void do_render(Renderer& renderer);
 
+    struct PendingStatusMessage {
+        di::String message;
+        dius::SteadyClock::TimePoint expiration {};
+    };
+
     InputStatus m_input_status;
+    di::Optional<PendingStatusMessage> m_pending_status_message;
     di::Synchronized<di::Queue<RenderEvent>> m_events;
     dius::ConditionVariable m_condition;
     di::Synchronized<LayoutState>& m_layout_state;
