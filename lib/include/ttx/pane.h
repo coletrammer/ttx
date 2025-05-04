@@ -13,6 +13,7 @@
 #include "ttx/direction.h"
 #include "ttx/key_event.h"
 #include "ttx/mouse.h"
+#include "ttx/mouse_click_tracker.h"
 #include "ttx/paste_event.h"
 #include "ttx/renderer.h"
 #include "ttx/size.h"
@@ -118,6 +119,7 @@ private:
     di::Atomic<bool> m_done { false };
     di::Atomic<bool> m_capture { true };
     di::Optional<MousePosition> m_last_mouse_position;
+    MouseClickTracker m_mouse_click_tracker { 3 };
     dius::SyncFile m_pty_controller;
     di::Function<void()> m_restore_termios;
     di::Synchronized<Terminal> m_terminal;

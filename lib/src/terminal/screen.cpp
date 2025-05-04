@@ -6,10 +6,12 @@
 #include "di/util/construct.h"
 #include "di/util/scope_exit.h"
 #include "dius/print.h"
+#include "dius/unicode/general_category.h"
 #include "ttx/graphics_rendition.h"
 #include "ttx/terminal/cell.h"
 #include "ttx/terminal/cursor.h"
 #include "ttx/terminal/escapes/osc_8.h"
+#include "ttx/terminal/selection.h"
 
 namespace ttx::terminal {
 static auto code_point_width(c32 code_point) -> u32;
@@ -794,13 +796,53 @@ void Screen::clear_selection() {
     m_selection = {};
 }
 
-void Screen::begin_selection(SelectionPoint const& point) {
-    m_selection = { point, point };
+void Screen::begin_selection(SelectionPoint const& point, BeginSelectionMode mode) {
+    switch (mode) {
+        case BeginSelectionMode::Empty:
+            m_selection = { point, point };
+            return;
+        case BeginSelectionMode::Word: {
+            // For word selection, consider all non whitespace characters
+            // as part of a word. This algorithm should work well enough
+            // while still being simple to implement.
+            auto text_per_cell = di::Vector<di::StringView> {};
+            for (auto row : iterate_row(point.row)) {
+                auto [_, _, text, _, _] = row;
+                text_per_cell.push_back(text);
+            }
+            auto start = point.col;
+            auto end = point.col;
+            while (start > 0) {
+                auto text = text_per_cell[start - 1];
+                if (text.empty() ||
+                    dius::unicode::general_category(*text.front()) == dius::unicode::GeneralCategory::SpaceSeparator) {
+                    break;
+                }
+                start--;
+            }
+            while (end < max_col_inclusive()) {
+                auto text = text_per_cell[end + 1];
+                if (text.empty() ||
+                    dius::unicode::general_category(*text.front()) == dius::unicode::GeneralCategory::SpaceSeparator) {
+                    break;
+                }
+                end++;
+            }
+            m_selection = { SelectionPoint { point.row, start }, SelectionPoint { point.row, end } };
+            invalidate_all();
+            return;
+        }
+        case BeginSelectionMode::Line:
+            m_selection = { SelectionPoint { point.row, 0 }, SelectionPoint { point.row, max_col_inclusive() } };
+            invalidate_all();
+            return;
+    }
+    di::unreachable();
 }
 
 void Screen::update_selection(SelectionPoint const& point) {
     if (!m_selection) {
-        begin_selection(point);
+        begin_selection(point, BeginSelectionMode::Empty);
     }
     ASSERT(m_selection);
     if (point != m_selection.value().end) {
@@ -814,7 +856,7 @@ auto Screen::in_selection(SelectionPoint const& point) const -> bool {
         return false;
     }
     auto [start, end] = m_selection.value().normalize();
-    return point >= start && point < end;
+    return point >= start && point <= end;
 }
 
 auto Screen::selected_text() const -> di::String {
@@ -844,7 +886,7 @@ auto Screen::selected_text() const -> di::String {
         auto iter_end_col = r == end.row ? end.col : row_object.cells.size();
         for (auto values : group.iterate_row(row)) {
             auto [c, _, cell_text, _, _] = values;
-            if (c < iter_start_col || c >= iter_end_col) {
+            if (c < iter_start_col || c > iter_end_col) {
                 continue;
             }
             text.append(cell_text);

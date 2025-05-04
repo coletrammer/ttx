@@ -15,6 +15,7 @@
 #include "ttx/paste_event.h"
 #include "ttx/renderer.h"
 #include "ttx/terminal.h"
+#include "ttx/terminal/screen.h"
 #include "ttx/utf8_stream_decoder.h"
 
 namespace ttx {
@@ -394,6 +395,8 @@ auto Pane::event(KeyEvent const& event) -> bool {
 }
 
 auto Pane::event(MouseEvent const& event) -> bool {
+    auto consecutive_clicks = m_mouse_click_tracker.track(event);
+
     auto [application_cursor_keys_mode, alternate_scroll_mode, mouse_protocol, mouse_encoding,
           in_alternate_screen_buffer, window_size, row_offset, selection] =
         m_terminal.with_lock([&](Terminal& terminal) {
@@ -438,7 +441,10 @@ auto Pane::event(MouseEvent const& event) -> bool {
     if (event.button() == MouseButton::Left && event.type() == MouseEventType::Press) {
         // Start selection.
         m_terminal.with_lock([&](Terminal& terminal) {
-            terminal.active_screen().screen.begin_selection(scroll_adjusted_position);
+            ASSERT_LT_EQ(consecutive_clicks, 3);
+            ASSERT_GT_EQ(consecutive_clicks, 1);
+            terminal.active_screen().screen.begin_selection(
+                scroll_adjusted_position, terminal::Screen::BeginSelectionMode(consecutive_clicks - 1));
         });
         return true;
     }
