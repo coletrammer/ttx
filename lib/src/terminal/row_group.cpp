@@ -92,9 +92,9 @@ auto RowGroup::transfer_from(RowGroup& from, usize from_index, usize to_index, u
         to_row.cells.resize(cols_to_take);
 
         auto text_size = 0_usize;
-        for (auto [i, from_cell] : from_row.cells | di::enumerate) {
+        for (auto [i, cells] : di::zip(from_row.cells, to_row.cells) | di::enumerate) {
             // Insert the new cell as desired.
-            auto& to_cell = to_row.cells[i];
+            auto& [from_cell, to_cell] = cells;
             if (i < cols_to_take) {
                 if (from_cell.graphics_rendition_id) {
                     to_cell.graphics_rendition_id =

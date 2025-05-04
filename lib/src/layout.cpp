@@ -458,10 +458,11 @@ auto LayoutGroup::resize(LayoutNode& root, Pane* pane, ResizeDirection direction
     // Now convert from cell space to relative layout space.
     auto available_size =
         relevant_node->direction == Direction::Horizontal ? relevant_node->size.cols : relevant_node->size.rows;
-    if (available_size <= relevant_node->children.size() * 2 - 1) {
+    if (available_size <= relevant_node->children.size() * 2) {
         return false;
     }
-    available_size -= relevant_node->children.size() * 2 - 1;
+    // Slightly under-estimate the available size to ensure we round up.
+    available_size -= relevant_node->children.size() * 2;
 
     // Now assign new layout values, clamping to prevent negative numbers.
     auto relative_size = (di::Rational<i64>(amount_in_cells, available_size) * max_layout_precision).round();
