@@ -32,7 +32,7 @@ struct StatusMessage {
     dius::SteadyClock::Duration duration {};
 };
 
-using RenderEvent = di::Variant<Size, PaneExited, InputStatus, WriteString, StatusMessage, DoRender, Exit>;
+using RenderEvent = di::Variant<Size, PaneExited, InputStatus, WriteString, StatusMessage, DoRender, MouseEvent, Exit>;
 
 class RenderThread {
 public:
@@ -60,8 +60,14 @@ private:
         dius::SteadyClock::TimePoint expiration {};
     };
 
+    struct StatusBarEntry {
+        u32 start { 0 };
+        u32 width { 0 };
+    };
+
     InputStatus m_input_status;
     di::Optional<PendingStatusMessage> m_pending_status_message;
+    di::Vector<StatusBarEntry> m_status_bar_layout;
     di::Synchronized<di::Queue<RenderEvent>> m_events;
     dius::ConditionVariable m_condition;
     di::Synchronized<LayoutState>& m_layout_state;

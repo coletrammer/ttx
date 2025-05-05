@@ -5,6 +5,8 @@
 #include "layout_state.h"
 #include "ttx/graphics_rendition.h"
 #include "ttx/layout.h"
+#include "ttx/mouse.h"
+#include "ttx/mouse_event.h"
 
 namespace ttx {
 auto RenderThread::create(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit)
@@ -99,6 +101,24 @@ void RenderThread::render_thread() {
                 m_input_status = *ev;
             } else if (auto ev = di::get_if<WriteString>(event)) {
                 (void) dius::stdin.write_exactly(di::as_bytes(ev->string.span()));
+            } else if (auto ev = di::get_if<MouseEvent>(event)) {
+                if (ev->type() == MouseEventType::Press && ev->button() == MouseButton::Left) {
+                    auto* it = di::find_if(m_status_bar_layout, [&](StatusBarEntry const& entry) {
+                        return ev->position().in_cells().x() >= entry.start &&
+                               ev->position().in_cells().x() < entry.start + entry.width;
+                    });
+                    if (it != m_status_bar_layout.end()) {
+                        auto index = usize(it - m_status_bar_layout.begin());
+                        m_layout_state.with_lock([&](LayoutState& state) {
+                            if (auto session = state.active_session()) {
+                                if (auto tab = session.value().tabs().at(index)) {
+                                    state.set_active_tab(session.value(),
+                                                         tab.transform(&di::Box<Tab>::get).value_or(nullptr));
+                                }
+                            }
+                        });
+                    }
+                }
             } else if (auto ev = di::get_if<DoRender>(event)) {
                 // Do nothing. This was just to wake us up.
             } else if (auto ev = di::get_if<Exit>(event)) {
@@ -216,6 +236,7 @@ void RenderThread::render_status_bar(LayoutState const& state, Renderer& rendere
             offset += 1;
         }
 
+        m_status_bar_layout.clear();
         if (!m_pending_status_message) {
             for (auto [i, tab] : di::enumerate(session.tabs())) {
                 auto color = inactive_color;
@@ -228,6 +249,8 @@ void RenderThread::render_status_bar(LayoutState const& state, Renderer& rendere
                         sign = U'󰖯';
                     }
                 }
+
+                auto status_bar_entry = StatusBarEntry { offset, 0 };
 
                 auto num_string = di::to_string(i + 1);
                 renderer.put_text(separator, 0, offset++, { .fg = color, .bg = color });
@@ -243,6 +266,9 @@ void RenderThread::render_status_bar(LayoutState const& state, Renderer& rendere
                     renderer.put_text(' ', 0, offset++, { .bg = light_bg });
                 }
                 renderer.put_text(separator, 0, offset++, { .fg = light_bg, .bg = light_bg });
+                status_bar_entry.width = offset - status_bar_entry.start;
+
+                m_status_bar_layout.push_back(status_bar_entry);
                 offset++;
             }
         } else {
