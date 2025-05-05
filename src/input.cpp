@@ -123,6 +123,7 @@ void InputThread::handle_event(MouseEvent const& event) {
     m_layout_state.with_lock([&](LayoutState& state) {
         // Check if the event intersects with the status bar.
         if (!state.hide_status_bar() && event.position().in_cells().y() == 0) {
+            m_render_thread.push_event(event);
             return;
         }
 
