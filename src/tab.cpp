@@ -1,9 +1,11 @@
 #include "tab.h"
 
+#include "di/container/algorithm/replace.h"
 #include "di/serialization/base64.h"
 #include "dius/print.h"
 #include "render.h"
 #include "ttx/direction.h"
+#include "ttx/focus_event.h"
 #include "ttx/layout.h"
 #include "ttx/layout_json.h"
 #include "ttx/popup.h"
@@ -113,6 +115,35 @@ auto Tab::popup_pane(u64 pane_id, PopupLayout const& popup_layout, Size const& s
 
     set_active(m_popup.value().pane.get());
     invalidate_all();
+    return {};
+}
+
+auto Tab::replace_pane(Pane& pane, CreatePaneArgs args, RenderThread& render_thread) -> di::Result<> {
+    auto entry = m_layout_tree->find_pane(&pane);
+    if (!entry) {
+        return di::Unexpected(di::BasicError::InvalidArgument);
+    }
+
+    auto new_size = m_full_screen_pane == &pane ? m_size : entry->size;
+    auto new_pane = TRY(make_pane(pane.id(), di::move(args), new_size, render_thread));
+
+    di::replace(m_panes_ordered_by_recency, &pane, new_pane.get());
+    if (m_active == &pane) {
+        m_active = new_pane.get();
+        new_pane->event(FocusEvent::focus_in());
+    }
+    if (m_full_screen_pane == &pane) {
+        m_full_screen_pane = new_pane.get();
+    }
+
+    entry->pane = new_pane.get();
+
+    // Now remove the old pane.
+    pane.exit();
+    // SAFETY: this const case is safe because we are holding the layout state lock. The
+    // mutation is safe because we aren't changing any field other than the pane object,
+    // and everything else remains unchanged.
+    const_cast<LayoutPane*>(entry->ref)->pane = di::move(new_pane);
     return {};
 }
 

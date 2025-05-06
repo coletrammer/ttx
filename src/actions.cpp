@@ -501,6 +501,28 @@ auto soft_reset() -> Action {
     };
 }
 
+auto hard_reset() -> Action {
+    return {
+        .description = "Hard reset the active pane"_s,
+        .apply =
+            [](ActionContext const& context) {
+                context.layout_state.with_lock([&](LayoutState& state) {
+                    for (auto& tab : state.active_tab()) {
+                        for (auto& pane : tab.active()) {
+                            (void) tab.replace_pane(pane,
+                                                    {
+                                                        .command = di::clone(context.command),
+                                                        .cwd = pane.current_working_directory().transform(di::to_owned),
+                                                    },
+                                                    context.render_thread);
+                        }
+                    }
+                });
+                context.render_thread.request_render();
+            },
+    };
+}
+
 auto toggle_full_screen_pane() -> Action {
     return {
         .description = "Toggle full screen for the active pane"_s,

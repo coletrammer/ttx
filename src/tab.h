@@ -45,6 +45,7 @@ public:
         -> di::Result<>;
     auto popup_pane(u64 pane_id, PopupLayout const& popup_layout, Size const& size, CreatePaneArgs args,
                     RenderThread& render_thread) -> di::Result<>;
+    auto replace_pane(Pane& pane, CreatePaneArgs args, RenderThread& render_thread) -> di::Result<>;
 
     void navigate(NavigateDirection direction);
 
