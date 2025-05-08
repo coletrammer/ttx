@@ -7,15 +7,15 @@
 #include "di/util/scope_exit.h"
 #include "dius/print.h"
 #include "dius/unicode/general_category.h"
+#include "dius/unicode/width.h"
 #include "ttx/graphics_rendition.h"
 #include "ttx/terminal/cell.h"
 #include "ttx/terminal/cursor.h"
 #include "ttx/terminal/escapes/osc_8.h"
+#include "ttx/terminal/multi_cell_info.h"
 #include "ttx/terminal/selection.h"
 
 namespace ttx::terminal {
-static auto code_point_width(c32 code_point) -> u32;
-
 Screen::Screen(Size const& size, ScrollBackEnabled scroll_back_enabled)
     : m_scroll_back_enabled(scroll_back_enabled), m_scroll_region(0, size.rows) {
     resize(size);
@@ -625,7 +625,7 @@ void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
     m_never_got_input = false;
 
     // 1. Measure the width of the code point.
-    auto width = code_point_width(code_point);
+    auto width = dius::unicode::code_point_width(code_point).value_or(0);
 
     // 2. Happy path - width is 1, so add a single cell.
     if (width == 1) {
@@ -658,9 +658,14 @@ void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
         m_cursor.text_offset += byte_size;
         prev_cell.text_size += byte_size;
         prev_cell.stale = false;
+        return;
     }
 
-    // TODO: 4. Multi-cell case - width is 2.
+    // 4. Multi-cell case - width is 2.
+    ASSERT_EQ(width, 2);
+    auto code_units = di::encoding::convert_to_code_units(di::String::Encoding(), code_point);
+    auto view = di::StringView(di::encoding::assume_valid, code_units.begin(), code_units.end());
+    put_wide_cell(view, 2, auto_wrap_mode);
 }
 
 void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode) {
@@ -691,10 +696,35 @@ void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode) {
         return;
     }
 
+    // We have to clear text starting from the insertion point. However, we have to extend the
+    // deletion of cells to account for a potential multi cell already partially occuppying the
+    // new multi cell.
+    auto insertion_point = m_cursor.col;
+    auto deletion_point = insertion_point;
+    if (row.cells[deletion_point].is_nonprimary_in_multi_cell()) {
+        while (!row.cells[deletion_point].is_primary_in_multi_cell()) {
+            deletion_point--;
+        }
+    }
+    auto text_start_position = m_cursor.text_offset;
+    if (deletion_point < m_cursor.col) {
+        for (auto& cell : auto(*row.cells.subspan(deletion_point, m_cursor.col - deletion_point))) {
+            text_start_position -= cell.text_size;
+        }
+    }
+    auto deletion_end = insertion_point + 1;
+    while (deletion_end < max_width() && row.cells[deletion_end].is_nonprimary_in_multi_cell()) {
+        deletion_end++;
+    }
+    auto text_end_position = text_start_position;
+    for (auto& cell : auto(*row.cells.subspan(deletion_point, deletion_end - deletion_point))) {
+        m_active_rows.drop_cell(cell);
+        text_end_position += cell.text_size;
+        cell.text_size = 0;
+    }
+
     // Modify the cell with the new attributes, starting by clearing the old attributes.
     auto& cell = row.cells[m_cursor.col];
-    m_active_rows.drop_cell(cell);
-
     if (m_graphics_id) {
         cell.graphics_rendition_id = m_active_rows.use_graphics_id(m_graphics_id);
     }
@@ -705,15 +735,12 @@ void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode) {
     // Insert the text. We can safely assert the iterator is valid because we compute the text offset in all cases
     // and it should be correct. Additionally, because each cell contains valid UTF-8 text, the cell boundaries
     // will always be valid insertion points.
-    auto text_start = row.text.iterator_at_offset(m_cursor.text_offset);
-    auto text_end = row.text.iterator_at_offset(m_cursor.text_offset + cell.text_size);
+    auto text_start = row.text.iterator_at_offset(text_start_position);
+    auto text_end = row.text.iterator_at_offset(text_end_position);
     ASSERT(text_start.has_value());
     ASSERT(text_end.has_value());
     row.text.replace(text_start.value(), text_end.value(), text);
     cell.text_size = text.size_bytes();
-
-    // Mark cell as dirty.
-    cell.stale = false;
 
     // Advance the cursor 1 cell.
     auto new_cursor = m_cursor;
@@ -722,6 +749,121 @@ void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode) {
     } else {
         new_cursor.col++;
         new_cursor.text_offset += text.size_bytes();
+    }
+    m_cursor = new_cursor;
+}
+
+void Screen::put_wide_cell(di::StringView text, u8 width, AutoWrapMode auto_wrap_mode) {
+    ASSERT_GT_EQ(width, 2u);
+
+    // Sanity check - if the text size is too large, ignore.
+    if (text.size_bytes() > Cell::max_text_size) {
+        return;
+    }
+
+    // Sanity check - if the width is too large, ignore.
+    if (width > max_width()) {
+        return;
+    }
+
+    // Fetch and validate the row from the cursor position.
+    auto& row = rows()[m_cursor.row];
+    ASSERT_LT(m_cursor.col, max_width());
+    ASSERT_EQ(row.cells.size(), max_width());
+
+    // Check for the overflow condition, which will evenually induce scrolling.
+    if (auto_wrap_mode == AutoWrapMode::Enabled && m_cursor.col + width > max_width()) {
+        // Mark the current row as having overflowed, and then advance the cursor.
+        row.overflow = true;
+
+        auto new_cursor = Cursor { m_cursor.row + 1, 0, 0, false };
+        if (m_cursor.row + 1 == m_scroll_region.end_row) {
+            // This was the last line - so induce scrolling by adding a new row.
+            scroll_down();
+            m_cursor.col = 0;
+        } else {
+            m_cursor = new_cursor;
+        }
+        put_wide_cell(text, width, auto_wrap_mode);
+        return;
+    }
+
+    // Try to the allocate the multi cell info. This is required, and so we bail if
+    // this fails.
+    auto multi_cell_info = MultiCellInfo { .width = width };
+    auto multi_cell_id = m_active_rows.maybe_allocate_multi_cell_id(multi_cell_info);
+    if (!multi_cell_id.has_value()) {
+        return;
+    }
+
+    // Determine the insertion point. This may not be the cursor column when we're at the
+    // end of the line.
+    auto insertion_point = di::min(m_cursor.col, max_width() - width);
+
+    // We have to clear text starting from the insertion point. However, we have to extend the
+    // deletion of cells to account for a potential multi cell already partially occuppying the
+    // new multi cell.
+    auto deletion_point = insertion_point;
+    if (row.cells[deletion_point].is_nonprimary_in_multi_cell()) {
+        while (!row.cells[deletion_point].is_primary_in_multi_cell()) {
+            deletion_point--;
+        }
+    }
+    auto text_start_position = m_cursor.text_offset;
+    if (deletion_point < m_cursor.col) {
+        for (auto& cell : auto(*row.cells.subspan(deletion_point, m_cursor.col - deletion_point))) {
+            text_start_position -= cell.text_size;
+        }
+    }
+    auto deletion_end = insertion_point + width;
+    while (deletion_end < max_width() && row.cells[deletion_end].is_nonprimary_in_multi_cell()) {
+        deletion_end++;
+    }
+    auto text_end_position = text_start_position;
+    for (auto& cell : auto(*row.cells.subspan(deletion_point, deletion_end - deletion_point))) {
+        m_active_rows.drop_cell(cell);
+        text_end_position += cell.text_size;
+        cell.text_size = 0;
+    }
+
+    // Now that we've cleared any old text, set the attributes appropriately on the new cells.
+    auto& primary_cell = row.cells[insertion_point];
+    primary_cell.left_boundary_of_multicell = true;
+    primary_cell.top_boundary_of_multicell = true;
+    primary_cell.multi_cell_id = multi_cell_id.value();
+
+    for (auto& cell : auto(*row.cells.subspan(insertion_point, width))) {
+        if (m_graphics_id) {
+            cell.graphics_rendition_id = m_active_rows.use_graphics_id(m_graphics_id);
+        }
+        if (m_hyperlink_id) {
+            cell.hyperlink_id = m_active_rows.use_hyperlink_id(m_hyperlink_id);
+        }
+        // Avoid adding an additional reference on the primary cell. Allocating the id
+        // already takes a reference, so we transfer that one directly to the primary
+        // cell.
+        if (!cell.multi_cell_id) {
+            cell.multi_cell_id = m_active_rows.use_multi_cell_id(multi_cell_id.value());
+        }
+    }
+
+    // Insert the text. We can safely assert the iterator is valid because we compute the text offset in all cases
+    // and it should be correct. Additionally, because each cell contains valid UTF-8 text, the cell boundaries
+    // will always be valid insertion points.
+    auto text_start = row.text.iterator_at_offset(text_start_position);
+    auto text_end = row.text.iterator_at_offset(text_end_position);
+    ASSERT(text_start.has_value());
+    ASSERT(text_end.has_value());
+    row.text.replace(text_start.value(), text_end.value(), text);
+    primary_cell.text_size = text.size_bytes();
+
+    // Advance the cursor 1 cell.
+    auto new_cursor = m_cursor;
+    new_cursor.col += width;
+    new_cursor.text_offset = text_start_position + text.size_bytes();
+    if (new_cursor.col >= max_width()) {
+        new_cursor.col = max_col_inclusive();
+        new_cursor.overflow_pending = true;
     }
     m_cursor = new_cursor;
 }
@@ -1017,50 +1159,5 @@ auto Screen::state_as_escape_sequences() const -> di::String {
 
     // Return the resulting string.
     return writer.vector() | di::transform(di::construct<c8>) | di::to<di::String>(di::encoding::assume_valid);
-}
-
-// This list is only for the diacritics used by the
-// kitty image protocol.
-static auto zero_width_characters = di::Array {
-    0x0305u,  0x030Du,  0x030Eu,  0x0310u,  0x0312u,  0x033Du,  0x033Eu,  0x033Fu,  0x0346u,  0x034Au,  0x034Bu,
-    0x034Cu,  0x0350u,  0x0351u,  0x0352u,  0x0357u,  0x035Bu,  0x0363u,  0x0364u,  0x0365u,  0x0366u,  0x0367u,
-    0x0368u,  0x0369u,  0x036Au,  0x036Bu,  0x036Cu,  0x036Du,  0x036Eu,  0x036Fu,  0x0483u,  0x0484u,  0x0485u,
-    0x0486u,  0x0487u,  0x0592u,  0x0593u,  0x0594u,  0x0595u,  0x0597u,  0x0598u,  0x0599u,  0x059Cu,  0x059Du,
-    0x059Eu,  0x059Fu,  0x05A0u,  0x05A1u,  0x05A8u,  0x05A9u,  0x05ABu,  0x05ACu,  0x05AFu,  0x05C4u,  0x0610u,
-    0x0611u,  0x0612u,  0x0613u,  0x0614u,  0x0615u,  0x0616u,  0x0617u,  0x0657u,  0x0658u,  0x0659u,  0x065Au,
-    0x065Bu,  0x065Du,  0x065Eu,  0x06D6u,  0x06D7u,  0x06D8u,  0x06D9u,  0x06DAu,  0x06DBu,  0x06DCu,  0x06DFu,
-    0x06E0u,  0x06E1u,  0x06E2u,  0x06E4u,  0x06E7u,  0x06E8u,  0x06EBu,  0x06ECu,  0x0730u,  0x0732u,  0x0733u,
-    0x0735u,  0x0736u,  0x073Au,  0x073Du,  0x073Fu,  0x0740u,  0x0741u,  0x0743u,  0x0745u,  0x0747u,  0x0749u,
-    0x074Au,  0x07EBu,  0x07ECu,  0x07EDu,  0x07EEu,  0x07EFu,  0x07F0u,  0x07F1u,  0x07F3u,  0x0816u,  0x0817u,
-    0x0818u,  0x0819u,  0x081Bu,  0x081Cu,  0x081Du,  0x081Eu,  0x081Fu,  0x0820u,  0x0821u,  0x0822u,  0x0823u,
-    0x0825u,  0x0826u,  0x0827u,  0x0829u,  0x082Au,  0x082Bu,  0x082Cu,  0x082Du,  0x0951u,  0x0953u,  0x0954u,
-    0x0F82u,  0x0F83u,  0x0F86u,  0x0F87u,  0x135Du,  0x135Eu,  0x135Fu,  0x17DDu,  0x193Au,  0x1A17u,  0x1A75u,
-    0x1A76u,  0x1A77u,  0x1A78u,  0x1A79u,  0x1A7Au,  0x1A7Bu,  0x1A7Cu,  0x1B6Bu,  0x1B6Du,  0x1B6Eu,  0x1B6Fu,
-    0x1B70u,  0x1B71u,  0x1B72u,  0x1B73u,  0x1CD0u,  0x1CD1u,  0x1CD2u,  0x1CDAu,  0x1CDBu,  0x1CE0u,  0x1DC0u,
-    0x1DC1u,  0x1DC3u,  0x1DC4u,  0x1DC5u,  0x1DC6u,  0x1DC7u,  0x1DC8u,  0x1DC9u,  0x1DCBu,  0x1DCCu,  0x1DD1u,
-    0x1DD2u,  0x1DD3u,  0x1DD4u,  0x1DD5u,  0x1DD6u,  0x1DD7u,  0x1DD8u,  0x1DD9u,  0x1DDAu,  0x1DDBu,  0x1DDCu,
-    0x1DDDu,  0x1DDEu,  0x1DDFu,  0x1DE0u,  0x1DE1u,  0x1DE2u,  0x1DE3u,  0x1DE4u,  0x1DE5u,  0x1DE6u,  0x1DFEu,
-    0x20D0u,  0x20D1u,  0x20D4u,  0x20D5u,  0x20D6u,  0x20D7u,  0x20DBu,  0x20DCu,  0x20E1u,  0x20E7u,  0x20E9u,
-    0x20F0u,  0x2CEFu,  0x2CF0u,  0x2CF1u,  0x2DE0u,  0x2DE1u,  0x2DE2u,  0x2DE3u,  0x2DE4u,  0x2DE5u,  0x2DE6u,
-    0x2DE7u,  0x2DE8u,  0x2DE9u,  0x2DEAu,  0x2DEBu,  0x2DECu,  0x2DEDu,  0x2DEEu,  0x2DEFu,  0x2DF0u,  0x2DF1u,
-    0x2DF2u,  0x2DF3u,  0x2DF4u,  0x2DF5u,  0x2DF6u,  0x2DF7u,  0x2DF8u,  0x2DF9u,  0x2DFAu,  0x2DFBu,  0x2DFCu,
-    0x2DFDu,  0x2DFEu,  0x2DFFu,  0xA66Fu,  0xA67Cu,  0xA67Du,  0xA6F0u,  0xA6F1u,  0xA8E0u,  0xA8E1u,  0xA8E2u,
-    0xA8E3u,  0xA8E4u,  0xA8E5u,  0xA8E6u,  0xA8E7u,  0xA8E8u,  0xA8E9u,  0xA8EAu,  0xA8EBu,  0xA8ECu,  0xA8EDu,
-    0xA8EEu,  0xA8EFu,  0xA8F0u,  0xA8F1u,  0xAAB0u,  0xAAB2u,  0xAAB3u,  0xAAB7u,  0xAAB8u,  0xAABEu,  0xAABFu,
-    0xAAC1u,  0xFE20u,  0xFE21u,  0xFE22u,  0xFE23u,  0xFE24u,  0xFE25u,  0xFE26u,  0x10A0Fu, 0x10A38u, 0x1D185u,
-    0x1D186u, 0x1D187u, 0x1D188u, 0x1D189u, 0x1D1AAu, 0x1D1ABu, 0x1D1ACu, 0x1D1ADu, 0x1D242u, 0x1D243u, 0x1D244u,
-};
-
-// TODO: use the unicode data base.
-static auto code_point_width(c32 code_point) -> u32 {
-    if (code_point <= 255) {
-        return 1;
-    }
-
-    // TODO: optimize!
-    if (di::contains(zero_width_characters, code_point)) {
-        return 0;
-    }
-    return 1;
 }
 }

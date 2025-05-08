@@ -1,6 +1,7 @@
 #include "ttx/terminal/row_group.h"
 
 #include "ttx/terminal/cell.h"
+#include "ttx/terminal/multi_cell_info.h"
 
 namespace ttx::terminal {
 auto RowGroup::maybe_allocate_graphics_id(GraphicsRendition const& rendition) -> di::Optional<u16> {
@@ -19,6 +20,14 @@ auto RowGroup::maybe_allocate_hyperlink_id(Hyperlink const& hyperlink) -> di::Op
     return use_hyperlink_id(existing_id.value());
 }
 
+auto RowGroup::maybe_allocate_multi_cell_id(MultiCellInfo const& multi_cell_info) -> di::Optional<u16> {
+    auto existing_id = multi_cell_id(multi_cell_info);
+    if (!existing_id) {
+        return allocate_multi_cell_id(multi_cell_info);
+    }
+    return use_multi_cell_id(existing_id.value());
+}
+
 void RowGroup::drop_graphics_id(u16& id) {
     if (id) {
         m_graphics_renditions.drop_id(id);
@@ -35,7 +44,9 @@ void RowGroup::drop_hyperlink_id(u16& id) {
 
 void RowGroup::drop_multi_cell_id(u16& id) {
     if (id) {
-        m_multi_cell_info.drop_id(id);
+        if (id > 1) {
+            m_multi_cell_info.drop_id(id);
+        }
         id = 0;
     }
 }
@@ -43,10 +54,10 @@ void RowGroup::drop_multi_cell_id(u16& id) {
 void RowGroup::drop_cell(Cell& cell) {
     drop_graphics_id(cell.graphics_rendition_id);
     drop_hyperlink_id(cell.hyperlink_id);
+    drop_multi_cell_id(cell.multi_cell_id);
 
-    // TODO: clear the whole multi cell here.
-    drop_multi_cell_id(cell.multicell_id);
-
+    cell.left_boundary_of_multicell = false;
+    cell.top_boundary_of_multicell = false;
     cell.stale = false;
 }
 
@@ -67,6 +78,16 @@ auto RowGroup::maybe_hyperlink(u16 id) const -> di::Optional<Hyperlink const&> {
         return {};
     }
     return hyperlink(id);
+}
+
+auto RowGroup::multi_cell_info(u16 id) const -> MultiCellInfo const& {
+    if (id == 0) {
+        return narrow_multi_cell_info;
+    }
+    if (id == 1) {
+        return wide_multi_cell_info;
+    }
+    return m_multi_cell_info.lookup_id(id);
 }
 
 auto RowGroup::transfer_from(RowGroup& from, usize from_index, usize to_index, usize row_count,
@@ -91,8 +112,23 @@ auto RowGroup::transfer_from(RowGroup& from, usize from_index, usize to_index, u
         total_cells += cols_to_take;
         to_row.cells.resize(cols_to_take);
 
+        // Truncate any wide cells if they won't fully fit into the requested column size.
+        auto from_cells_to_take = di::min(cols_to_take, u32(from_row.cells.size()));
+        if (from_cells_to_take > 0 && from_cells_to_take < from_row.cells.size()) {
+            // Check if this multi cell would be truncated.
+            if (from_row.cells[from_cells_to_take - 1].is_multi_cell() &&
+                from_row.cells[from_cells_to_take].is_nonprimary_in_multi_cell()) {
+                while (from_cells_to_take > 0 && from_row.cells[from_cells_to_take - 1].is_nonprimary_in_multi_cell()) {
+                    from_cells_to_take--;
+                }
+                if (from_cells_to_take > 0) {
+                    from_cells_to_take--;
+                }
+            }
+        }
+
         auto text_size = 0_usize;
-        for (auto [i, cells] : di::zip(from_row.cells, to_row.cells) | di::enumerate) {
+        for (auto [i, cells] : di::zip(from_row.cells | di::take(from_cells_to_take), to_row.cells) | di::enumerate) {
             // Insert the new cell as desired.
             auto& [from_cell, to_cell] = cells;
             if (i < cols_to_take) {
@@ -105,9 +141,13 @@ auto RowGroup::transfer_from(RowGroup& from, usize from_index, usize to_index, u
                     to_cell.hyperlink_id =
                         to.maybe_allocate_hyperlink_id(from.hyperlink(from_cell.hyperlink_id)).value_or(0);
                 }
+                if (from_cell.multi_cell_id) {
+                    to_cell.multi_cell_id =
+                        to.maybe_allocate_multi_cell_id(from.multi_cell_info(from_cell.multi_cell_id)).value_or(0);
+                }
+                to_cell.left_boundary_of_multicell = from_cell.left_boundary_of_multicell;
+                to_cell.top_boundary_of_multicell = from_cell.top_boundary_of_multicell;
                 to_cell.text_size = from_cell.text_size;
-
-                // TODO: multi cells
             }
 
             // Always drop the cell `from` cell. We don't have to worry about clearing the associated text since the
@@ -140,7 +180,8 @@ auto RowGroup::strip_trailing_empty_cells(usize row_index) -> usize {
     }
 
     // Ensure all rows have at least size 1, as otherwise our cell based scroll back
-    // limit breaks down (you could have an unbounded number of blank lines).
+    // limit breaks down (you could have an unbounded number of blank lines). Multi
+    // cells are never empty, so no special handling is needed.
     while (row.cells.size() > 1) {
         if (row.cells.back().value().is_empty()) {
             row.cells.pop_back();

@@ -1,5 +1,4 @@
 #pragma once
-
 #include "di/bit/bitset/prelude.h"
 #include "di/container/string/string_view.h"
 #include "di/container/view/cache_last.h"
@@ -166,6 +165,7 @@ public:
 
 private:
     void put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode);
+    void put_wide_cell(di::StringView text, u8 width, AutoWrapMode auto_wrap_mode);
 
     // Row/column helper functions for dealing with origin mode.
     auto translate_row(u32 row) const -> u32;
