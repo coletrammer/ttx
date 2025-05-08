@@ -22,6 +22,12 @@ namespace ttx::terminal {
 /// inserting rows at the start of the group).
 class RowGroup {
 public:
+    explicit RowGroup() {
+        // Ensure that multi cell ID 1 is the standard wide cell. This allows for
+        // fast path optimizations.
+        ASSERT_EQ(1, m_multi_cell_info.allocate({ wide_multi_cell_info }));
+    }
+
     auto rows() -> di::Ring<Row>& { return m_rows; }
     auto rows() const -> di::Ring<Row> const& { return m_rows; }
 
@@ -35,6 +41,7 @@ public:
     auto graphics_rendition(u16 id) const -> GraphicsRendition const&;
     auto hyperlink(u16 id) const -> Hyperlink const&;
     auto maybe_hyperlink(u16 id) const -> di::Optional<Hyperlink const&>;
+    auto multi_cell_info(u16 id) const -> MultiCellInfo const&;
 
     auto graphics_id(GraphicsRendition const& rendition) -> di::Optional<u16> {
         if (rendition == GraphicsRendition {}) {
@@ -66,6 +73,23 @@ public:
         return m_hyperlinks.allocate(di::move(hyperlink));
     }
     auto maybe_allocate_hyperlink_id(Hyperlink const& hyperlink) -> di::Optional<u16>;
+
+    auto multi_cell_id(MultiCellInfo const& multi_cell_info) -> di::Optional<u16> {
+        if (multi_cell_info == wide_multi_cell_info) {
+            return 1;
+        }
+        return m_multi_cell_info.lookup_key(multi_cell_info);
+    }
+    auto use_multi_cell_id(u16 id) -> u16 {
+        if (id <= 1) {
+            return id;
+        }
+        return m_multi_cell_info.use_id(id);
+    }
+    auto allocate_multi_cell_id(MultiCellInfo const& multi_cell_info) -> di::Optional<u16> {
+        return m_multi_cell_info.allocate(multi_cell_info);
+    }
+    auto maybe_allocate_multi_cell_id(MultiCellInfo const& multi_cell_info) -> di::Optional<u16>;
 
     auto transfer_from(RowGroup& from, usize from_index, usize to_index, usize row_count,
                        di::Optional<u32> desired_cols = {}) -> usize;

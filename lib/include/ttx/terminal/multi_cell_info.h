@@ -17,4 +17,9 @@ struct MultiCellInfo {
     auto operator==(MultiCellInfo const&) const -> bool = default;
     auto operator<=>(MultiCellInfo const&) const = default;
 };
+
+// Strictly speaking, this isn't a multicell. However, its a reasonable default value.
+constexpr inline auto narrow_multi_cell_info = MultiCellInfo { 1, 1 };
+
+constexpr inline auto wide_multi_cell_info = MultiCellInfo { 1, 2 };
 }

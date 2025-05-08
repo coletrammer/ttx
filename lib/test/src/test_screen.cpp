@@ -35,20 +35,31 @@ static void validate_text(Screen& screen, di::StringView text) {
             ASSERT_EQ(di::distance(expected_text), screen.max_width());
 
             for (auto [expected, row] : di::zip(expected_text, screen.iterate_row(i))) {
-                auto [_, _, text, _, _] = row;
-                if (text.empty()) {
-                    text = " "_sv;
+                auto [_, cell, text, _, _] = row;
+                if (expected == "."_sv) {
+                    ASSERT(cell.is_nonprimary_in_multi_cell());
+                    continue;
                 }
 
+                if (text.empty()) {
+                    text = " "_sv;
+                    ASSERT(!cell.is_multi_cell());
+                }
                 ASSERT_EQ(text, expected);
             }
         } else {
             ASSERT_EQ(di::distance(line), screen.max_width());
 
             for (auto [ch, row] : di::zip(line, screen.iterate_row(i))) {
-                auto [_, _, text, _, _] = row;
+                auto [_, cell, text, _, _] = row;
+                if (ch == U'.') {
+                    ASSERT(cell.is_nonprimary_in_multi_cell());
+                    continue;
+                }
+
                 if (text.empty()) {
                     text = " "_sv;
+                    ASSERT(!cell.is_multi_cell());
                 }
 
                 auto expected = di::String {};
@@ -120,6 +131,82 @@ static void put_text_unicode() {
                           u8"     \n"
                           u8"     \n"
                           u8"     "_sv);
+}
+
+static void put_text_wide() {
+    auto screen = Screen({ 5, 5 }, Screen::ScrollBackEnabled::No);
+
+    put_text(screen, u8"ab猫e"_sv);  // Width 2 character
+    put_text(screen, u8"abcd猫"_sv); // This wraps
+
+    auto cursor = screen.cursor();
+    ASSERT_EQ(cursor, (Cursor {
+                          .row = 2,
+                          .col = 2,
+                          .text_offset = 3,
+                          .overflow_pending = false,
+                      }));
+
+    validate_text(screen, u8"ab猫.e\n"
+                          u8"abcd \n"
+                          u8"猫.   \n"
+                          u8"     \n"
+                          u8"     "_sv);
+
+    put_text(screen, "xxx"_sv);
+    put_text(screen, "qwert"_sv);
+    screen.put_code_point(U'猫', AutoWrapMode::Disabled);
+
+    cursor = screen.cursor();
+    ASSERT_EQ(cursor, (Cursor {
+                          .row = 3,
+                          .col = 4,
+                          .text_offset = 6,
+                          .overflow_pending = true,
+                      }));
+
+    validate_text(screen, u8"ab猫.e\n"
+                          u8"abcd \n"
+                          u8"猫.xxx\n"
+                          u8"qwe猫.\n"
+                          u8"     "_sv);
+
+    put_text(screen, u8"猫猫e"_sv);
+    screen.set_cursor(4, 1);
+    screen.put_code_point(U'猫', AutoWrapMode::Disabled);
+
+    cursor = screen.cursor();
+    ASSERT_EQ(cursor, (Cursor {
+                          .row = 4,
+                          .col = 3,
+                          .text_offset = 3,
+                          .overflow_pending = false,
+                      }));
+
+    validate_text(screen, u8"ab猫.e\n"
+                          u8"abcd \n"
+                          u8"猫.xxx\n"
+                          u8"qwe猫.\n"
+                          u8" 猫. e"_sv);
+
+    screen.set_cursor(2, 0);
+    put_text(screen, "1"_sv);
+
+    validate_text(screen, u8"ab猫.e\n"
+                          u8"abcd \n"
+                          u8"1 xxx\n"
+                          u8"qwe猫.\n"
+
+                          u8" 猫. e"_sv);
+
+    screen.set_cursor(3, 4);
+    put_text(screen, "2"_sv);
+
+    validate_text(screen, u8"ab猫.e\n"
+                          u8"abcd \n"
+                          u8"1 xxx\n"
+                          u8"qwe 2\n"
+                          u8" 猫. e"_sv);
 }
 
 static void cursor_movement() {
@@ -596,6 +683,7 @@ static void save_restore_cursor() {
 
 TEST(screen, put_text_basic)
 TEST(screen, put_text_unicode)
+TEST(screen, put_text_wide)
 TEST(screen, cursor_movement)
 TEST(screen, origin_mode_cursor_movement)
 TEST(screen, clear_row)

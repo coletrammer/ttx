@@ -92,3 +92,43 @@ handling the extremely large line case is still tricky (unless we enforce a maxi
 
 Multi cells with a height greater than 0 are also very difficult to deal with when reflowing lines, when the cells have
 mixed height.
+
+## Multi Cells
+
+Combined cells come in 2 forms: wide characters as determined by the grapheme cluster width, and explicitly
+sized text specified by the kitty text-sizing protocol. Although wide characters represent an extreme subset
+of the text-sizing protocol, wide characters are more common and may deserve special optimizations.
+
+To represent combined cells, it likely makes the most sense to store the associated text and graphics rendition
+in the top-left cell. This is useful because it lets us re-use several fields, and maps naturally when rendering
+cells. Every other "cell" linked to the primary cell can be ignored.
+
+However, blank cells cannot be ignored when modifying terminal contents. In particular, erasing or overwriting
+a single cell which is part of a combined cell clears the whole mulit-cell. This gives us to ways of handling
+this operation: eager clearing or lazy clearing.
+
+### Eager Clearing
+
+In this model, when we "clear" a cell which is part of a multi-cell, we need to find the all other joined cells
+and erase those too. This is somewhat inefficient and often redundant, as depending on the mutation, we're going
+to erase those other cells next (think something clearing the current line).
+
+### Lazy Clearing
+
+In this model, clearing a part of a multi-cell simply sets a flag on the shared metadata indicating the cell is
+no longer valid. When rendering, we can check this flag and treat the cell as blank if this flag is set. To
+properly handle background character erase, we'd need to store an associated background color on the multicell
+object. Additionally, we can longer share multi-cell metadata objects between "equivalent" multi-cells. This
+is especially bad when considering text consisting of all width 2 characters. We'd effectively need 1.5 as many
+objects as we would if we used the eager approach.
+
+### Solution
+
+Given these constraints, it makes the most sense to lazily clear multicells with height > 1 and eagerly clear
+cells with height = 1. Almost all terminal mutations are implemented on a per-row basis, and so will be able
+to eagerly clear multicells based by checking the boundaries of the operation. For the common case of width=2,
+we'll still give the cell a multicell id, but it will have a fast path for lookup.
+
+To determine which cell of a multicell is "primary", we'll need a 2 bit flags per cell. The primary cell will
+have both bits set, while the top-most and left-most cells will have only 1 of the bits set. Finding the primary
+cell can be done by iterating up and to the left looking for these flags.

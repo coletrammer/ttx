@@ -319,7 +319,7 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
                 auto end_col = 0_u32;
                 for (auto [c, cell, text, graphics, hyperlink] :
                      screen.iterate_row(r + screen.visual_scroll_offset())) {
-                    if (c < m_horizontal_scroll_offset) {
+                    if (c < m_horizontal_scroll_offset || cell.is_nonprimary_in_multi_cell()) {
                         continue;
                     }
 
