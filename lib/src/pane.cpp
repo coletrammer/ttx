@@ -104,7 +104,7 @@ auto Pane::create_from_replay(u64 id, di::Optional<di::Path> cwd, di::PathView r
             di::visit(di::overload(
                           [&](SetClipboard&& ev) {
                               if (pane->m_hooks.did_selection) {
-                                  pane->m_hooks.did_selection(ev.data.span());
+                                  pane->m_hooks.did_selection(ev.data.span(), false);
                               }
                           },
                           [&](terminal::OSC7&&) {}),
@@ -231,7 +231,7 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
                     di::visit(di::overload(
                                   [&](SetClipboard&& ev) {
                                       if (pane.m_hooks.did_selection) {
-                                          pane.m_hooks.did_selection(ev.data.span());
+                                          pane.m_hooks.did_selection(ev.data.span(), false);
                                       }
                                   },
                                   [&](terminal::OSC7&& osc7) {
@@ -465,7 +465,7 @@ auto Pane::event(MouseEvent const& event) -> bool {
             return result;
         });
         if (!text.empty() && m_hooks.did_selection) {
-            m_hooks.did_selection(di::as_bytes(text.span()));
+            m_hooks.did_selection(di::as_bytes(text.span()), true);
         }
         return true;
     }

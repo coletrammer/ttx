@@ -31,7 +31,7 @@ struct PaneHooks {
     di::Function<void(Pane&)> did_update;
 
     /// @brief Application controlled callback when text is selected.
-    di::Function<void(di::Span<byte const>)> did_selection;
+    di::Function<void(di::Span<byte const>, bool)> did_selection;
 
     /// @brief Application controlled callback when APC command is set.
     di::Function<void(di::StringView)> apc_passthrough;
