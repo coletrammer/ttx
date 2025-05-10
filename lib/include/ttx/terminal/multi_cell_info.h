@@ -1,5 +1,6 @@
 #pragma once
 
+#include "di/reflect/prelude.h"
 #include "di/types/prelude.h"
 
 namespace ttx::terminal {
@@ -16,6 +17,15 @@ struct MultiCellInfo {
 
     auto operator==(MultiCellInfo const&) const -> bool = default;
     auto operator<=>(MultiCellInfo const&) const = default;
+
+    constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<MultiCellInfo>) {
+        return di::make_fields<"Hyperlink">(
+            di::field<"scale", &MultiCellInfo::scale>, di::field<"width", &MultiCellInfo::width>,
+            di::field<"fractional_scale_numerator", &MultiCellInfo::fractional_scale_numerator>,
+            di::field<"fractional_scale_denominator", &MultiCellInfo::fractional_scale_denominator>,
+            di::field<"vertical_alignment", &MultiCellInfo::vertical_alignment>,
+            di::field<"horizontal_alignment", &MultiCellInfo::horizontal_alignment>);
+    }
 };
 
 // Strictly speaking, this isn't a multicell. However, its a reasonable default value.
