@@ -191,6 +191,7 @@ static void put_text_wide() {
 
     screen.set_cursor(2, 0);
     put_text(screen, "1"_sv);
+    ASSERT_EQ(screen.cursor().text_offset, 1);
 
     validate_text(screen, u8"ab猫.e\n"
                           u8"abcd \n"
@@ -201,6 +202,7 @@ static void put_text_wide() {
 
     screen.set_cursor(3, 4);
     put_text(screen, "2"_sv);
+    ASSERT_EQ(screen.cursor().text_offset, 3);
 
     validate_text(screen, u8"ab猫.e\n"
                           u8"abcd \n"

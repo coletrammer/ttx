@@ -25,8 +25,11 @@ auto Renderer::setup(dius::SyncFile& output) -> di::Result<> {
     m_cleanup.push_back("\033[<u"_s);
 
     // Setup - capture mouse events with shift held
-    di::writer_print<di::String::Encoding>(output, "\033[>1s"_sv);
-    m_cleanup.push_back("\033[>0s"_s);
+    // Unfortunately, capturing shift mouse events prevents us from being able
+    // to click on hyperlinks on Linux + Ghostty. On MacOS, command clicks can
+    // be used. Other terminals ignore this escape anyway.
+    // di::writer_print<di::String::Encoding>(output, "\033[>1s"_sv);
+    // m_cleanup.push_back("\033[>0s"_s);
 
     // Setup - capture all mouse events and use SGR mosue reporting.
     di::writer_print<di::String::Encoding>(output, "\033[?1003h\033[?1006h"_sv);
