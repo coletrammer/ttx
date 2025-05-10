@@ -522,7 +522,19 @@ void Screen::clear_row_after_cursor() {
 
     auto& row = rows()[m_cursor.row];
     auto text_size_to_delete = 0zu;
-    for (auto& cell : row.cells | di::drop(m_cursor.col)) {
+    auto deletion_point = m_cursor.col;
+    if (row.cells[deletion_point].is_nonprimary_in_multi_cell()) {
+        while (!row.cells[deletion_point].is_primary_in_multi_cell()) {
+            deletion_point--;
+        }
+    }
+    auto text_start_position = m_cursor.text_offset;
+    if (deletion_point < m_cursor.col) {
+        for (auto& cell : auto(*row.cells.subspan(deletion_point, m_cursor.col - deletion_point))) {
+            text_start_position -= cell.text_size;
+        }
+    }
+    for (auto& cell : row.cells | di::drop(deletion_point)) {
         m_active_rows.drop_cell(cell);
         text_size_to_delete += cell.text_size;
         cell.text_size = 0;
@@ -530,19 +542,25 @@ void Screen::clear_row_after_cursor() {
     row.overflow = false;
 
     // Delete text after the cursor.
-    auto text_start = row.text.iterator_at_offset(m_cursor.text_offset);
-    auto text_end = row.text.iterator_at_offset(m_cursor.text_offset + text_size_to_delete);
+    auto text_start = row.text.iterator_at_offset(text_start_position);
+    auto text_end = row.text.iterator_at_offset(text_start_position + text_size_to_delete);
     ASSERT(text_start);
     ASSERT(text_end);
     row.text.erase(text_start.value(), text_end.value());
+
+    m_cursor.text_offset = text_start_position;
 }
 
 void Screen::clear_row_before_cursor() {
     m_cursor.overflow_pending = false;
 
     auto& row = rows()[m_cursor.row];
+    auto deletion_end = m_cursor.col + 1;
+    while (deletion_end < row.cells.size() && row.cells[deletion_end].is_nonprimary_in_multi_cell()) {
+        deletion_end++;
+    }
     auto text_size_to_delete = 0zu;
-    for (auto& cell : row.cells | di::take(m_cursor.col + 1)) {
+    for (auto& cell : row.cells | di::take(deletion_end)) {
         m_active_rows.drop_cell(cell);
         text_size_to_delete += cell.text_size;
         cell.text_size = 0;
@@ -561,16 +579,33 @@ void Screen::erase_characters(u32 n) {
     m_cursor.overflow_pending = false;
 
     auto& row = rows()[m_cursor.row];
-    auto text_size_to_delete = 0zu;
-    for (auto& cell : row.cells | di::drop(m_cursor.col) | di::take(n)) {
+    auto insertion_point = m_cursor.col;
+    auto deletion_point = insertion_point;
+    if (row.cells[deletion_point].is_nonprimary_in_multi_cell()) {
+        while (!row.cells[deletion_point].is_primary_in_multi_cell()) {
+            deletion_point--;
+        }
+    }
+    auto text_start_position = m_cursor.text_offset;
+    if (deletion_point < m_cursor.col) {
+        for (auto& cell : auto(*row.cells.subspan(deletion_point, m_cursor.col - deletion_point))) {
+            text_start_position -= cell.text_size;
+        }
+    }
+    auto deletion_end = di::min(insertion_point + n, u32(row.cells.size()));
+    while (deletion_end < max_width() && row.cells[deletion_end].is_nonprimary_in_multi_cell()) {
+        deletion_end++;
+    }
+    auto text_end_position = text_start_position;
+    for (auto& cell : auto(*row.cells.subspan(deletion_point, deletion_end - deletion_point))) {
         m_active_rows.drop_cell(cell);
-        text_size_to_delete += cell.text_size;
+        text_end_position += cell.text_size;
         cell.text_size = 0;
     }
 
     // Delete text after the cursor.
-    auto text_start = row.text.iterator_at_offset(m_cursor.text_offset);
-    auto text_end = row.text.iterator_at_offset(m_cursor.text_offset + text_size_to_delete);
+    auto text_start = row.text.iterator_at_offset(text_start_position);
+    auto text_end = row.text.iterator_at_offset(text_end_position);
     ASSERT(text_start);
     ASSERT(text_end);
     row.text.erase(text_start.value(), text_end.value());
@@ -579,6 +614,8 @@ void Screen::erase_characters(u32 n) {
     if (text_end.value() == row.text.end()) {
         row.overflow = false;
     }
+
+    m_cursor.text_offset = text_start_position;
 }
 
 void Screen::scroll_down() {
