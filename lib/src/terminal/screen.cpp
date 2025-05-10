@@ -874,9 +874,10 @@ void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode) {
     auto new_cursor = m_cursor;
     if (new_cursor.col + 1 == max_width()) {
         new_cursor.overflow_pending = true;
+        new_cursor.text_offset = text_start_position;
     } else {
         new_cursor.col++;
-        new_cursor.text_offset += text.size_bytes();
+        new_cursor.text_offset = text_start_position + text.size_bytes();
     }
     m_cursor = new_cursor;
 }

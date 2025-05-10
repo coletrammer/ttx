@@ -25,7 +25,7 @@ Date:   Mon Apr 27 13:48:52 2015 +0200
 ]8;id=30;https://en.wikipedia.org/wiki/%C3%81\Wiki page of Á (escaped as %C3%81)
 ]8;id=31;https://en.wikipedia.org/wiki/%25\Wiki page of % (escaped as %25)
 ]8;id=32;http://%d8%a7%d9%84%d9%85%d8%ba%d8%b1%d8%a8.icom.museum\http://المغرب.icom.museum (with URI-escaped domain name)
-]8;id=33;http://xn--4wa8awb4637h.org\http://xn--4wa8awb4637h.org (Παν語.org)
+]8;id=33;http://xn--4wa8awb4637h.org\http://xn--4wa8awb4637h.org (Παν語[C.org)
 [C
 ]8;;\Two adjacent links pointing to the same URL:   ]8;id=34;http://example.com/foo\foo]8;id=35;http://example.com/foo\foo
 ]8;;\Two adjacent links pointing to different URLs: ]8;id=36;http://example.com/foo\foo]8;id=37;http://example.com/bar\bar
@@ -39,7 +39,7 @@ bar
 [C
 ]8;;\Soft reset "\e[!p" resets attributes and terminates link: [0;3m[31m]8;id=44;http://example.com/softreset\foo]8;;\bar
 [C
-]8;id=45;http://example.com/width\Some CJK and combining accents: 䀀䀁䀂ćĝm̃n̄o̅
+]8;id=45;http://example.com/width\Some CJK and combining accents: 䀀[C䀁[C䀂[Cćĝm̃n̄o̅
 [C
 ]8;;\(Introducing the "under_score" character for even more fun)
 [C
