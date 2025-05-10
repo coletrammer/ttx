@@ -943,6 +943,10 @@ void Terminal::csi_decrqm(Params const& params) {
             (void) m_psuedo_terminal.write_exactly(
                 di::as_bytes(di::present("\033[?{};{}$y"_sv, param, m_disable_drawing ? 1 : 2)->span()));
             break;
+        case 2027:
+            // 3 means hard-wired to set.
+            (void) m_psuedo_terminal.write_exactly(di::as_bytes(di::present("\033[?{};{}$y"_sv, param, 3)->span()));
+            break;
         default:
             (void) m_psuedo_terminal.write_exactly(di::as_bytes(di::present("\033[?{};0$y"_sv, param)->span()));
     }
