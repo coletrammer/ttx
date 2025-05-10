@@ -313,20 +313,48 @@ void Screen::insert_blank_characters(u32 count) {
 
     // TODO: horizontal scrolling region
 
-    // Start by dropping the correct number of cells, based on how many new ones we need
-    // to insert.
+    // Check if we're inserting into a multicell boundary. If so, we need to clear the
+    // multicell.
     auto& row = rows()[m_cursor.row];
+    if (row.cells[m_cursor.col].is_nonprimary_in_multi_cell()) {
+        auto erase_position = m_cursor.col;
+        while (erase_position > 0 && row.cells[erase_position].is_nonprimary_in_multi_cell()) {
+            m_active_rows.drop_cell(row.cells[erase_position]);
+            erase_position--;
+        }
+
+        auto& primary_cell = row.cells[erase_position];
+        m_active_rows.drop_cell(primary_cell);
+
+        auto erase_text_start = row.text.iterator_at_offset(m_cursor.text_offset - primary_cell.text_size);
+        ASSERT(erase_text_start);
+        auto erase_text_end = row.text.iterator_at_offset(m_cursor.text_offset);
+        ASSERT(erase_text_end);
+        row.text.erase(erase_text_start.value(), erase_text_end.value());
+
+        m_cursor.text_offset -= primary_cell.text_size;
+        primary_cell.text_size = 0;
+    }
+
+    // Drop the correct number of cells, based on how many new ones we need
+    // to insert.
     auto max_to_insert = di::min(count, max_width() - m_cursor.col);
-    auto text_size_to_remove = 0zu;
-    for (auto& cell : row.cells | di::drop(max_width() - max_to_insert)) {
+    auto deletion_point = max_width() - max_to_insert;
+    if (deletion_point < row.cells.size() && row.cells[deletion_point].is_nonprimary_in_multi_cell()) {
+        while (deletion_point > 0 && !row.cells[deletion_point].is_primary_in_multi_cell()) {
+            deletion_point--;
+        }
+    }
+    auto text_start_position = row.text.size_bytes();
+    for (auto& cell : auto(*row.cells.subspan(deletion_point))) {
         m_active_rows.drop_cell(cell);
-        text_size_to_remove += cell.text_size;
+        text_start_position -= cell.text_size;
         cell.text_size = 0;
     }
     row.cells.erase(row.cells.end() - max_to_insert, row.cells.end());
 
     // Erase the text of the deleted cells.
-    auto text_start = row.text.iterator_at_offset(row.text.size_bytes() - text_size_to_remove);
+    auto text_start = row.text.iterator_at_offset(text_start_position);
     ASSERT(text_start);
     row.text.erase(text_start.value(), row.text.end());
 
@@ -380,17 +408,33 @@ void Screen::delete_characters(u32 count) {
     // to insert.
     auto& row = rows()[m_cursor.row];
     auto max_to_delete = di::min(count, max_width() - m_cursor.col);
-    auto text_size_to_remove = 0zu;
-    for (auto& cell : row.cells | di::drop(m_cursor.col) | di::take(max_to_delete)) {
+    auto deletion_point = m_cursor.col;
+    if (row.cells[deletion_point].is_nonprimary_in_multi_cell()) {
+        while (!row.cells[deletion_point].is_primary_in_multi_cell()) {
+            deletion_point--;
+        }
+    }
+    auto text_start_position = m_cursor.text_offset;
+    if (deletion_point < m_cursor.col) {
+        for (auto& cell : auto(*row.cells.subspan(deletion_point, m_cursor.col - deletion_point))) {
+            text_start_position -= cell.text_size;
+        }
+    }
+    auto deletion_end = m_cursor.col + max_to_delete;
+    while (deletion_end < max_width() && row.cells[deletion_end].is_nonprimary_in_multi_cell()) {
+        deletion_end++;
+    }
+    auto text_end_position = text_start_position;
+    for (auto& cell : auto(*row.cells.subspan(deletion_point, deletion_end - deletion_point))) {
         m_active_rows.drop_cell(cell);
-        text_size_to_remove += cell.text_size;
+        text_end_position += cell.text_size;
         cell.text_size = 0;
     }
     row.cells.erase(row.cells.begin() + m_cursor.col, row.cells.begin() + m_cursor.col + max_to_delete);
 
     // Erase the text of the deleted cells.
-    auto text_start = row.text.iterator_at_offset(m_cursor.text_offset);
-    auto text_end = row.text.iterator_at_offset(m_cursor.text_offset + text_size_to_remove);
+    auto text_start = row.text.iterator_at_offset(text_start_position);
+    auto text_end = row.text.iterator_at_offset(text_end_position);
     ASSERT(text_start);
     ASSERT(text_end);
     row.text.erase(text_start.value(), text_end.value());
@@ -404,6 +448,8 @@ void Screen::delete_characters(u32 count) {
     // preserve the background color. The cursor position is unchanged, as is the cursor byte offset.
     row.cells.resize(max_width());
     row.overflow = false;
+
+    m_cursor.text_offset = text_start_position;
 }
 
 void Screen::delete_lines(u32 count) {
