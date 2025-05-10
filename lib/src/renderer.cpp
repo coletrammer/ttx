@@ -40,6 +40,10 @@ auto Renderer::setup(dius::SyncFile& output) -> di::Result<> {
     di::writer_print<di::String::Encoding>(output, "\033[?2004h"_sv);
     m_cleanup.push_back("\033[?2004l"_s);
 
+    // Setup - grapheme cluster mode
+    di::writer_print<di::String::Encoding>(output, "\033[?2027h"_sv);
+    m_cleanup.push_back("\033[?2027l"_s);
+
     auto text = di::move(m_buffer).vector();
     m_buffer = {};
     return output.write_exactly(di::as_bytes(text.span()));

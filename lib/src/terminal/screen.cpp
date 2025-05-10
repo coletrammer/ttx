@@ -7,6 +7,7 @@
 #include "di/util/scope_exit.h"
 #include "dius/print.h"
 #include "dius/unicode/general_category.h"
+#include "dius/unicode/grapheme_cluster.h"
 #include "dius/unicode/width.h"
 #include "ttx/graphics_rendition.h"
 #include "ttx/terminal/cell.h"
@@ -710,12 +711,24 @@ void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
     // 1. Measure the width of the code point.
     auto width = dius::unicode::code_point_width(code_point).value_or(0);
 
-    // 2. Happy path - width is 1, so add a single cell.
-    if (width == 1) {
-        auto code_units = di::encoding::convert_to_code_units(di::String::Encoding(), code_point);
-        auto view = di::StringView(di::encoding::assume_valid, code_units.begin(), code_units.end());
-        put_single_cell(view, auto_wrap_mode);
-        return;
+    // 2. Determine the previous cell.
+    auto prev_cell = di::Optional<di::Tuple<Row&, Cell&, usize>> {};
+    if (m_cursor.row > 0 && m_cursor.col == 0) {
+        auto& row = rows()[m_cursor.row - 1];
+        auto candidate_position = max_width() - 1;
+        while (candidate_position > 0 && row.cells[candidate_position].is_nonprimary_in_multi_cell()) {
+            candidate_position--;
+        }
+        auto& cell = row.cells[candidate_position];
+        prev_cell = { row, cell, row.text.size_bytes() - cell.text_size };
+    } else if (m_cursor.col > 0) {
+        auto& row = rows()[m_cursor.row];
+        auto candidate_position = m_cursor.col - 1;
+        while (candidate_position > 0 && row.cells[candidate_position].is_nonprimary_in_multi_cell()) {
+            candidate_position--;
+        }
+        auto& cell = row.cells[candidate_position];
+        prev_cell = { row, cell, m_cursor.text_offset - cell.text_size };
     }
 
     // 3. Combining path - width is 0, so potentially add the
@@ -724,27 +737,59 @@ void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
     if (width == 0) {
         // Ignore code point if there is no previous cell or the
         // previous cell has no text.
-        if (m_cursor.col == 0) {
-            return;
-        }
-        auto& row = rows()[m_cursor.row];
-        auto& prev_cell = row.cells[m_cursor.col - 1];
-        if (prev_cell.text_size == 0) {
+        if (!prev_cell) {
             return;
         }
 
         // Now, we're safe to add the 0 width character to the cell's text.
-        auto it = row.text.iterator_at_offset(m_cursor.text_offset);
+        auto [row, primary_cell, text_offset] = prev_cell.value();
+        auto it = row.text.iterator_at_offset(text_offset + primary_cell.text_size);
         ASSERT(it);
         auto [s, e] = row.text.insert(it.value(), code_point);
         auto byte_size = e.data() - s.data();
-        m_cursor.text_offset += byte_size;
-        prev_cell.text_size += byte_size;
-        prev_cell.stale = false;
+        if (m_cursor.col > 0) {
+            m_cursor.text_offset += byte_size;
+        }
+        primary_cell.text_size += byte_size;
+        primary_cell.stale = false;
         return;
     }
 
-    // 4. Multi-cell case - width is 2.
+    // 4. Perform grapheme clustering w.r.t to the previous cell. If this character is not a grapheme boundary,
+    //    add to the previous cell.
+    if (prev_cell) {
+        auto clusterer = dius::unicode::GraphemeClusterer {};
+        auto [row, primary_cell, text_offset] = prev_cell.value();
+        auto text_start = row.text.iterator_at_offset(text_offset);
+        auto text_end = row.text.iterator_at_offset(text_offset + primary_cell.text_size);
+        ASSERT(text_start);
+        ASSERT(text_end);
+        auto text = row.text.substr(text_start.value(), text_end.value());
+        for (auto ch : text) {
+            clusterer.is_boundary(ch);
+        }
+        // Check for the combining case.
+        if (!clusterer.is_boundary(code_point)) {
+            auto [s, e] = row.text.insert(text_end.value(), code_point);
+            auto byte_size = e.data() - s.data();
+            if (m_cursor.col > 0) {
+                m_cursor.text_offset += byte_size;
+            }
+            primary_cell.text_size += byte_size;
+            primary_cell.stale = false;
+            return;
+        }
+    }
+
+    // 5. Happy path - width is 1, so add a single cell.
+    if (width == 1) {
+        auto code_units = di::encoding::convert_to_code_units(di::String::Encoding(), code_point);
+        auto view = di::StringView(di::encoding::assume_valid, code_units.begin(), code_units.end());
+        put_single_cell(view, auto_wrap_mode);
+        return;
+    }
+
+    // 6. Multi-cell case - width is 2.
     ASSERT_EQ(width, 2);
     auto code_units = di::encoding::convert_to_code_units(di::String::Encoding(), code_point);
     auto view = di::StringView(di::encoding::assume_valid, code_units.begin(), code_units.end());
