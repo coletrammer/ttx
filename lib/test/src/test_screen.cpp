@@ -308,37 +308,56 @@ static void origin_mode_cursor_movement() {
 }
 
 static void clear_row() {
-    auto screen = Screen({ 5, 5 }, Screen::ScrollBackEnabled::No);
+    auto screen = Screen({ 7, 5 }, Screen::ScrollBackEnabled::No);
 
     put_text(screen, u8"abcde"
                      u8"fghij"
                      u8"$¢€𐍈 "
-                     u8"pqrst"
-                     u8"uvwxy"_sv);
+                     u8"pq猫t"
+                     u8"uv猫y"
+                     u8"xx猫t"
+                     u8"yy猫y"_sv);
 
     screen.set_cursor(0, 2, true);
-    ;
+
     screen.clear_row_after_cursor();
     ASSERT_EQ(screen.cursor().text_offset, 2);
     ASSERT_EQ(screen.cursor().overflow_pending, false);
 
     screen.set_cursor(1, 2, true);
-    ;
+
     screen.clear_row_before_cursor();
     ASSERT_EQ(screen.cursor().text_offset, 0);
     ASSERT_EQ(screen.cursor().overflow_pending, false);
 
     screen.set_cursor(2, 4, true);
-    ;
+
     screen.clear_row();
     ASSERT_EQ(screen.cursor().text_offset, 0);
     ASSERT_EQ(screen.cursor().overflow_pending, false);
 
-    validate_text(screen, "ab   \n"
-                          "   ij\n"
-                          "     \n"
-                          "pqrst\n"
-                          "uvwxy"_sv);
+    screen.set_cursor(3, 2);
+    screen.clear_row_after_cursor();
+    ASSERT_EQ(screen.cursor().text_offset, 2);
+
+    screen.set_cursor(4, 3);
+    screen.clear_row_after_cursor();
+
+    screen.set_cursor(5, 2);
+    screen.clear_row_before_cursor();
+    ASSERT_EQ(screen.cursor().text_offset, 0);
+
+    screen.set_cursor(6, 3);
+    screen.clear_row_before_cursor();
+    ASSERT_EQ(screen.cursor().text_offset, 0);
+
+    validate_text(screen, u8"ab   \n"
+                          u8"   ij\n"
+                          u8"     \n"
+                          u8"pq   \n"
+                          u8"uv   \n"
+                          u8"    t\n"
+                          u8"    y"_sv);
 }
 
 static void clear_screen() {
@@ -351,13 +370,13 @@ static void clear_screen() {
                      u8"uvwxy"_sv);
 
     screen.set_cursor(2, 2, true);
-    ;
+
     screen.clear_before_cursor();
     ASSERT_EQ(screen.cursor().text_offset, 0);
     ASSERT_EQ(screen.cursor().overflow_pending, false);
 
     screen.set_cursor(3, 1, true);
-    ;
+
     screen.clear_after_cursor();
     ASSERT_EQ(screen.cursor().text_offset, 1);
     ASSERT_EQ(screen.cursor().overflow_pending, false);
@@ -394,11 +413,19 @@ static void clear_all() {
 static void erase_characters() {
     auto screen = Screen({ 5, 5 }, Screen::ScrollBackEnabled::No);
 
-    put_text(screen, u8"abcde"
-                     u8"fghij"
+    put_text(screen, u8"ab猫e"
+                     u8"fg猫j"
                      u8"$¢€𐍈x"
                      u8"pqrst"
                      u8"uvwxy"_sv);
+
+    screen.set_cursor(0, 2);
+    screen.erase_characters(1);
+    ASSERT_EQ(screen.cursor().text_offset, 2);
+
+    screen.set_cursor(1, 3);
+    screen.erase_characters(2);
+    ASSERT_EQ(screen.cursor().text_offset, 2);
 
     screen.set_cursor(2, 2, true);
 
@@ -409,8 +436,8 @@ static void erase_characters() {
     screen.set_cursor(3, 1);
     screen.erase_characters(1000);
 
-    validate_text(screen, u8"abcde\n"
-                          u8"fghij\n"
+    validate_text(screen, u8"ab  e\n"
+                          u8"fg   \n"
                           u8"$¢ 𐍈x\n"
                           u8"p    \n"
                           u8"uvwxy"_sv);
@@ -427,7 +454,7 @@ static void insert_blank_characters() {
 
     auto expected = Cursor {};
     screen.set_cursor(0, 0, true);
-    ;
+
     screen.insert_blank_characters(0); // No-op, but clears cursor overflow pending.
     ASSERT_EQ(screen.cursor(), expected);
     screen.insert_blank_characters(1);
