@@ -449,8 +449,8 @@ static void insert_blank_characters() {
     put_text(screen, u8"abcde"
                      u8"fghij"
                      u8"$¢€𐍈x"
-                     u8"pqrst"
-                     u8"uvwxy"_sv);
+                     u8"p猫tv"
+                     u8"u猫yz"_sv);
 
     auto expected = Cursor {};
     screen.set_cursor(0, 0, true);
@@ -470,11 +470,19 @@ static void insert_blank_characters() {
     expected = { .row = 2, .col = 2, .text_offset = 3 };
     ASSERT_EQ(screen.cursor(), expected);
 
+    screen.set_cursor(3, 1);
+    screen.insert_blank_characters(3);
+    ASSERT_EQ(screen.cursor().text_offset, 1);
+
+    screen.set_cursor(4, 2);
+    screen.insert_blank_characters(1);
+    ASSERT_EQ(screen.cursor().text_offset, 1);
+
     validate_text(screen, u8" abcd\n"
                           u8"f    \n"
                           u8"$¢  €\n"
-                          u8"pqrst\n"
-                          u8"uvwxy"_sv);
+                          u8"p    \n"
+                          u8"u   y"_sv);
 }
 
 static void delete_characters() {
@@ -483,8 +491,8 @@ static void delete_characters() {
     put_text(screen, u8"abcde"
                      u8"fghij"
                      u8"$¢€𐍈x"
-                     u8"pqrst"
-                     u8"uvwxy"_sv);
+                     u8"p猫st"
+                     u8"u猫xy"_sv);
 
     auto expected = Cursor {};
     screen.set_cursor(0, 0, true);
@@ -504,11 +512,19 @@ static void delete_characters() {
     expected = { .row = 2, .col = 2, .text_offset = 3 };
     ASSERT_EQ(screen.cursor(), expected);
 
+    screen.set_cursor(3, 1);
+    screen.delete_characters(1);
+    ASSERT_EQ(screen.cursor().text_offset, 1);
+
+    screen.set_cursor(4, 2);
+    screen.delete_characters(2);
+    ASSERT_EQ(screen.cursor().text_offset, 1);
+
     validate_text(screen, u8"bcde \n"
                           u8"f    \n"
                           u8"$¢x  \n"
-                          u8"pqrst\n"
-                          u8"uvwxy"_sv);
+                          u8"p st \n"
+                          u8"u y  "_sv);
 }
 
 static void insert_blank_lines() {
