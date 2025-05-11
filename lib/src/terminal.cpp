@@ -838,6 +838,9 @@ void Terminal::csi_decset(Params const& params) {
         case 1006:
             m_mouse_encoding = MouseEncoding::SGR;
             break;
+        case 1007:
+            m_alternate_scroll_mode = AlternateScrollMode::Enabled;
+            break;
         case 1015:
             m_mouse_encoding = MouseEncoding::URXVT;
             break;
@@ -919,6 +922,9 @@ void Terminal::csi_decrst(Params const& params) {
         case 1015:
         case 1016:
             m_mouse_encoding = MouseEncoding::X10;
+            break;
+        case 1007:
+            m_alternate_scroll_mode = AlternateScrollMode::Disabled;
             break;
         case 1049:
             set_use_alternate_screen_buffer(false);
@@ -1327,8 +1333,8 @@ auto Terminal::state_as_escape_sequences() const -> di::String {
         }
 
         // Alternate scroll mode
-        if (m_alternate_scroll_mode == AlternateScrollMode::Enabled) {
-            di::writer_print<di::String::Encoding>(writer, "\033[?1007h"_sv);
+        if (m_alternate_scroll_mode == AlternateScrollMode::Disabled) {
+            di::writer_print<di::String::Encoding>(writer, "\033[?1007l"_sv);
         }
 
         // Mouse protocol

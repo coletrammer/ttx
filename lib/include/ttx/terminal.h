@@ -202,7 +202,7 @@ private:
 
     ApplicationCursorKeysMode m_application_cursor_keys_mode { ApplicationCursorKeysMode::Disabled };
 
-    AlternateScrollMode m_alternate_scroll_mode { AlternateScrollMode::Disabled };
+    AlternateScrollMode m_alternate_scroll_mode { AlternateScrollMode::Enabled };
     MouseProtocol m_mouse_protocol { MouseProtocol::None };
     MouseEncoding m_mouse_encoding { MouseEncoding::X10 };
     FocusEventMode m_focus_event_mode { FocusEventMode::Disabled };
