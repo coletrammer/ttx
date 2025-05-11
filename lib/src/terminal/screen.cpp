@@ -126,7 +126,8 @@ void Screen::resize(Size const& size) {
         m_cursor.text_offset += cell.text_size;
     }
 
-    // TODO: optimize!
+    // When resizing, just invalidate everything. Resize happens when
+    // the layout changes and the caller expects us to redraw everything.
     invalidate_all();
 }
 
@@ -398,8 +399,14 @@ void Screen::insert_blank_lines(u32 count) {
     m_cursor.text_offset = 0;
     m_cursor.col = 0;
 
-    // TODO: optimize!
-    invalidate_all();
+    // Invalidate all moved rows as necessary.
+    if (m_cursor.row == 0) {
+        invalidate_all();
+    } else {
+        for (auto& row : di::View(rows().begin() + m_cursor.row, end_row_iterator())) {
+            row.stale = false;
+        }
+    }
 }
 
 void Screen::delete_characters(u32 count) {
@@ -483,8 +490,14 @@ void Screen::delete_lines(u32 count) {
     m_cursor.text_offset = 0;
     m_cursor.col = 0;
 
-    // TODO: optimize!
-    invalidate_all();
+    // Invalidate all moved rows as necessary.
+    if (delete_row_it == rows().begin()) {
+        invalidate_all();
+    } else {
+        for (auto& row : di::View(delete_row_it, end_row_iterator())) {
+            row.stale = false;
+        }
+    }
 }
 
 void Screen::clear() {
@@ -1061,83 +1074,148 @@ void Screen::visual_scroll_to_bottom() {
 }
 
 void Screen::clear_selection() {
-    if (!m_selection.value_or({}).empty()) {
-        invalidate_all();
+    if (m_selection) {
+        invalidate_region(m_selection.value());
     }
     m_selection = {};
 }
 
+auto Screen::clamp_selection_point(SelectionPoint const& point) const
+    -> di::Tuple<SelectionPoint, RowGroup const&, u32> {
+    // Clamp the selection point to ensure its in bounds. Also lookup the backing
+    // row, which also is needed to clamping to the top left of the multi cell.
+    auto adjusted_point = point;
+    adjusted_point.row = di::clamp(point.row, absolute_row_start(), absolute_row_end() - 1);
+    auto [row_index, row_group] = find_row(adjusted_point.row);
+    auto const& row = row_group.rows()[row_index];
+    adjusted_point.col = di::clamp(point.col, 0_u32, u32(row.cells.size() - 1));
+
+    // Adjust the selection point to be at the start of any potential multicell.
+    while (adjusted_point.col > 0 && row.cells[adjusted_point.col].is_nonprimary_in_multi_cell()) {
+        adjusted_point.col--;
+    }
+    return di::make_tuple(adjusted_point, di::cref(row_group), row_index);
+}
+
 void Screen::begin_selection(SelectionPoint const& point, BeginSelectionMode mode) {
+    clear_selection();
+
+    auto [adjusted_point, row_group, row_index] = clamp_selection_point(point);
+    auto const& row = row_group.rows()[row_index];
     switch (mode) {
-        case BeginSelectionMode::Empty:
-            m_selection = { point, point };
+        case BeginSelectionMode::Single: {
+            m_selection = { adjusted_point, adjusted_point };
+            row.cells[adjusted_point.col].stale = false;
             return;
+        }
         case BeginSelectionMode::Word: {
             // For word selection, consider all non whitespace characters
             // as part of a word. This algorithm should work well enough
             // while still being simple to implement.
-            auto text_per_cell = di::Vector<di::StringView> {};
-            for (auto row : iterate_row(point.row)) {
-                auto [_, _, text, _, _] = row;
-                text_per_cell.push_back(text);
+            auto text_per_cell = di::Vector<di::Tuple<di::StringView, bool>> {};
+            for (auto row : iterate_row(adjusted_point.row)) {
+                auto [_, cell, text, _, _] = row;
+                text_per_cell.push_back({ text, cell.is_nonprimary_in_multi_cell() });
             }
-            auto start = point.col;
-            auto end = point.col;
+            auto start = adjusted_point.col;
+            auto end = adjusted_point.col;
             while (start > 0) {
-                auto text = text_per_cell[start - 1];
-                if (text.empty() ||
-                    dius::unicode::general_category(*text.front()) == dius::unicode::GeneralCategory::SpaceSeparator) {
+                auto [text, is_nonprimary_in_multi_cell] = text_per_cell[start - 1];
+                if (!is_nonprimary_in_multi_cell &&
+                    (text.empty() || dius::unicode::general_category(*text.front()) ==
+                                         dius::unicode::GeneralCategory::SpaceSeparator)) {
                     break;
                 }
                 start--;
             }
             while (end < max_col_inclusive()) {
-                auto text = text_per_cell[end + 1];
-                if (text.empty() ||
-                    dius::unicode::general_category(*text.front()) == dius::unicode::GeneralCategory::SpaceSeparator) {
+                auto [text, is_nonprimary_in_multi_cell] = text_per_cell[end + 1];
+                if (!is_nonprimary_in_multi_cell &&
+                    (text.empty() || dius::unicode::general_category(*text.front()) ==
+                                         dius::unicode::GeneralCategory::SpaceSeparator)) {
                     break;
                 }
                 end++;
             }
-            m_selection = { SelectionPoint { point.row, start }, SelectionPoint { point.row, end } };
-            invalidate_all();
+            m_selection = { SelectionPoint { adjusted_point.row, start }, SelectionPoint { adjusted_point.row, end } };
+            for (auto const& cell : auto(*row.cells.subspan(start, end - start + 1))) {
+                cell.stale = false;
+            }
             return;
         }
         case BeginSelectionMode::Line:
-            m_selection = { SelectionPoint { point.row, 0 }, SelectionPoint { point.row, max_col_inclusive() } };
-            invalidate_all();
+            m_selection = { SelectionPoint { adjusted_point.row, 0 },
+                            SelectionPoint { adjusted_point.row, u32(row.cells.size() - 1) } };
+            row.stale = false;
             return;
     }
     di::unreachable();
 }
 
 void Screen::update_selection(SelectionPoint const& point) {
+    auto [adjusted_point, row_group, row_index] = clamp_selection_point(point);
+    // auto const& row = row_group.rows()[row_index];
     if (!m_selection) {
-        begin_selection(point, BeginSelectionMode::Empty);
+        begin_selection(adjusted_point, BeginSelectionMode::Single);
     }
     ASSERT(m_selection);
-    if (point != m_selection.value().end) {
-        m_selection.value().end = point;
-        invalidate_all();
+    if (adjusted_point != m_selection.value().end) {
+        auto modified_region = Selection { m_selection.value().end, adjusted_point };
+        m_selection.value().end = adjusted_point;
+        invalidate_region(modified_region);
     }
 }
 
 auto Screen::in_selection(SelectionPoint const& point) const -> bool {
-    if (m_selection.value_or({}).empty()) {
+    if (!m_selection) {
         return false;
     }
     auto [start, end] = m_selection.value().normalize();
     return point >= start && point <= end;
 }
 
+void Screen::invalidate_region(Selection const& region) {
+    auto [start, end] = region.normalize();
+    ASSERT_GT_EQ(start.row, absolute_row_start());
+    ASSERT_LT_EQ(start.row, absolute_row_end());
+    ASSERT_GT_EQ(end.row, absolute_row_start());
+    ASSERT_LT_EQ(end.row, absolute_row_end());
+
+    // If we're invalidating a region larger than the screen, there's
+    // point if having detailed damage tracking.
+    if (end.row - start.row >= max_height()) {
+        invalidate_all();
+        return;
+    }
+
+    for (auto r = start.row; r <= end.row; r++) {
+        // Fast path: the entire row is contained the selection.
+        auto [row, group] = find_row(r);
+        auto const& row_object = group.rows()[row];
+        if (r > start.row && r < end.row) {
+            row_object.stale = false;
+            continue;
+        }
+
+        // Slow path: iterate over the whole row and invalidate the relevant cells.
+        auto iter_start_col = r == start.row ? start.col : 0_usize;
+        auto iter_end_col = r == end.row ? end.col : row_object.cells.size() - 1;
+        for (auto const& cell : auto(*row_object.cells.subspan(iter_start_col, iter_end_col - iter_start_col + 1))) {
+            cell.stale = false;
+        }
+    }
+}
+
 auto Screen::selected_text() const -> di::String {
-    if (m_selection.value_or({}).empty()) {
+    if (!m_selection) {
         return {};
     }
 
     auto [start, end] = m_selection.value().normalize();
     ASSERT_GT_EQ(start.row, absolute_row_start());
     ASSERT_LT_EQ(start.row, absolute_row_end());
+    ASSERT_GT_EQ(end.row, absolute_row_start());
+    ASSERT_LT_EQ(end.row, absolute_row_end());
 
     auto text = ""_s;
     for (auto r = start.row; r <= end.row; r++) {
@@ -1154,7 +1232,7 @@ auto Screen::selected_text() const -> di::String {
 
         // Slow path: iterate over the whole row and add the relevant cells.
         auto iter_start_col = r == start.row ? start.col : 0_usize;
-        auto iter_end_col = r == end.row ? end.col : row_object.cells.size();
+        auto iter_end_col = r == end.row ? end.col : row_object.cells.size() - 1;
         for (auto values : group.iterate_row(row)) {
             auto [c, _, cell_text, _, _] = values;
             if (c < iter_start_col || c > iter_end_col) {
@@ -1171,8 +1249,10 @@ auto Screen::selected_text() const -> di::String {
 
 void Screen::clamp_selection() {
     for (auto& selection : m_selection) {
-        selection.start.row = di::clamp(selection.start.row, absolute_row_start(), absolute_row_end() - 1);
-        selection.end.row = di::clamp(selection.end.row, absolute_row_start(), absolute_row_end() - 1);
+        auto [start, _, _] = clamp_selection_point(selection.start);
+        auto [end, _, _] = clamp_selection_point(selection.end);
+        selection.start = start;
+        selection.end = end;
     }
 }
 

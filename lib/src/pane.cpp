@@ -10,6 +10,7 @@
 #include "dius/sync_file.h"
 #include "dius/system/process.h"
 #include "dius/tty.h"
+#include "ttx/modifiers.h"
 #include "ttx/mouse.h"
 #include "ttx/mouse_event.h"
 #include "ttx/paste_event.h"
@@ -303,6 +304,7 @@ Pane::~Pane() {
     (void) m_process_thread.join();
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 auto Pane::draw(Renderer& renderer) -> RenderedCursor {
     return m_terminal.with_lock([&](Terminal& terminal) {
         auto& screen = terminal.active_screen().screen;
@@ -317,18 +319,25 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
                 end_row = r - m_vertical_scroll_offset + 1;
 
                 auto end_col = 0_u32;
-                for (auto [c, cell, text, graphics, hyperlink] :
-                     screen.iterate_row(r + screen.visual_scroll_offset())) {
+                auto [row_index, row_group] = screen.find_row(r + screen.visual_scroll_offset());
+                auto const& row = row_group.rows()[row_index];
+                for (auto [c, cell, text, graphics, hyperlink] : row_group.iterate_row(row_index)) {
                     if (c < m_horizontal_scroll_offset || cell.is_nonprimary_in_multi_cell()) {
                         continue;
                     }
 
-                    if (!cell.stale || whole_screen_dirty) {
+                    if (!cell.stale || !row.stale || whole_screen_dirty) {
                         auto selected = !text.empty() && screen.in_selection({ r + screen.visual_scroll_offset(),
                                                                                c - m_horizontal_scroll_offset });
                         auto gfx = graphics;
-                        if (terminal.reverse_video() ^ selected) {
+                        if (terminal.reverse_video()) {
                             gfx.inverted = !gfx.inverted;
+                        }
+                        if (selected) {
+                            // Taken from catpuccin mocha
+                            gfx.fg = Color(0xcd, 0xd6, 0xf4);
+                            gfx.bg = Color(0x58, 0x5b, 0x70);
+                            gfx.inverted = false;
                         }
                         if (text.empty()) {
                             text = " "_sv;
@@ -346,6 +355,7 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
                                           { .inverted = terminal.reverse_video() });
                     }
                 }
+                row.stale = true;
             }
 
             // Clear any blank rows after the terminal.
@@ -386,6 +396,7 @@ auto Pane::event(KeyEvent const& event) -> bool {
             // Clear the selection and scroll to the bottom when sending keys to the application.
             terminal.active_screen().screen.visual_scroll_to_bottom();
             terminal.active_screen().screen.clear_selection();
+            m_pending_selection_start = {};
         });
 
         (void) m_pty_controller.write_exactly(di::as_bytes(serialized_event.value().span()));
@@ -417,11 +428,11 @@ auto Pane::event(MouseEvent const& event) -> bool {
         serialize_mouse_event(event, mouse_protocol, mouse_encoding, m_last_mouse_position,
                               { alternate_scroll_mode, application_cursor_keys_mode, in_alternate_screen_buffer },
                               shift_escape_options, window_size);
+    m_last_mouse_position = event.position();
     if (serialized_event.has_value()) {
         (void) m_pty_controller.write_exactly(di::as_bytes(serialized_event.value().span()));
         return true;
     }
-    m_last_mouse_position = event.position();
 
     // Support mouse scrolling.
     if (event.button() == MouseButton::ScrollUp && event.type() == MouseEventType::Press) {
@@ -445,14 +456,25 @@ auto Pane::event(MouseEvent const& event) -> bool {
         m_terminal.with_lock([&](Terminal& terminal) {
             ASSERT_LT_EQ(consecutive_clicks, 3);
             ASSERT_GT_EQ(consecutive_clicks, 1);
-            terminal.active_screen().screen.begin_selection(
-                scroll_adjusted_position, terminal::Screen::BeginSelectionMode(consecutive_clicks - 1));
+            if (consecutive_clicks > 1) {
+                m_pending_selection_start = {};
+                terminal.active_screen().screen.begin_selection(
+                    scroll_adjusted_position, terminal::Screen::BeginSelectionMode(consecutive_clicks - 1));
+            } else {
+                m_pending_selection_start = scroll_adjusted_position;
+            }
         });
         return true;
     }
 
-    if (selection.has_value() && event.button() == MouseButton::Left && event.type() == MouseEventType::Move) {
+    if ((selection.has_value() || m_pending_selection_start.has_value()) && event.button() == MouseButton::Left &&
+        event.type() == MouseEventType::Move) {
         m_terminal.with_lock([&](Terminal& terminal) {
+            if (m_pending_selection_start) {
+                terminal.active_screen().screen.begin_selection(m_pending_selection_start.value(),
+                                                                terminal::Screen::BeginSelectionMode::Single);
+                m_pending_selection_start = {};
+            }
             terminal.active_screen().screen.update_selection(scroll_adjusted_position);
         });
         return true;
@@ -462,6 +484,7 @@ auto Pane::event(MouseEvent const& event) -> bool {
         auto text = m_terminal.with_lock([&](Terminal& terminal) {
             auto result = terminal.active_screen().screen.selected_text();
             terminal.active_screen().screen.clear_selection();
+            m_pending_selection_start = {};
             return result;
         });
         if (!text.empty() && m_hooks.did_selection) {
@@ -473,6 +496,7 @@ auto Pane::event(MouseEvent const& event) -> bool {
     // Clear selection by default on other events.
     m_terminal.with_lock([&](Terminal& terminal) {
         terminal.active_screen().screen.clear_selection();
+        m_pending_selection_start = {};
     });
     return false;
 }
@@ -481,6 +505,7 @@ auto Pane::event(FocusEvent const& event) -> bool {
     auto [focus_event_mode] = m_terminal.with_lock([&](Terminal& terminal) {
         if (event.is_focus_out()) {
             terminal.active_screen().screen.clear_selection();
+            m_pending_selection_start = {};
         }
         return di::Tuple { terminal.focus_event_mode() };
     });
@@ -496,6 +521,7 @@ auto Pane::event(FocusEvent const& event) -> bool {
 auto Pane::event(PasteEvent const& event) -> bool {
     auto [bracketed_paste_mode] = m_terminal.with_lock([&](Terminal& terminal) {
         terminal.active_screen().screen.clear_selection();
+        m_pending_selection_start = {};
         return di::Tuple { terminal.bracked_paste_mode() };
     });
 
@@ -563,6 +589,18 @@ void Pane::scroll(Direction direction, i32 amount_in_cells) {
                 amount_in_cells--;
             }
         });
+    }
+
+    auto selection = m_terminal.with_lock([&](Terminal& terminal) {
+        return terminal.active_screen().screen.selection();
+    });
+    if ((selection || m_pending_selection_start) && m_last_mouse_position) {
+        // Simulate a mouse move event. Because we've just scrolled the screen and are
+        // in the middle of a selection, we can be sure the user is holding the left
+        // mouse button. By simulating this mouse move, we update the selection based
+        // on the scrolling which just occurred. Use shift to ensure the mouse event
+        // isn't sent to the application.
+        event(MouseEvent(MouseEventType::Move, MouseButton::Left, m_last_mouse_position.value(), Modifiers::Shift));
     }
 }
 

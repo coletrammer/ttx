@@ -25,19 +25,13 @@ struct SelectionPoint {
 /// @brief Represents the visual selection of a terminal
 struct Selection {
     SelectionPoint start; ///< The start of the selection
-    SelectionPoint end;   ///< The end of the selection
+    SelectionPoint end;   ///< The end of the selection (inclusive)
 
     /// @brief Normalize the selection so that start <= end
     constexpr auto normalize() const -> Selection {
-        if (empty()) {
-            return {};
-        }
         auto [s, e] = di::minmax({ start, end });
         return { s, e };
     }
-
-    /// @brief Check if the selection contains no cells.
-    constexpr auto empty() const -> bool { return start == end; }
 
     constexpr auto operator==(Selection const& other) const -> bool {
         auto a = this->normalize();

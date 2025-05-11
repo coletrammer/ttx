@@ -119,6 +119,7 @@ private:
     di::Atomic<bool> m_done { false };
     di::Atomic<bool> m_capture { true };
     di::Optional<MousePosition> m_last_mouse_position;
+    di::Optional<terminal::SelectionPoint> m_pending_selection_start;
     MouseClickTracker m_mouse_click_tracker { 3 };
     dius::SyncFile m_pty_controller;
     di::Function<void()> m_restore_termios;

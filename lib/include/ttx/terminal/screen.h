@@ -136,7 +136,7 @@ public:
     void visual_scroll_to_bottom();
 
     enum class BeginSelectionMode {
-        Empty,
+        Single,
         Word,
         Line,
     };
@@ -179,6 +179,13 @@ private:
 
     // Clamp the selection to be within bounds, after adding/removing rows from scrollback.
     void clamp_selection();
+
+    // Clamp a selection point to only refer to actual cells (and the top-left of any multi cell).
+    // Also return the corresponding row information, for efficiency.
+    auto clamp_selection_point(SelectionPoint const& point) const -> di::Tuple<SelectionPoint, RowGroup const&, u32>;
+
+    // Invalidate a region of rows and cells, as specified by the selection region.
+    void invalidate_region(Selection const& region);
 
     auto begin_row_iterator() { return rows().begin() + m_scroll_region.start_row; }
     auto end_row_iterator() { return rows().begin() + m_scroll_region.end_row; }

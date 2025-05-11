@@ -2,13 +2,23 @@
 #include "dius/print.h"
 #include "ttx/graphics_rendition.h"
 #include "ttx/terminal/screen.h"
+#include "ttx/terminal/selection.h"
 
 namespace screen {
 using namespace ttx::terminal;
 
 static void put_text(Screen& screen, di::StringView text) {
     for (auto code_point : text) {
-        screen.put_code_point(code_point, AutoWrapMode::Enabled);
+        if (code_point == '\n') {
+            screen.set_cursor_col(0);
+            if (screen.cursor().row == screen.max_height() - 1) {
+                screen.scroll_down();
+            } else {
+                screen.set_cursor_row(screen.cursor().row + 1);
+            }
+        } else {
+            screen.put_code_point(code_point, AutoWrapMode::Enabled);
+        }
     }
 }
 
@@ -209,6 +219,38 @@ static void put_text_wide() {
                           u8"1 xxx\n"
                           u8"qwe 2\n"
                           u8" 猫. e"_sv);
+}
+
+static void selection() {
+    auto screen = Screen({ 3, 5 }, Screen::ScrollBackEnabled::Yes);
+
+    put_text(screen, u8"ab猫\n"_sv
+                     u8"猫fgh"_sv
+                     u8"h猫f "_sv
+                     u8"aa猫f"_sv
+                     u8"a猫bb"_sv
+                     u8"ddd猫"_sv);
+
+    // Single mode (clamp to wide cell boundary)
+    screen.begin_selection({ 5, 4 }, Screen::BeginSelectionMode::Single);
+    ASSERT_EQ(screen.selection(), Selection({ 5, 3 }, { 5, 3 }));
+    ASSERT_EQ(screen.selected_text(), u8"猫"_sv);
+
+    // Word mode (expand towards spaces)
+    screen.begin_selection({ 2, 2 }, Screen::BeginSelectionMode::Word);
+    ASSERT_EQ(screen.selection(), Selection({ 2, 0 }, { 2, 3 }));
+    ASSERT_EQ(screen.selected_text(), u8"h猫f"_sv);
+
+    // Line mode (handles overlay smalls lines in scroll back)
+    screen.begin_selection({ 0, 3 }, Screen::BeginSelectionMode::Line);
+    ASSERT_EQ(screen.selection(), Selection({ 0, 0 }, { 0, 3 }));
+    ASSERT_EQ(screen.selected_text(), u8"ab猫"_sv);
+
+    // Update selection (clamps to multi cell and works). And selection text
+    // only includes newlines that weren't caused by auto-wrapping.
+    screen.update_selection({ 2, 2 });
+    ASSERT_EQ(screen.selection(), Selection({ 0, 0 }, { 2, 1 }));
+    ASSERT_EQ(screen.selected_text(), u8"ab猫\n猫fghh猫"_sv);
 }
 
 static void cursor_movement() {
@@ -729,6 +771,7 @@ static void save_restore_cursor() {
 TEST(screen, put_text_basic)
 TEST(screen, put_text_unicode)
 TEST(screen, put_text_wide)
+TEST(screen, selection)
 TEST(screen, cursor_movement)
 TEST(screen, origin_mode_cursor_movement)
 TEST(screen, clear_row)
