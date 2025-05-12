@@ -52,13 +52,14 @@ void RowGroup::drop_multi_cell_id(u16& id) {
 }
 
 void RowGroup::drop_cell(Cell& cell) {
+    auto was_empty = cell.is_empty();
     drop_graphics_id(cell.graphics_rendition_id);
     drop_hyperlink_id(cell.hyperlink_id);
     drop_multi_cell_id(cell.multi_cell_id);
 
     cell.left_boundary_of_multicell = false;
     cell.top_boundary_of_multicell = false;
-    cell.stale = false;
+    cell.stale = was_empty;
 }
 
 auto RowGroup::graphics_rendition(u16 id) const -> GraphicsRendition const& {

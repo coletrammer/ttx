@@ -841,47 +841,61 @@ void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode) {
     // deletion of cells to account for a potential multi cell already partially occuppying the
     // new multi cell.
     auto insertion_point = m_cursor.col;
-    auto deletion_point = insertion_point;
-    if (row.cells[deletion_point].is_nonprimary_in_multi_cell()) {
-        while (!row.cells[deletion_point].is_primary_in_multi_cell()) {
-            deletion_point--;
-        }
-    }
     auto text_start_position = m_cursor.text_offset;
-    if (deletion_point < m_cursor.col) {
-        for (auto& cell : auto(*row.cells.subspan(deletion_point, m_cursor.col - deletion_point))) {
-            text_start_position -= cell.text_size;
+    auto& cell = row.cells[insertion_point];
+    if (cell.multi_cell_id == 0 && cell.graphics_rendition_id == m_graphics_id && cell.hyperlink_id == m_hyperlink_id &&
+        cell.text_size == text.size_bytes()) {
+        // Since everything else matches, we only need to update potentially the text.
+        auto text_start = row.text.iterator_at_offset(m_cursor.text_offset);
+        auto text_end = row.text.iterator_at_offset(m_cursor.text_offset + cell.text_size);
+        ASSERT(text_start.has_value());
+        ASSERT(text_end.has_value());
+        if (row.text.substr(text_start.value(), text_end.value()) != text) {
+            row.text.replace(text_start.value(), text_end.value(), text);
+            cell.stale = false;
         }
-    }
-    auto deletion_end = insertion_point + 1;
-    while (deletion_end < max_width() && row.cells[deletion_end].is_nonprimary_in_multi_cell()) {
-        deletion_end++;
-    }
-    auto text_end_position = text_start_position;
-    for (auto& cell : auto(*row.cells.subspan(deletion_point, deletion_end - deletion_point))) {
-        m_active_rows.drop_cell(cell);
-        text_end_position += cell.text_size;
-        cell.text_size = 0;
-    }
+    } else {
+        auto deletion_point = insertion_point;
+        if (row.cells[deletion_point].is_nonprimary_in_multi_cell()) {
+            while (!row.cells[deletion_point].is_primary_in_multi_cell()) {
+                deletion_point--;
+            }
+        }
+        if (deletion_point < m_cursor.col) {
+            for (auto& cell : auto(*row.cells.subspan(deletion_point, m_cursor.col - deletion_point))) {
+                text_start_position -= cell.text_size;
+            }
+        }
+        auto deletion_end = insertion_point + 1;
+        while (deletion_end < max_width() && row.cells[deletion_end].is_nonprimary_in_multi_cell()) {
+            deletion_end++;
+        }
+        auto text_end_position = text_start_position;
+        for (auto& cell : auto(*row.cells.subspan(deletion_point, deletion_end - deletion_point))) {
+            m_active_rows.drop_cell(cell);
+            text_end_position += cell.text_size;
+            cell.text_size = 0;
+        }
 
-    // Modify the cell with the new attributes, starting by clearing the old attributes.
-    auto& cell = row.cells[m_cursor.col];
-    if (m_graphics_id) {
-        cell.graphics_rendition_id = m_active_rows.use_graphics_id(m_graphics_id);
-    }
-    if (m_hyperlink_id) {
-        cell.hyperlink_id = m_active_rows.use_hyperlink_id(m_hyperlink_id);
-    }
+        // Modify the cell with the new attributes, starting by clearing the old attributes.
+        if (m_graphics_id) {
+            cell.graphics_rendition_id = m_active_rows.use_graphics_id(m_graphics_id);
+        }
+        if (m_hyperlink_id) {
+            cell.hyperlink_id = m_active_rows.use_hyperlink_id(m_hyperlink_id);
+        }
+        cell.stale = false;
 
-    // Insert the text. We can safely assert the iterator is valid because we compute the text offset in all cases
-    // and it should be correct. Additionally, because each cell contains valid UTF-8 text, the cell boundaries
-    // will always be valid insertion points.
-    auto text_start = row.text.iterator_at_offset(text_start_position);
-    auto text_end = row.text.iterator_at_offset(text_end_position);
-    ASSERT(text_start.has_value());
-    ASSERT(text_end.has_value());
-    row.text.replace(text_start.value(), text_end.value(), text);
-    cell.text_size = text.size_bytes();
+        // Insert the text. We can safely assert the iterator is valid because we compute the text offset in all cases
+        // and it should be correct. Additionally, because each cell contains valid UTF-8 text, the cell boundaries
+        // will always be valid insertion points.
+        auto text_start = row.text.iterator_at_offset(text_start_position);
+        auto text_end = row.text.iterator_at_offset(text_end_position);
+        ASSERT(text_start.has_value());
+        ASSERT(text_end.has_value());
+        row.text.replace(text_start.value(), text_end.value(), text);
+        cell.text_size = text.size_bytes();
+    }
 
     // Advance the cursor 1 cell.
     auto new_cursor = m_cursor;
@@ -941,63 +955,76 @@ void Screen::put_wide_cell(di::StringView text, u8 width, AutoWrapMode auto_wrap
     // Determine the insertion point. This may not be the cursor column when we're at the
     // end of the line.
     auto insertion_point = di::min(m_cursor.col, max_width() - width);
-
-    // We have to clear text starting from the insertion point. However, we have to extend the
-    // deletion of cells to account for a potential multi cell already partially occuppying the
-    // new multi cell.
-    auto deletion_point = insertion_point;
-    if (row.cells[deletion_point].is_nonprimary_in_multi_cell()) {
-        while (!row.cells[deletion_point].is_primary_in_multi_cell()) {
-            deletion_point--;
-        }
-    }
     auto text_start_position = m_cursor.text_offset;
-    if (deletion_point < m_cursor.col) {
-        for (auto& cell : auto(*row.cells.subspan(deletion_point, m_cursor.col - deletion_point))) {
-            text_start_position -= cell.text_size;
-        }
-    }
-    auto deletion_end = insertion_point + width;
-    while (deletion_end < max_width() && row.cells[deletion_end].is_nonprimary_in_multi_cell()) {
-        deletion_end++;
-    }
-    auto text_end_position = text_start_position;
-    for (auto& cell : auto(*row.cells.subspan(deletion_point, deletion_end - deletion_point))) {
-        m_active_rows.drop_cell(cell);
-        text_end_position += cell.text_size;
-        cell.text_size = 0;
-    }
 
-    // Now that we've cleared any old text, set the attributes appropriately on the new cells.
+    // Fast path: check for redundant updates. This means we're putting the same text into a cell.
     auto& primary_cell = row.cells[insertion_point];
-    primary_cell.left_boundary_of_multicell = true;
-    primary_cell.top_boundary_of_multicell = true;
-    primary_cell.multi_cell_id = multi_cell_id.value();
+    if (primary_cell.is_primary_in_multi_cell() && primary_cell.multi_cell_id == multi_cell_id.value() &&
+        primary_cell.graphics_rendition_id == m_graphics_id && primary_cell.hyperlink_id == m_hyperlink_id &&
+        primary_cell.text_size == text.size_bytes()) {
+        // Since everything else matches, we only need to update potentially the text.
+        auto text_start = row.text.iterator_at_offset(m_cursor.text_offset);
+        auto text_end = row.text.iterator_at_offset(m_cursor.text_offset + primary_cell.text_size);
+        ASSERT(text_start.has_value());
+        ASSERT(text_end.has_value());
+        if (row.text.substr(text_start.value(), text_end.value()) != text) {
+            row.text.replace(text_start.value(), text_end.value(), text);
+            primary_cell.stale = false;
+        }
+    } else {
+        // We have to clear text starting from the insertion point. However, we have to extend the
+        // deletion of cells to account for a potential multi cell already partially occuppying the
+        // new multi cell.
+        auto deletion_point = insertion_point;
+        if (row.cells[deletion_point].is_nonprimary_in_multi_cell()) {
+            while (!row.cells[deletion_point].is_primary_in_multi_cell()) {
+                deletion_point--;
+            }
+        }
+        if (deletion_point < m_cursor.col) {
+            for (auto& cell : auto(*row.cells.subspan(deletion_point, m_cursor.col - deletion_point))) {
+                text_start_position -= cell.text_size;
+            }
+        }
+        auto deletion_end = insertion_point + width;
+        while (deletion_end < max_width() && row.cells[deletion_end].is_nonprimary_in_multi_cell()) {
+            deletion_end++;
+        }
+        auto text_end_position = text_start_position;
+        for (auto& cell : auto(*row.cells.subspan(deletion_point, deletion_end - deletion_point))) {
+            m_active_rows.drop_cell(cell);
+            text_end_position += cell.text_size;
+            cell.text_size = 0;
+        }
 
-    for (auto& cell : auto(*row.cells.subspan(insertion_point, width))) {
+        // Now that we've cleared any old text, set the attributes appropriately on the primary cells.
+        auto& primary_cell = row.cells[insertion_point];
+        primary_cell.left_boundary_of_multicell = true;
+        primary_cell.top_boundary_of_multicell = true;
+        primary_cell.multi_cell_id = multi_cell_id.value();
+        primary_cell.stale = false;
         if (m_graphics_id) {
-            cell.graphics_rendition_id = m_active_rows.use_graphics_id(m_graphics_id);
+            primary_cell.graphics_rendition_id = m_active_rows.use_graphics_id(m_graphics_id);
         }
         if (m_hyperlink_id) {
-            cell.hyperlink_id = m_active_rows.use_hyperlink_id(m_hyperlink_id);
+            primary_cell.hyperlink_id = m_active_rows.use_hyperlink_id(m_hyperlink_id);
         }
-        // Avoid adding an additional reference on the primary cell. Allocating the id
-        // already takes a reference, so we transfer that one directly to the primary
-        // cell.
-        if (!cell.multi_cell_id) {
+
+        // Apply the multi cell id to all components of the multi cell.
+        for (auto& cell : auto(*row.cells.subspan(insertion_point + 1, width - 1))) {
             cell.multi_cell_id = m_active_rows.use_multi_cell_id(multi_cell_id.value());
         }
-    }
 
-    // Insert the text. We can safely assert the iterator is valid because we compute the text offset in all cases
-    // and it should be correct. Additionally, because each cell contains valid UTF-8 text, the cell boundaries
-    // will always be valid insertion points.
-    auto text_start = row.text.iterator_at_offset(text_start_position);
-    auto text_end = row.text.iterator_at_offset(text_end_position);
-    ASSERT(text_start.has_value());
-    ASSERT(text_end.has_value());
-    row.text.replace(text_start.value(), text_end.value(), text);
-    primary_cell.text_size = text.size_bytes();
+        // Insert the text. We can safely assert the iterator is valid because we compute the text offset in all cases
+        // and it should be correct. Additionally, because each cell contains valid UTF-8 text, the cell boundaries
+        // will always be valid insertion points.
+        auto text_start = row.text.iterator_at_offset(text_start_position);
+        auto text_end = row.text.iterator_at_offset(text_end_position);
+        ASSERT(text_start.has_value());
+        ASSERT(text_end.has_value());
+        row.text.replace(text_start.value(), text_end.value(), text);
+        primary_cell.text_size = text.size_bytes();
+    }
 
     // Advance the cursor 1 cell.
     auto new_cursor = m_cursor;

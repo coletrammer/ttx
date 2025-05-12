@@ -80,6 +80,29 @@ static void validate_text(Screen& screen, di::StringView text) {
     }
 }
 
+static void validate_dirty(Screen& screen, di::StringView text) {
+    ASSERT_EQ(screen.absolute_row_start(), 0);
+    auto lines = text | di::split(U'\n');
+    for (auto [i, line] : lines | di::enumerate) {
+        ASSERT_EQ(di::distance(line), screen.max_width());
+
+        auto [row_index, row_group] = screen.find_row(i);
+        auto const& row = row_group.rows()[row_index];
+        for (auto [ch, data] : di::zip(line, row_group.iterate_row(row_index))) {
+            auto [_, cell, _, _, _] = data;
+
+            if (ch != U' ') {
+                auto cell_dirty = screen.whole_screen_dirty() || !row.stale || !cell.stale;
+                auto expected = ch == U'y';
+                ASSERT_EQ(cell_dirty, expected);
+            }
+            cell.stale = true;
+        }
+        row.stale = true;
+    }
+    screen.clear_whole_screen_dirty_flag();
+}
+
 static void put_text_basic() {
     auto screen = Screen({ 5, 5 }, Screen::ScrollBackEnabled::No);
 
@@ -219,6 +242,42 @@ static void put_text_wide() {
                           u8"1 xxx\n"
                           u8"qwe 2\n"
                           u8" 猫. e"_sv);
+}
+
+static void put_text_damage_tracking() {
+    auto screen = Screen({ 5, 5 }, Screen::ScrollBackEnabled::No);
+
+    validate_dirty(screen, "yyyyy\n"
+                           "yyyyy\n"
+                           "yyyyy\n"
+                           "yyyyy\n"
+                           "yyyyy"_sv);
+
+    put_text(screen, u8"ab猫e"_sv);
+    validate_text(screen, u8"ab猫.e\n"
+                          u8"     \n"
+                          u8"     \n"
+                          u8"     \n"
+                          u8"     "_sv);
+    validate_dirty(screen, "yyy y\n"
+                           "nnnnn\n"
+                           "nnnnn\n"
+                           "nnnnn\n"
+                           "nnnnn"_sv);
+
+    // Writing the same text should not mark the cells as dirty.
+    screen.set_cursor(0, 0);
+    put_text(screen, u8"ab猫e"_sv);
+    validate_text(screen, u8"ab猫.e\n"
+                          u8"     \n"
+                          u8"     \n"
+                          u8"     \n"
+                          u8"     "_sv);
+    validate_dirty(screen, "nnn n\n"
+                           "nnnnn\n"
+                           "nnnnn\n"
+                           "nnnnn\n"
+                           "nnnnn"_sv);
 }
 
 static void selection() {
@@ -452,6 +511,26 @@ static void clear_all() {
                           "     \n"
                           "     \n"
                           "     "_sv);
+    validate_dirty(screen, "yyyyy\n"
+                           "yyyyy\n"
+                           "yyyyy\n"
+                           "yyyyy\n"
+                           "yyyyy"_sv);
+
+    screen.clear();
+    ASSERT_EQ(screen.cursor().text_offset, 0);
+    ASSERT_EQ(screen.cursor().overflow_pending, false);
+
+    validate_text(screen, "     \n"
+                          "     \n"
+                          "     \n"
+                          "     \n"
+                          "     "_sv);
+    validate_dirty(screen, "nnnnn\n"
+                           "nnnnn\n"
+                           "nnnnn\n"
+                           "nnnnn\n"
+                           "nnnnn"_sv);
 }
 
 static void erase_characters() {
@@ -771,6 +850,7 @@ static void save_restore_cursor() {
 TEST(screen, put_text_basic)
 TEST(screen, put_text_unicode)
 TEST(screen, put_text_wide)
+TEST(screen, put_text_damage_tracking)
 TEST(screen, selection)
 TEST(screen, cursor_movement)
 TEST(screen, origin_mode_cursor_movement)
