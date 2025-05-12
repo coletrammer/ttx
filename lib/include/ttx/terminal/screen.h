@@ -8,6 +8,7 @@
 #include "ttx/size.h"
 #include "ttx/terminal/cursor.h"
 #include "ttx/terminal/hyperlink.h"
+#include "ttx/terminal/multi_cell_info.h"
 #include "ttx/terminal/row.h"
 #include "ttx/terminal/row_group.h"
 #include "ttx/terminal/scroll_back.h"
@@ -117,6 +118,7 @@ public:
     void invalidate_all() { m_whole_screen_dirty = true; }
     auto whole_screen_dirty() const -> bool { return m_whole_screen_dirty; }
     void clear_whole_screen_dirty_flag() { m_whole_screen_dirty = false; }
+    void clear_damage_tracking();
 
     auto absolute_row_start() const -> u64 { return m_scroll_back.absolute_row_start(); }
     auto absolute_row_screen_start() const -> u64 { return m_scroll_back.absolute_row_end(); }
@@ -163,10 +165,10 @@ public:
     /// information, including the size and dec modes.
     auto state_as_escape_sequences() const -> di::String;
 
-private:
     void put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode);
-    void put_wide_cell(di::StringView text, u8 width, AutoWrapMode auto_wrap_mode);
+    void put_wide_cell(di::StringView text, MultiCellInfo const& multi_cell_info, AutoWrapMode auto_wrap_mode);
 
+private:
     // Row/column helper functions for dealing with origin mode.
     auto translate_row(u32 row) const -> u32;
     auto translate_col(u32 col) const -> u32;

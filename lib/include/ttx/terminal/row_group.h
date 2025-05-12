@@ -123,9 +123,9 @@ public:
                        return row_object.text.substr(text_start.value(), text_end.value());
                    }();
 
-                   return di::make_tuple(col++, di::ref(cell), text,
-                                         di::ref(graphics_rendition(cell.graphics_rendition_id)),
-                                         maybe_hyperlink(cell.hyperlink_id));
+                   return di::make_tuple(
+                       col++, di::ref(cell), text, di::ref(graphics_rendition(cell.graphics_rendition_id)),
+                       maybe_hyperlink(cell.hyperlink_id), di::ref(multi_cell_info(cell.multi_cell_id)));
                }) |
                di::cache_last;
     }

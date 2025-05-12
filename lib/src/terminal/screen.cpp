@@ -806,7 +806,7 @@ void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
     ASSERT_EQ(width, 2);
     auto code_units = di::encoding::convert_to_code_units(di::String::Encoding(), code_point);
     auto view = di::StringView(di::encoding::assume_valid, code_units.begin(), code_units.end());
-    put_wide_cell(view, 2, auto_wrap_mode);
+    put_wide_cell(view, terminal::wide_multi_cell_info, auto_wrap_mode);
 }
 
 void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode) {
@@ -909,7 +909,8 @@ void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode) {
     m_cursor = new_cursor;
 }
 
-void Screen::put_wide_cell(di::StringView text, u8 width, AutoWrapMode auto_wrap_mode) {
+void Screen::put_wide_cell(di::StringView text, MultiCellInfo const& multi_cell_info, AutoWrapMode auto_wrap_mode) {
+    auto width = multi_cell_info.compute_width();
     ASSERT_GT_EQ(width, 2u);
 
     // Sanity check - if the text size is too large, ignore.
@@ -940,13 +941,12 @@ void Screen::put_wide_cell(di::StringView text, u8 width, AutoWrapMode auto_wrap
         } else {
             m_cursor = new_cursor;
         }
-        put_wide_cell(text, width, auto_wrap_mode);
+        put_wide_cell(text, multi_cell_info, auto_wrap_mode);
         return;
     }
 
     // Try to the allocate the multi cell info. This is required, and so we bail if
     // this fails.
-    auto multi_cell_info = MultiCellInfo { .width = width };
     auto multi_cell_id = m_active_rows.maybe_allocate_multi_cell_id(multi_cell_info);
     if (!multi_cell_id.has_value()) {
         return;
@@ -1100,6 +1100,15 @@ void Screen::visual_scroll_to_bottom() {
     }
 }
 
+void Screen::clear_damage_tracking() {
+    for (auto const& row : m_active_rows.rows()) {
+        for (auto const& cell : row.cells) {
+            cell.stale = true;
+        }
+        row.stale = true;
+    }
+}
+
 void Screen::clear_selection() {
     if (m_selection) {
         invalidate_region(m_selection.value());
@@ -1141,7 +1150,7 @@ void Screen::begin_selection(SelectionPoint const& point, BeginSelectionMode mod
             // while still being simple to implement.
             auto text_per_cell = di::Vector<di::Tuple<di::StringView, bool>> {};
             for (auto row : iterate_row(adjusted_point.row)) {
-                auto [_, cell, text, _, _] = row;
+                auto [_, cell, text, _, _, _] = row;
                 text_per_cell.push_back({ text, cell.is_nonprimary_in_multi_cell() });
             }
             auto start = adjusted_point.col;
@@ -1261,7 +1270,7 @@ auto Screen::selected_text() const -> di::String {
         auto iter_start_col = r == start.row ? start.col : 0_usize;
         auto iter_end_col = r == end.row ? end.col : row_object.cells.size() - 1;
         for (auto values : group.iterate_row(row)) {
-            auto [c, _, cell_text, _, _] = values;
+            auto [c, _, cell_text, _, _, _] = values;
             if (c < iter_start_col || c > iter_end_col) {
                 continue;
             }
@@ -1333,7 +1342,7 @@ auto Screen::state_as_escape_sequences() const -> di::String {
 
         auto [row, group] = find_row(r);
         for (auto row : group.iterate_row(row)) {
-            auto [c, _, text, gfx, hyperlink] = row;
+            auto [c, _, text, gfx, hyperlink, _] = row;
 
             // If we're at the cursor, and overflow isn't pending, then save the cursor now.
             auto at_cursor = r >= absolute_row_screen_start() && r - absolute_row_screen_start() == m_cursor.row &&

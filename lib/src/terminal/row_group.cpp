@@ -59,7 +59,7 @@ void RowGroup::drop_cell(Cell& cell) {
 
     cell.left_boundary_of_multicell = false;
     cell.top_boundary_of_multicell = false;
-    cell.stale = was_empty;
+    cell.stale = cell.stale && was_empty;
 }
 
 auto RowGroup::graphics_rendition(u16 id) const -> GraphicsRendition const& {

@@ -9,13 +9,13 @@
 #include "dius/print.h"
 #include "dius/sync_file.h"
 #include "dius/system/process.h"
-#include "dius/tty.h"
 #include "ttx/modifiers.h"
 #include "ttx/mouse.h"
 #include "ttx/mouse_event.h"
 #include "ttx/paste_event.h"
 #include "ttx/renderer.h"
 #include "ttx/terminal.h"
+#include "ttx/terminal/multi_cell_info.h"
 #include "ttx/terminal/screen.h"
 #include "ttx/utf8_stream_decoder.h"
 
@@ -321,7 +321,7 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
                 auto end_col = 0_u32;
                 auto [row_index, row_group] = screen.find_row(r + screen.visual_scroll_offset());
                 auto const& row = row_group.rows()[row_index];
-                for (auto [c, cell, text, graphics, hyperlink] : row_group.iterate_row(row_index)) {
+                for (auto [c, cell, text, graphics, hyperlink, multi_cell_info] : row_group.iterate_row(row_index)) {
                     if (c < m_horizontal_scroll_offset || cell.is_nonprimary_in_multi_cell()) {
                         continue;
                     }
@@ -339,11 +339,8 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
                             gfx.bg = Color(0x58, 0x5b, 0x70);
                             gfx.inverted = false;
                         }
-                        if (text.empty()) {
-                            text = " "_sv;
-                        }
                         renderer.put_cell(text, r - m_vertical_scroll_offset, c - m_horizontal_scroll_offset, gfx,
-                                          hyperlink);
+                                          hyperlink, multi_cell_info);
                         cell.stale = true;
                     }
                     end_col = c - m_horizontal_scroll_offset + 1;
@@ -351,8 +348,9 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
                 // Clear any blank cols after the terminal.
                 if (end_col < terminal.visible_size().cols) {
                     for (auto c : di::range(end_col, terminal.visible_size().cols)) {
-                        renderer.put_cell(" "_sv, r - m_vertical_scroll_offset, c,
-                                          { .inverted = terminal.reverse_video() });
+                        renderer.put_cell(""_sv, r - m_vertical_scroll_offset, c,
+                                          { .inverted = terminal.reverse_video() }, {},
+                                          terminal::narrow_multi_cell_info);
                     }
                 }
                 row.stale = true;

@@ -26,7 +26,7 @@ static void put_text(Screen& screen, di::StringView text) {
     for (auto i : di::range(screen.absolute_row_start(), screen.absolute_row_end())) {
         dius::print("\""_sv);
         for (auto row : screen.iterate_row(i)) {
-            auto [_, _, text, _, _] = row;
+            auto [_, _, text, _, _, _] = row;
             if (text.empty()) {
                 text = " "_sv;
             }
@@ -45,7 +45,7 @@ static void validate_text(Screen& screen, di::StringView text) {
             ASSERT_EQ(di::distance(expected_text), screen.max_width());
 
             for (auto [expected, row] : di::zip(expected_text, screen.iterate_row(i))) {
-                auto [_, cell, text, _, _] = row;
+                auto [_, cell, text, _, _, _] = row;
                 if (expected == "."_sv) {
                     ASSERT(cell.is_nonprimary_in_multi_cell());
                     continue;
@@ -61,7 +61,7 @@ static void validate_text(Screen& screen, di::StringView text) {
             ASSERT_EQ(di::distance(line), screen.max_width());
 
             for (auto [ch, row] : di::zip(line, screen.iterate_row(i))) {
-                auto [_, cell, text, _, _] = row;
+                auto [_, cell, text, _, _, _] = row;
                 if (ch == U'.') {
                     ASSERT(cell.is_nonprimary_in_multi_cell());
                     continue;
@@ -89,7 +89,7 @@ static void validate_dirty(Screen& screen, di::StringView text) {
         auto [row_index, row_group] = screen.find_row(i);
         auto const& row = row_group.rows()[row_index];
         for (auto [ch, data] : di::zip(line, row_group.iterate_row(row_index))) {
-            auto [_, cell, _, _, _] = data;
+            auto [_, cell, _, _, _, _] = data;
 
             if (ch != U' ') {
                 auto cell_dirty = screen.whole_screen_dirty() || !row.stale || !cell.stale;
