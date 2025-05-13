@@ -9,6 +9,7 @@
 #include "layout_state.h"
 #include "render.h"
 #include "save_layout.h"
+#include "ttx/features.h"
 
 namespace ttx {
 struct Args {
@@ -22,6 +23,7 @@ struct Args {
     di::Optional<di::TransparentStringView> layout_restore_name;
     bool replay { false };
     bool headless { false };
+    bool print_features { false };
     bool help { false };
 
     constexpr static auto get_cli_parser() {
@@ -31,6 +33,7 @@ struct Args {
             .option<&Args::print_keybinds>('k', "keybinds"_tsv, "Print key bindings"_sv)
             .option<&Args::capture_command_output_path>('c', "capture-command-output-path"_tsv,
                                                         "Capture command output to a file"_sv)
+            .option<&Args::print_features>('f', "features"_tsv, "Print out detected terminal features"_sv)
             .option<&Args::save_state_path>('S', "save-state-path"_tsv,
                                             "Save state path when triggering saving a pane's state"_sv)
             .option<&Args::headless>('h', "headless"_tsv, "Headless mode"_sv)
@@ -75,6 +78,15 @@ static auto main(Args& args) -> di::Result<void> {
         for (auto const& bind : key_binds) {
             dius::println("{}"_sv, bind);
         }
+        return {};
+    }
+
+    auto features = Feature::All;
+    if (!args.headless) {
+        features = TRY(detect_features(dius::stdin));
+    }
+    if (args.print_features) {
+        dius::println("Feature: {}"_sv, features);
         return {};
     }
 

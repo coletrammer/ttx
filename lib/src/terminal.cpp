@@ -13,6 +13,9 @@
 #include "ttx/mouse_event_io.h"
 #include "ttx/params.h"
 #include "ttx/paste_event_io.h"
+#include "ttx/terminal/escapes/device_attributes.h"
+#include "ttx/terminal/escapes/device_status.h"
+#include "ttx/terminal/escapes/mode.h"
 #include "ttx/terminal/escapes/osc_8.h"
 #include "ttx/terminal/screen.h"
 
@@ -731,7 +734,8 @@ void Terminal::csi_da1(Params const& params) {
     if (params.get(0, 0) != 0) {
         return;
     }
-    (void) m_psuedo_terminal.write_exactly(di::as_bytes("\033[?1;0c"_sv.span()));
+    auto response = terminal::PrimaryDeviceAttributes { .attributes = { 1, 0 } }.serialize();
+    (void) m_psuedo_terminal.write_exactly(di::as_bytes(response.span()));
 }
 
 // Secondary Device Attributes - https://vt100.net/docs/vt510-rm/DA2.html
@@ -943,19 +947,24 @@ void Terminal::csi_decrst(Params const& params) {
 // Request Mode - Host to Terminal - https://vt100.net/docs/vt510-rm/DECRQM.html
 void Terminal::csi_decrqm(Params const& params) {
     auto param = params.get(0, 0);
+    auto reply = terminal::ModeQueryReply {
+        .support = terminal::ModeSupport::Unknown,
+        .dec_mode = terminal::DecMode(param),
+    };
     switch (param) {
         // Synchronized output - https://gist.github.com/christianparpart/d8a62cc1ab659194337d73e399004036
         case 2026:
-            (void) m_psuedo_terminal.write_exactly(
-                di::as_bytes(di::present("\033[?{};{}$y"_sv, param, m_disable_drawing ? 1 : 2)->span()));
+            reply.support = m_disable_drawing ? terminal::ModeSupport::Set : terminal::ModeSupport::Unset;
             break;
         case 2027:
-            // 3 means hard-wired to set.
-            (void) m_psuedo_terminal.write_exactly(di::as_bytes(di::present("\033[?{};{}$y"_sv, param, 3)->span()));
+            reply.support = terminal::ModeSupport::AlwaysSet;
             break;
         default:
-            (void) m_psuedo_terminal.write_exactly(di::as_bytes(di::present("\033[?{};0$y"_sv, param)->span()));
+            break;
     }
+
+    auto reply_string = reply.serialize();
+    (void) m_psuedo_terminal.write_exactly(di::as_bytes(reply_string.span()));
 }
 
 // Set Cursor Style - https://vt100.net/docs/vt510-rm/DECSCUSR.html
@@ -982,15 +991,18 @@ void Terminal::csi_sgr(Params const& params) {
 // Device Status Report - https://vt100.net/docs/vt510-rm/DSR.html
 void Terminal::csi_dsr(Params const& params) {
     switch (params.get(0, 0)) {
-        case 5:
+        case 5: {
             // Operating Status - https://vt100.net/docs/vt510-rm/DSR-OS.html
-            (void) m_psuedo_terminal.write_exactly(di::as_bytes("\033[0n"_sv.span()));
+            auto response = terminal::OperatingStatusReport().serialize();
+            (void) m_psuedo_terminal.write_exactly(di::as_bytes(response.span()));
             break;
-        case 6:
+        }
+        case 6: {
             // Cursor Position Report - https://vt100.net/docs/vt510-rm/DSR-CPR.html
-            (void) m_psuedo_terminal.write_exactly(
-                di::as_bytes(di::present("\033[{};{}R"_sv, cursor_row() + 1, cursor_col() + 1).value().span()));
+            auto response = terminal::CursorPositionReport(cursor_row(), cursor_col()).serialize();
+            (void) m_psuedo_terminal.write_exactly(di::as_bytes(response.span()));
             break;
+        }
         default:
             break;
     }
