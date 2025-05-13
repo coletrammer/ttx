@@ -9,6 +9,9 @@
 #include "ttx/key_event.h"
 #include "ttx/mouse.h"
 #include "ttx/paste_event.h"
+#include "ttx/terminal/escapes/device_attributes.h"
+#include "ttx/terminal/escapes/device_status.h"
+#include "ttx/terminal/escapes/mode.h"
 
 namespace ttx {
 class RenderThread;
@@ -35,6 +38,9 @@ private:
     void handle_event(MouseEvent const& event);
     void handle_event(FocusEvent const& event);
     void handle_event(PasteEvent const& event);
+    void handle_event(terminal::PrimaryDeviceAttributes const&) {}
+    void handle_event(terminal::ModeQueryReply const&) {}
+    void handle_event(terminal::CursorPositionReport const&) {}
 
     auto handle_drag(LayoutState& state, MouseCoordinate const& coordinate) -> bool;
 

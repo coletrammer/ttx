@@ -10,6 +10,9 @@
 #include "ttx/mouse_event_io.h"
 #include "ttx/paste_event.h"
 #include "ttx/paste_event_io.h"
+#include "ttx/terminal/escapes/device_attributes.h"
+#include "ttx/terminal/escapes/device_status.h"
+#include "ttx/terminal/escapes/mode.h"
 
 namespace ttx {
 auto TerminalInputParser::parse(di::StringView input) -> di::Vector<Event> {
@@ -59,6 +62,15 @@ void TerminalInputParser::handle(CSI const& csi) {
     }
     if (auto focus_event = focus_event_from_csi(csi)) {
         m_events.emplace_back(di::move(focus_event).value());
+    }
+    if (auto primary_device_attributes = terminal::PrimaryDeviceAttributes::from_csi(csi)) {
+        m_events.emplace_back(di::move(primary_device_attributes).value());
+    }
+    if (auto mode_reply = terminal::ModeQueryReply::from_csi(csi)) {
+        m_events.emplace_back(di::move(mode_reply).value());
+    }
+    if (auto cursor_position_report = terminal::CursorPositionReport::from_csi(csi)) {
+        m_events.emplace_back(di::move(cursor_position_report).value());
     }
     if (is_bracketed_paste_begin(csi)) {
         m_in_bracketed_paste = true;

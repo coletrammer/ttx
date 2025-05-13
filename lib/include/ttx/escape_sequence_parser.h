@@ -53,8 +53,8 @@ struct APC {
 };
 
 struct CSI {
-    di::String intermediate;
-    Params params;
+    di::String intermediate {};
+    Params params {};
     c32 terminator = 0;
 
     auto operator==(CSI const&) const -> bool = default;

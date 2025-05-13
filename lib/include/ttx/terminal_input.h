@@ -8,9 +8,13 @@
 #include "ttx/key_event.h"
 #include "ttx/mouse_event.h"
 #include "ttx/paste_event.h"
+#include "ttx/terminal/escapes/device_attributes.h"
+#include "ttx/terminal/escapes/device_status.h"
+#include "ttx/terminal/escapes/mode.h"
 
 namespace ttx {
-using Event = di::Variant<KeyEvent, MouseEvent, FocusEvent, PasteEvent>;
+using Event = di::Variant<KeyEvent, MouseEvent, FocusEvent, PasteEvent, terminal::PrimaryDeviceAttributes,
+                          terminal::ModeQueryReply, terminal::CursorPositionReport>;
 
 class TerminalInputParser {
 public:
