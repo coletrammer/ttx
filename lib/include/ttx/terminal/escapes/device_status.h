@@ -2,6 +2,7 @@
 
 #include "di/reflect/prelude.h"
 #include "ttx/escape_sequence_parser.h"
+#include "ttx/key_event_io.h"
 
 namespace ttx::terminal {
 /// @brief Operating status report
@@ -42,6 +43,43 @@ struct CursorPositionReport {
     constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<CursorPositionReport>) {
         return di::make_fields<"CursorPositionReport">(di::field<"row", &CursorPositionReport::row>,
                                                        di::field<"col", &CursorPositionReport::col>);
+    }
+};
+
+/// @brief Kitty key protocol status report
+///
+/// This is requested via CSI ? u, and indicates the status of the kitty key progressive
+/// enhancements. This is mainly used to detect support for the protocol. Ths format is
+/// specified [here](https://sw.kovidgoyal.net/kitty/keyboard-protocol/#progressive-enhancement).
+struct KittyKeyReport {
+    KeyReportingFlags flags = KeyReportingFlags::None;
+
+    static auto from_csi(CSI const& csi) -> di::Optional<KittyKeyReport>;
+    auto serialize() const -> di::String;
+
+    auto operator==(KittyKeyReport const& other) const -> bool = default;
+
+    constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<KittyKeyReport>) {
+        return di::make_fields<"KittyKeyReport">(di::field<"flags", &KittyKeyReport::flags>);
+    }
+};
+
+/// @brief Request status string response
+///
+/// This is requested by DCS $ q Pt ST (DECRQSS), where Pt is the type
+/// of request to make. Commonly, Pt=m which indicates a request for the
+/// current graphics rendition. This is specified
+/// [here](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h4-Device-Control-functions:DCS-$-q-Pt-ST.DF5).
+struct StatusStringResponse {
+    di::Optional<di::String> response;
+
+    static auto from_dcs(DCS const& dcs) -> di::Optional<StatusStringResponse>;
+    auto serialize() const -> di::String;
+
+    auto operator==(StatusStringResponse const& other) const -> bool = default;
+
+    constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<StatusStringResponse>) {
+        return di::make_fields<"StatusStringResponse">(di::field<"response", &StatusStringResponse::response>);
     }
 };
 }

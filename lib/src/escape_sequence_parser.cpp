@@ -86,6 +86,11 @@ STATE(escape) {
         return;
     }
 
+    if (code_point == 0x50) {
+        transition(State::DcsEntry);
+        return;
+    }
+
     // For the purposes of parsing input, any other code point should be treated
     // as if we were in the ground state. This allows us to recognize alt+key when
     // using the legacy mode.
@@ -118,11 +123,6 @@ STATE(escape) {
 
     if (code_point == 0x5D) {
         transition(State::OscString);
-        return;
-    }
-
-    if (code_point == 0x50) {
-        transition(State::DcsEntry);
         return;
     }
 
@@ -670,6 +670,17 @@ auto EscapeSequenceParser::parse_input_escape_sequences(di::StringView data, boo
     if (flush && m_next_state == State::Escape) {
         transition(State::Ground);
         m_result.push_back(ControlCharacter('\x1b'));
+    }
+
+    // Special case: if we get the start of a DCS string (ESC P), and
+    // we don't finish parsing the DCS query, treat the input as alt+p.
+    // This is needed so that the user doesn't break the input parser
+    // by pressint alt+shift+p.
+    if (flush && (m_next_state == State::DcsEntry || m_next_state == State::DcsIgnore ||
+                  m_next_state == State::DcsIntermediate || m_next_state == State::DcsPassthrough ||
+                  m_next_state == State::DcsParam)) {
+        transition(State::Ground);
+        m_result.push_back(ControlCharacter('P', true));
     }
 
     return di::move(m_result);

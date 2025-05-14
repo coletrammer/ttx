@@ -41,6 +41,8 @@ private:
     void handle_event(terminal::PrimaryDeviceAttributes const&) {}
     void handle_event(terminal::ModeQueryReply const&) {}
     void handle_event(terminal::CursorPositionReport const&) {}
+    void handle_event(terminal::KittyKeyReport const&) {}
+    void handle_event(terminal::StatusStringResponse const&) {}
 
     auto handle_drag(LayoutState& state, MouseCoordinate const& coordinate) -> bool;
 
