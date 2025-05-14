@@ -465,13 +465,15 @@ void Terminal::c1_ri() {
 // Request Status String - https://vt100.net/docs/vt510-rm/DECRQSS.html
 void Terminal::dcs_decrqss(Params const&, di::StringView data) {
     // Set graphics rendition
+    auto response = terminal::StatusStringResponse {};
     if (data == "m"_sv) {
         auto sgr_string = active_screen().screen.current_graphics_rendition().as_csi_params() |
                           di::transform(di::to_string) | di::join_with(U';') | di::to<di::String>();
-        (void) m_psuedo_terminal.write_exactly(di::as_bytes(di::present("\033P1$r{}m\033\\"_sv, sgr_string)->span()));
-    } else {
-        (void) m_psuedo_terminal.write_exactly(di::as_bytes("\033P0$r\033\\"_sv.span()));
+        response.response = *di::present("{}m"_sv, sgr_string);
     }
+
+    auto response_string = response.serialize();
+    (void) m_psuedo_terminal.write_exactly(di::as_bytes(response_string.span()));
 }
 
 // OSC 7 - Current working directory report
@@ -1132,8 +1134,8 @@ void Terminal::csi_set_key_reporting_flags(Params const& params) {
 
 // https://sw.kovidgoyal.net/kitty/keyboard-protocol/#progressive-enhancement
 void Terminal::csi_get_key_reporting_flags(Params const&) {
-    (void) m_psuedo_terminal.write_exactly(
-        di::as_bytes(di::present("\033[?{}u"_sv, u32(active_screen().m_key_reporting_flags)).value().span()));
+    auto report = terminal::KittyKeyReport(active_screen().m_key_reporting_flags).serialize();
+    (void) m_psuedo_terminal.write_exactly(di::as_bytes(report.span()));
 }
 
 // https://sw.kovidgoyal.net/kitty/keyboard-protocol/#progressive-enhancement

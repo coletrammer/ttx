@@ -128,6 +128,21 @@ enum class DecMode {
     /// terminals like kitty do not report supporting this mode but do support
     /// grapheme clustering by default.
     GraphemeClustering = 2027,
+
+    /// @brief Enable automatic reports of users dark/light theme preference
+    ///
+    /// This allows an application to subscribe to updates when the user changes
+    /// their theme preference. The terminal will send special device status
+    /// report messages whenever this changes. This is specified
+    /// [here](https://contour-terminal.org/vt-extensions/color-palette-update-notifications/).
+    ThemeDetection = 2031,
+
+    /// @brief Enable automatic reports of the current terminal size
+    ///
+    /// This lets applications bypass the SIGWINCH mechanism and instead
+    /// directly get size reports whenver the size changes. This is
+    /// specified [here](https://gist.github.com/rockorager/e695fb2924d36b2bcf1fff4a3704bd83).
+    InBandSizeReports = 2048,
 };
 
 constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<DecMode>) {
@@ -144,7 +159,8 @@ constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<DecMode>) {
         di::enumerator<"AlternateScroll", AlternateScroll>, di::enumerator<"URXVTMouse", URXVTMouse>,
         di::enumerator<"SGRPixelMouse", SGRPixelMouse>, di::enumerator<"AlternateScreenBuffer", AlternateScreenBuffer>,
         di::enumerator<"BrackedPaste", BrackedPaste>, di::enumerator<"SynchronizedOutput", SynchronizedOutput>,
-        di::enumerator<"GraphemeClustering", GraphemeClustering>);
+        di::enumerator<"GraphemeClustering", GraphemeClustering>, di::enumerator<"ThemeDetection", ThemeDetection>,
+        di::enumerator<"InBandSizeReports", InBandSizeReports>);
 }
 
 enum class ModeSupport {

@@ -13,6 +13,18 @@
 #include "ttx/utf8_stream_decoder.h"
 
 namespace ttx {
+struct ModeQuery {
+    Feature feature = Feature::None;
+    terminal::DecMode mode { terminal::DecMode::None };
+};
+
+constexpr static auto dec_mode_queries = di::Array {
+    ModeQuery(Feature::SyncronizedOutput, terminal::DecMode::SynchronizedOutput),
+    ModeQuery(Feature::ThemeDetection, terminal::DecMode::ThemeDetection),
+    ModeQuery(Feature::InBandSizeReports, terminal::DecMode::InBandSizeReports),
+    ModeQuery(Feature::GraphemeClusteringMode, terminal::DecMode::GraphemeClustering),
+};
+
 class FeatureDetector {
 public:
     auto done() const -> bool { return m_done; }
@@ -26,14 +38,17 @@ public:
     void handle_event(terminal::PrimaryDeviceAttributes const&) { m_done = true; }
 
     void handle_event(terminal::ModeQueryReply const& reply) {
-        switch (reply.dec_mode) {
-            case terminal::DecMode::SynchronizedOutput:
-                if (reply.support == terminal::ModeSupport::Set || reply.support == terminal::ModeSupport::Unset) {
-                    m_result |= Feature::SyncronizedOutput;
+        for (auto [feature, mode] : dec_mode_queries) {
+            if (mode == reply.dec_mode) {
+                auto is_supported =
+                    reply.support == terminal::ModeSupport::Set || reply.support == terminal::ModeSupport::Unset;
+                if (mode == terminal::DecMode::GraphemeClustering) {
+                    is_supported |= reply.support == terminal::ModeSupport::AlwaysSet;
                 }
-                break;
-            default:
-                break;
+                if (is_supported) {
+                    m_result |= feature;
+                }
+            }
         }
     }
 
@@ -52,6 +67,14 @@ public:
         }
     }
 
+    void handle_event(terminal::KittyKeyReport const&) { m_result |= Feature::KittyKeyProtocol; }
+
+    void handle_event(terminal::StatusStringResponse const& response) {
+        if (response.response.has_value() && response.response.value().contains("4:3m"_sv)) {
+            m_result |= Feature::Undercurl;
+        }
+    }
+
 private:
     Feature m_result = Feature::None;
     bool m_done = false;
@@ -66,8 +89,17 @@ auto detect_features(dius::SyncFile& terminal) -> di::Result<Feature> {
     // the device attributes, so we can determine when a terminal igonres a specific request.
     auto request_buffer = di::VectorWriter<> {};
 
-    // Synchronoized output query
-    di::writer_print<di::String::Encoding>(request_buffer, "\033[?{}$p"_sv, u32(terminal::DecMode::SynchronizedOutput));
+    // DEC mode queries
+    for (auto [_, mode] : dec_mode_queries) {
+        di::writer_print<di::String::Encoding>(request_buffer, "\033[?{}$p"_sv, u32(mode));
+    }
+
+    // Undercurl support query (this sets urderline mode=3 (undercurl) and then requests what the
+    // terminal currently thinks the graphics attributes are).
+    di::writer_print<di::String::Encoding>(request_buffer, "\x1b[0m\x1b[4:3m\x1bP$qm\x1b\\\\\x1b[0m"_sv);
+
+    // Kitty keyboard protocol query
+    di::writer_print<di::String::Encoding>(request_buffer, "\033[?u"_sv);
 
     // Text sizing protocol query
     di::writer_print<di::String::Encoding>(request_buffer, "\033[6n"_sv);

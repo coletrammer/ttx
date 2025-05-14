@@ -14,7 +14,8 @@
 
 namespace ttx {
 using Event = di::Variant<KeyEvent, MouseEvent, FocusEvent, PasteEvent, terminal::PrimaryDeviceAttributes,
-                          terminal::ModeQueryReply, terminal::CursorPositionReport>;
+                          terminal::ModeQueryReply, terminal::CursorPositionReport, terminal::KittyKeyReport,
+                          terminal::StatusStringResponse>;
 
 class TerminalInputParser {
 public:

@@ -47,7 +47,11 @@ void TerminalInputParser::handle(PrintableCharacter const& printable_character) 
     m_events.emplace_back(key_event_from_legacy_code_point(printable_character.code_point));
 }
 
-void TerminalInputParser::handle(DCS const&) {}
+void TerminalInputParser::handle(DCS const& dcs) {
+    if (auto status_string_response = terminal::StatusStringResponse::from_dcs(dcs)) {
+        m_events.emplace_back(di::move(status_string_response).value());
+    }
+}
 
 void TerminalInputParser::handle(OSC const&) {}
 
@@ -71,6 +75,9 @@ void TerminalInputParser::handle(CSI const& csi) {
     }
     if (auto cursor_position_report = terminal::CursorPositionReport::from_csi(csi)) {
         m_events.emplace_back(di::move(cursor_position_report).value());
+    }
+    if (auto kitty_key_report = terminal::KittyKeyReport::from_csi(csi)) {
+        m_events.emplace_back(di::move(kitty_key_report).value());
     }
     if (is_bracketed_paste_begin(csi)) {
         m_in_bracketed_paste = true;
