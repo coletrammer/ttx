@@ -3,6 +3,7 @@
 #include "di/container/string/string_view.h"
 #include "dius/sync_file.h"
 #include "ttx/cursor_style.h"
+#include "ttx/features.h"
 #include "ttx/graphics_rendition.h"
 #include "ttx/size.h"
 #include "ttx/terminal/hyperlink.h"
@@ -25,7 +26,7 @@ public:
         : m_current_screen({ 24, 80 }, terminal::Screen::ScrollBackEnabled::No)
         , m_desired_screen({ 24, 80 }, terminal::Screen::ScrollBackEnabled::No) {}
 
-    auto setup(dius::SyncFile& output) -> di::Result<>;
+    auto setup(dius::SyncFile& output, Feature features) -> di::Result<>;
     auto cleanup(dius::SyncFile& output) -> di::Result<>;
 
     void start(Size const& size);
@@ -37,7 +38,8 @@ public:
                   di::Optional<terminal::Hyperlink const&> hyperlink = {});
 
     void put_cell(di::StringView text, u32 row, u32 col, GraphicsRendition const& rendition,
-                  di::Optional<terminal::Hyperlink const&> hyperlink, terminal::MultiCellInfo const& multi_cell_info);
+                  di::Optional<terminal::Hyperlink const&> hyperlink, terminal::MultiCellInfo const& multi_cell_info,
+                  bool explicitly_sized, bool complex_grapheme_cluster);
 
     void clear_row(u32 row, GraphicsRendition const& graphics_rendition = {},
                    di::Optional<terminal::Hyperlink const&> hyperlink = {});
@@ -51,6 +53,7 @@ private:
     terminal::Screen m_desired_screen;
     di::Optional<RenderedCursor> m_current_cursor;
     di::Vector<di::String> m_cleanup;
+    Feature m_features { Feature::None };
 
     u32 m_row_offset { 0 };
     u32 m_col_offset { 0 };

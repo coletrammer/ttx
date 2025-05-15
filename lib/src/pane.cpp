@@ -340,7 +340,8 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
                             gfx.inverted = false;
                         }
                         renderer.put_cell(text, r - m_vertical_scroll_offset, c - m_horizontal_scroll_offset, gfx,
-                                          hyperlink, multi_cell_info);
+                                          hyperlink, multi_cell_info, cell.explicitly_sized,
+                                          cell.complex_grapheme_cluster);
                         cell.stale = true;
                     }
                     end_col = c - m_horizontal_scroll_offset + 1;
@@ -350,7 +351,7 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
                     for (auto c : di::range(end_col, terminal.visible_size().cols)) {
                         renderer.put_cell(""_sv, r - m_vertical_scroll_offset, c,
                                           { .inverted = terminal.reverse_video() }, {},
-                                          terminal::narrow_multi_cell_info);
+                                          terminal::narrow_multi_cell_info, false, false);
                     }
                 }
                 row.stale = true;

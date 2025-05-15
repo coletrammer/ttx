@@ -5,6 +5,7 @@
 #include "input_mode.h"
 #include "layout_state.h"
 #include "tab.h"
+#include "ttx/features.h"
 #include "ttx/pane.h"
 #include "ttx/renderer.h"
 
@@ -36,10 +37,10 @@ using RenderEvent = di::Variant<Size, PaneExited, InputStatus, WriteString, Stat
 
 class RenderThread {
 public:
-    explicit RenderThread(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit);
+    explicit RenderThread(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit, Feature features);
     ~RenderThread();
 
-    static auto create(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit)
+    static auto create(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit, Feature features)
         -> di::Result<di::Box<RenderThread>>;
     static auto create_mock(di::Synchronized<LayoutState>& layout_state) -> RenderThread;
 
@@ -72,6 +73,7 @@ private:
     dius::ConditionVariable m_condition;
     di::Synchronized<LayoutState>& m_layout_state;
     di::Function<void()> m_did_exit;
+    Feature m_features { Feature::None };
     dius::Thread m_thread;
 };
 }

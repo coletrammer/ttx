@@ -7,11 +7,12 @@
 #include "ttx/layout.h"
 #include "ttx/mouse.h"
 #include "ttx/mouse_event.h"
+#include "ttx/renderer.h"
 
 namespace ttx {
-auto RenderThread::create(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit)
+auto RenderThread::create(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit, Feature features)
     -> di::Result<di::Box<RenderThread>> {
-    auto result = di::make_box<RenderThread>(layout_state, di::move(did_exit));
+    auto result = di::make_box<RenderThread>(layout_state, di::move(did_exit), features);
     result->m_thread = TRY(dius::Thread::create([&self = *result.get()] {
         self.render_thread();
     }));
@@ -19,11 +20,11 @@ auto RenderThread::create(di::Synchronized<LayoutState>& layout_state, di::Funct
 }
 
 auto RenderThread::create_mock(di::Synchronized<LayoutState>& layout_state) -> RenderThread {
-    return RenderThread(layout_state, nullptr);
+    return RenderThread(layout_state, nullptr, Feature::All);
 }
 
-RenderThread::RenderThread(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit)
-    : m_layout_state(layout_state), m_did_exit(di::move(did_exit)) {}
+RenderThread::RenderThread(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit, Feature features)
+    : m_layout_state(layout_state), m_did_exit(di::move(did_exit)), m_features(features) {}
 
 RenderThread::~RenderThread() {
     (void) m_thread.join();
@@ -129,7 +130,7 @@ void RenderThread::render_thread() {
 
         // Do terminal setup if requested.
         if (do_setup) {
-            (void) renderer.setup(dius::stdin);
+            (void) renderer.setup(dius::stdin, m_features);
             do_setup = false;
         }
 
@@ -314,16 +315,16 @@ void RenderThread::render_status_bar(LayoutState const& state, Renderer& rendere
 }
 
 void RenderThread::do_render(Renderer& renderer) {
-    m_layout_state.with_lock([&](LayoutState& state) {
+    auto cursor = m_layout_state.with_lock([&](LayoutState& state) -> di::Optional<RenderedCursor> {
         // Ignore if there is no layout.
         auto active_tab = state.active_tab();
         if (!active_tab) {
-            return;
+            return {};
         }
         auto& tab = *active_tab;
         auto tree = tab.layout_tree();
         if (!tree) {
-            return;
+            return {};
         }
 
         // Do the render.
@@ -348,7 +349,9 @@ void RenderThread::do_render(Renderer& renderer) {
             render_fn(popup_layout);
         }
 
-        (void) renderer.finish(dius::stdin, cursor.value_or({ .hidden = true }));
+        return cursor;
     });
+
+    (void) renderer.finish(dius::stdin, cursor.value_or({ .hidden = true }));
 }
 }

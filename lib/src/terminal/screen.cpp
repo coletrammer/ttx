@@ -789,6 +789,7 @@ void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
                 m_cursor.text_offset += byte_size;
             }
             primary_cell.text_size += byte_size;
+            primary_cell.complex_grapheme_cluster = true;
             primary_cell.stale = false;
             return;
         }
@@ -798,7 +799,7 @@ void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
     if (width == 1) {
         auto code_units = di::encoding::convert_to_code_units(di::String::Encoding(), code_point);
         auto view = di::StringView(di::encoding::assume_valid, code_units.begin(), code_units.end());
-        put_single_cell(view, auto_wrap_mode);
+        put_single_cell(view, auto_wrap_mode, false, false);
         return;
     }
 
@@ -806,10 +807,20 @@ void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
     ASSERT_EQ(width, 2);
     auto code_units = di::encoding::convert_to_code_units(di::String::Encoding(), code_point);
     auto view = di::StringView(di::encoding::assume_valid, code_units.begin(), code_units.end());
-    put_wide_cell(view, terminal::wide_multi_cell_info, auto_wrap_mode);
+    put_wide_cell(view, terminal::wide_multi_cell_info, auto_wrap_mode, false, false);
 }
 
-void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode) {
+void Screen::put_cell(di::StringView text, MultiCellInfo const& multi_cell_info, AutoWrapMode auto_wrap_mode,
+                      bool explicitly_sized, bool complex_grapheme_cluster) {
+    if (multi_cell_info == terminal::narrow_multi_cell_info) {
+        put_single_cell(text, auto_wrap_mode, explicitly_sized, complex_grapheme_cluster);
+    } else {
+        put_wide_cell(text, multi_cell_info, auto_wrap_mode, explicitly_sized, complex_grapheme_cluster);
+    }
+}
+
+void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode, bool explicitly_sized,
+                             bool complex_grapheme_cluster) {
     // Sanity check - if the text size is too large, ignore.
     if (text.size_bytes() > Cell::max_text_size) {
         return;
@@ -833,7 +844,7 @@ void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode) {
         } else {
             m_cursor = new_cursor;
         }
-        put_single_cell(text, auto_wrap_mode);
+        put_single_cell(text, auto_wrap_mode, explicitly_sized, complex_grapheme_cluster);
         return;
     }
 
@@ -854,6 +865,8 @@ void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode) {
             row.text.replace(text_start.value(), text_end.value(), text);
             cell.stale = false;
         }
+        cell.explicitly_sized = explicitly_sized;
+        cell.complex_grapheme_cluster = complex_grapheme_cluster;
     } else {
         auto deletion_point = insertion_point;
         if (row.cells[deletion_point].is_nonprimary_in_multi_cell()) {
@@ -884,6 +897,8 @@ void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode) {
         if (m_hyperlink_id) {
             cell.hyperlink_id = m_active_rows.use_hyperlink_id(m_hyperlink_id);
         }
+        cell.explicitly_sized = explicitly_sized;
+        cell.complex_grapheme_cluster = complex_grapheme_cluster;
         cell.stale = false;
 
         // Insert the text. We can safely assert the iterator is valid because we compute the text offset in all cases
@@ -909,7 +924,8 @@ void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode) {
     m_cursor = new_cursor;
 }
 
-void Screen::put_wide_cell(di::StringView text, MultiCellInfo const& multi_cell_info, AutoWrapMode auto_wrap_mode) {
+void Screen::put_wide_cell(di::StringView text, MultiCellInfo const& multi_cell_info, AutoWrapMode auto_wrap_mode,
+                           bool explicitly_sized, bool complex_grapheme_cluster) {
     auto width = multi_cell_info.compute_width();
     ASSERT_GT_EQ(width, 2u);
 
@@ -941,7 +957,7 @@ void Screen::put_wide_cell(di::StringView text, MultiCellInfo const& multi_cell_
         } else {
             m_cursor = new_cursor;
         }
-        put_wide_cell(text, multi_cell_info, auto_wrap_mode);
+        put_wide_cell(text, multi_cell_info, auto_wrap_mode, explicitly_sized, complex_grapheme_cluster);
         return;
     }
 
@@ -971,6 +987,8 @@ void Screen::put_wide_cell(di::StringView text, MultiCellInfo const& multi_cell_
             row.text.replace(text_start.value(), text_end.value(), text);
             primary_cell.stale = false;
         }
+        primary_cell.explicitly_sized = explicitly_sized;
+        primary_cell.complex_grapheme_cluster = complex_grapheme_cluster;
     } else {
         // We have to clear text starting from the insertion point. However, we have to extend the
         // deletion of cells to account for a potential multi cell already partially occuppying the
@@ -998,10 +1016,10 @@ void Screen::put_wide_cell(di::StringView text, MultiCellInfo const& multi_cell_
         }
 
         // Now that we've cleared any old text, set the attributes appropriately on the primary cells.
-        auto& primary_cell = row.cells[insertion_point];
         primary_cell.left_boundary_of_multicell = true;
-        primary_cell.top_boundary_of_multicell = true;
         primary_cell.multi_cell_id = multi_cell_id.value();
+        primary_cell.explicitly_sized = explicitly_sized;
+        primary_cell.complex_grapheme_cluster = complex_grapheme_cluster;
         primary_cell.stale = false;
         if (m_graphics_id) {
             primary_cell.graphics_rendition_id = m_active_rows.use_graphics_id(m_graphics_id);
