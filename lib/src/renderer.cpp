@@ -6,16 +6,20 @@
 #include "di/meta/constexpr.h"
 #include "dius/print.h"
 #include "dius/sync_file.h"
+#include "dius/unicode/width.h"
+#include "ttx/features.h"
 #include "ttx/graphics_rendition.h"
 #include "ttx/size.h"
 #include "ttx/terminal/cursor.h"
+#include "ttx/terminal/escapes/osc_66.h"
 #include "ttx/terminal/escapes/osc_8.h"
 #include "ttx/terminal/multi_cell_info.h"
 #include "ttx/terminal/screen.h"
 
 namespace ttx {
-auto Renderer::setup(dius::SyncFile& output) -> di::Result<> {
+auto Renderer::setup(dius::SyncFile& output, Feature features) -> di::Result<> {
     m_cleanup = {};
+    m_features = features;
 
     auto buffer = di::VectorWriter<> {};
 
@@ -87,31 +91,6 @@ void Renderer::start(Size const& size) {
         m_desired_screen.clear_damage_tracking();
         m_current_cursor = {};
     }
-    // Otherwise, update the current screen state to the desired state.
-    // We are assuming that the caller previously called end which would
-    // actually write out the state. We do this here because it saves computation
-    // when the size changes (as opposed to doing it in the end() function).
-    else {
-        ASSERT_EQ(m_desired_screen.absolute_row_start(), 0);
-        ASSERT_EQ(m_desired_screen.size(), m_current_screen.size());
-        auto [_, desired_row_group] = m_desired_screen.find_row(0);
-        for (auto row_index : di::range(this->size().rows)) {
-            for (auto desired : desired_row_group.iterate_row(row_index)) {
-                auto [col, cell, text, gfx, hyperlink, multi_cell_info] = desired;
-                if (cell.is_nonprimary_in_multi_cell()) {
-                    continue;
-                }
-                m_current_screen.set_cursor(row_index, col);
-                m_current_screen.set_current_graphics_rendition(gfx);
-                m_current_screen.set_current_hyperlink(hyperlink);
-                if (multi_cell_info == terminal::narrow_multi_cell_info) {
-                    m_current_screen.put_single_cell(text, terminal::AutoWrapMode::Disabled);
-                } else {
-                    m_current_screen.put_wide_cell(text, multi_cell_info, terminal::AutoWrapMode::Disabled);
-                }
-            }
-        }
-    }
 
     // Reset bounding box.
     m_row_offset = 0;
@@ -125,24 +104,35 @@ void Renderer::start(Size const& size) {
 // modified cells and store them in grouped list. The grouping is chosen to minimize the amount of bytes written (so
 // the order is hyperlink > graphics > cursor position).
 struct Change {
+    u32 phase { 0 }; // Allow separating rendering into 2 phases.
     di::Optional<terminal::Hyperlink const&> hyperlink;
     GraphicsRendition const& graphics_rendition;
     u32 row { 0 };
     u32 col { 0 };
     di::StringView text;
     terminal::MultiCellInfo const& multi_cell_info;
+    bool explicitly_sized { false };
+    bool complex_grapheme_cluster { false };
 
     auto operator==(Change const& o) const -> bool {
-        return di::tie(hyperlink, graphics_rendition, row, col) ==
-               di::tie(o.hyperlink, o.graphics_rendition, o.row, o.col);
+        return di::tie(phase, hyperlink, graphics_rendition, row, col) ==
+               di::tie(o.phase, o.hyperlink, o.graphics_rendition, o.row, o.col);
     };
     auto operator<=>(Change const& o) const {
+        if (auto rv = phase <=> o.phase; rv != 0) {
+            return rv;
+        }
+        if (phase == 0) {
+            // In phase 0 sort entirely by position.
+            return di::tie(row, col) <=> di::tie(o.row, o.col);
+        }
         return di::tie(hyperlink, graphics_rendition, row, col) <=>
                di::tie(o.hyperlink, o.graphics_rendition, o.row, o.col);
     }
 };
 
-static void move_cursor(di::VectorWriter<>& buffer, terminal::Cursor const& current, terminal::Cursor const& desired) {
+static void move_cursor(di::VectorWriter<>& buffer, u32 current_row, di::Optional<u32> current_col, u32 desired_row,
+                        u32 desired_col) {
     // Optmizations: we want to move the cursor using the fewest number of bytes.
     // We have the following escapes available to us:
     //   \n  (C0) : row += 1
@@ -163,77 +153,98 @@ static void move_cursor(di::VectorWriter<>& buffer, terminal::Cursor const& curr
     // In particular, use \n and RI only when the row if off by 1. And use relative whenever possible, but falling
     // back on CUP.
 
-    if (current.row == desired.row && current.col == desired.col) {
+    if (current_row == desired_row && current_col == desired_col) {
         return;
     }
 
-    if (current.row == desired.row) {
+    if (current_row == desired_row) {
         // Column only: Use \r if possible, otherwise relative positioning.
-        if (desired.col == 0) {
+        if (desired_col == 0) {
             di::writer_print<di::String::Encoding>(buffer, "\r"_sv);
-        } else if (desired.col + 1 == current.col) {
+        } else if (!current_col) {
+            // CHA
+            di::writer_print<di::String::Encoding>(buffer, "\033[{}G"_sv, desired_col + 1);
+        } else if (desired_col + 1 == current_col.value()) {
             // BS
             di::writer_print<di::String::Encoding>(buffer, "\x08"_sv);
-        } else if (desired.col < current.col) {
+        } else if (desired_col < current_col.value()) {
             // CUB
-            di::writer_print<di::String::Encoding>(buffer, "\033[{}D"_sv, current.col - desired.col);
+            di::writer_print<di::String::Encoding>(buffer, "\033[{}D"_sv, current_col.value() - desired_col);
         } else {
             // CUF
-            di::writer_print<di::String::Encoding>(buffer, "\033[{}C"_sv, desired.col - current.col);
+            di::writer_print<di::String::Encoding>(buffer, "\033[{}C"_sv, desired_col - current_col.value());
         }
         return;
     }
 
-    if (current.col == desired.col) {
+    if (current_col == desired_col) {
         // Row only: Use \n or RI if possible, otherwise relative movement.
-        if (desired.row == current.row + 1) {
+        if (desired_row == current_row + 1) {
             di::writer_print<di::String::Encoding>(buffer, "\n"_sv);
-        } else if (desired.row + 1 == current.row) {
+        } else if (desired_row + 1 == current_row) {
             di::writer_print<di::String::Encoding>(buffer, "\033M"_sv);
-        } else if (desired.row < current.row) {
+        } else if (desired_row < current_row) {
             // CUU
-            di::writer_print<di::String::Encoding>(buffer, "\033[{}A"_sv, current.row - desired.row);
+            di::writer_print<di::String::Encoding>(buffer, "\033[{}A"_sv, current_row - desired_row);
         } else {
             // CUD
-            di::writer_print<di::String::Encoding>(buffer, "\033[{}B"_sv, desired.row - current.row);
+            di::writer_print<di::String::Encoding>(buffer, "\033[{}B"_sv, desired_row - current_row);
         }
         return;
     }
 
-    if (desired.col == 0) {
+    if (desired_col == 0) {
         // Desired col = 0: Use CPL or CNL for relative movement.
-        if (desired.row == current.row + 1) {
+        if (desired_row == current_row + 1) {
             di::writer_print<di::String::Encoding>(buffer, "\r\n"_sv);
-        } else if (desired.row + 1 == current.row) {
+        } else if (desired_row + 1 == current_row) {
             di::writer_print<di::String::Encoding>(buffer, "\r\033M"_sv);
-        } else if (desired.row < current.row) {
+        } else if (desired_row < current_row) {
             // CPL
-            di::writer_print<di::String::Encoding>(buffer, "\033[{}F"_sv, current.row - desired.row);
+            di::writer_print<di::String::Encoding>(buffer, "\033[{}F"_sv, current_row - desired_row);
         } else {
             // CNL
-            di::writer_print<di::String::Encoding>(buffer, "\033[{}E"_sv, desired.row - current.row);
+            di::writer_print<di::String::Encoding>(buffer, "\033[{}E"_sv, desired_row - current_row);
         }
         return;
     }
 
     // Row movement by 1: adjust the row and then adjust the column
-    if (desired.row == current.row + 1) {
-        move_cursor(buffer, { desired.row, current.col }, desired);
+    if (desired_row == current_row + 1) {
+        move_cursor(buffer, desired_row, current_col, desired_row, desired_col);
         di::writer_print<di::String::Encoding>(buffer, "\n"_sv);
         return;
     }
-    if (desired.row + 1 == current.row) {
-        move_cursor(buffer, { desired.row, current.col }, desired);
+    if (desired_row + 1 == current_row) {
+        move_cursor(buffer, desired_row, current_col, desired_row, desired_col);
         di::writer_print<di::String::Encoding>(buffer, "\033M"_sv);
         return;
     }
 
     // Fallback:
     // CPA
-    di::writer_print<di::String::Encoding>(buffer, "\033[{};{}H"_sv, desired.row + 1, desired.col + 1);
+    di::writer_print<di::String::Encoding>(buffer, "\033[{};{}H"_sv, desired_row + 1, desired_col + 1);
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor) -> di::Result<> {
+    // List of changes which are used to determine what updates to the screen are needed. We
+    // render changes in 2 phases to account for specific edge cases around cell sizing. Imagine
+    // we have a terminal cell with text "🐈‍⬛". We will think this emoji has width 2, but its
+    // possible the outer terminal will give it width 4. To handle these scenarios,
+    // we need to always render the cells immediately following the potentially problematic
+    // text so it truncated properly. If we fail to do this we may end up with stale cells
+    // on subsequent renders, because we'll assume the cell if already up-to-date when in
+    // reality it was overwritten by another cell.
+    //
+    // This is only needed in specific cases where the text requires explicit sizing and the
+    // outer terminal doesn't support the text sizing protocol (OSC 66). However, when it is
+    // needed, we need to establish an upper bound on the length of text. This is done using
+    // the legacy algorithm of summing the code points widths across all code points. This can
+    // actually still under count the text if the outer terminals thinks some code point is
+    // larger than we do, but that's extremely unlikely. We only perform grapheme clustering
+    // ourselves if the terminal has at least some support so this entire case is fairly
+    // unlikely to begin with.
     auto changes = di::TreeSet<Change> {};
 
     ASSERT_EQ(m_current_screen.absolute_row_start(), 0);
@@ -242,8 +253,14 @@ auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor) -> d
     auto [_, current_row_group] = m_current_screen.find_row(0);
     auto [_, desired_row_group] = m_desired_screen.find_row(0);
     for (auto row_index : di::range(size().rows)) {
+        u32 force_change = 0;
         for (auto [current, desired] :
              di::zip(current_row_group.iterate_row(row_index), desired_row_group.iterate_row(row_index))) {
+            auto _ = di::ScopeExit([&] {
+                if (force_change > 0) {
+                    force_change--;
+                }
+            });
             auto [col, current_cell, current_text, current_gfx, current_hyperlink, current_multi_cell_info] = current;
             auto [_, desired_cell, desired_text, desired_gfx, desired_hyperlink, desired_multi_cell_info] = desired;
             if (desired_cell.is_nonprimary_in_multi_cell()) {
@@ -251,9 +268,27 @@ auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor) -> d
             }
 
             // Now detect a change. Order comparisons in order of likeliness.
-            if (desired_text != current_text || desired_gfx != current_gfx || desired_hyperlink != current_hyperlink ||
-                desired_multi_cell_info != current_multi_cell_info) {
-                changes.emplace(desired_hyperlink, desired_gfx, row_index, col, desired_text, desired_multi_cell_info);
+            if (force_change > 0 || desired_text != current_text || desired_gfx != current_gfx ||
+                desired_hyperlink != current_hyperlink || desired_multi_cell_info != current_multi_cell_info) {
+                auto need_explicit_sizing =
+                    desired_cell.explicitly_sized ||
+                    (!(m_features & Feature::FullGraphemeClustering) && desired_cell.complex_grapheme_cluster);
+                auto use_phase_0 = need_explicit_sizing && !(m_features & Feature::TextSizingWidth);
+                changes.emplace(use_phase_0 ? 0 : 1, desired_hyperlink, desired_gfx, row_index, col, desired_text,
+                                desired_multi_cell_info, desired_cell.explicitly_sized,
+                                desired_cell.complex_grapheme_cluster);
+                if (use_phase_0) {
+                    // Force changes for the next N - M cells, where N is the correct width and M is
+                    // the upper bound on the width.
+                    auto upper_bound = desired_text | di::transform(dius::unicode::code_point_width) |
+                                       di::transform([](di::Optional<u8> x) {
+                                           return x.value_or(0);
+                                       }) |
+                                       di::sum;
+                    if (upper_bound > desired_multi_cell_info.compute_width()) {
+                        force_change += upper_bound;
+                    }
+                }
             }
         }
     }
@@ -274,37 +309,97 @@ auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor) -> d
         return {};
     }
 
-    // Now apply the changes.
+    // Now apply the changes. While we're iterating over all the changes,
+    // also update the current terminal configuration.
     auto current_hyperlink = di::Optional<terminal::Hyperlink const&> {};
     auto current_gfx = GraphicsRendition {};
-    auto current_cursor = terminal::Cursor {};
-    for (auto [hyperlink, gfx, row, col, text, multi_cell_info] : changes) {
+    auto current_cursor_row = 0_u32;
+    auto current_cursor_col = di::Optional(0_u32);
+    m_current_screen.set_current_hyperlink({});
+    m_current_screen.set_current_graphics_rendition({});
+    for (auto [_, hyperlink, gfx, row, col, text, multi_cell_info, explicitly_sized, complex_grapheme_cluster] :
+         changes) {
         if (current_hyperlink != hyperlink) {
+            m_current_screen.set_current_hyperlink(hyperlink);
             di::writer_print<di::String::Encoding>(buffer, terminal::OSC8::from_hyperlink(hyperlink).serialize());
             current_hyperlink = hyperlink;
         }
         if (current_gfx != gfx) {
+            m_current_screen.set_current_graphics_rendition(gfx);
             for (auto& params : gfx.as_csi_params()) {
                 di::writer_print<di::String::Encoding>(buffer, "\033[{}m"_sv, params);
             }
             current_gfx = gfx;
         }
-        if (current_cursor.row != row || current_cursor.col != col) {
-            move_cursor(buffer, current_cursor, { row, col });
-            current_cursor.row = row;
-            current_cursor.col = col;
+        if (current_cursor_row != row || current_cursor_col != col) {
+            m_current_screen.set_cursor(row, col);
+            move_cursor(buffer, current_cursor_row, current_cursor_col, row, col);
+            current_cursor_row = row;
+            current_cursor_col = col;
         }
 
+        // Update current screen with the new cell.
+        m_current_screen.put_cell(text, multi_cell_info, terminal::AutoWrapMode::Disabled, explicitly_sized,
+                                  complex_grapheme_cluster);
+
+        // Write out the cell to the actual terminal
         // TODO: use erase character if there is no background color.
         if (text == ""_sv) {
             text = " "_sv;
         }
 
-        // TODO: multi cell info (this needs to handle different terminals).
-        di::writer_print<di::String::Encoding>(buffer, "{}"_sv, text);
+        // Time for actually rendering the text. The behavior varies greatly depending on
+        // what features the terminal supports. We need to use explicit sizing if required
+        // or the terminal disagrees with our grapheme clustering algorithm, and the text involved
+        // a grapheme cluster with multiple non-zero width code points.
+        auto need_explicit_sizing =
+            explicitly_sized || (!(m_features & Feature::FullGraphemeClustering) && complex_grapheme_cluster);
+        if (!!(m_features & Feature::TextSizingWidth)) {
+            // This is the best case scenario, as we can control things precisely.
+            // However, there are still a few different cases to consider.
+            if (multi_cell_info != terminal::narrow_multi_cell_info &&
+                multi_cell_info != terminal::wide_multi_cell_info && !!(m_features & Feature::TextSizingPresentation)) {
+                // The outer terminal supports the fractional scale and alignment properties. We therefore can
+                // actually use an OSC 66 sequence (meaning we don't need to drop the other attributes).
+                //
+                // We use explicit sizing if either the text itself was sized explicitly or full grapheme clustering
+                // is not handled in the terminal and the text involved a grapheme break.
+                auto info = multi_cell_info;
+                if (!need_explicit_sizing) {
+                    info.width = 0;
+                }
+                auto osc66 = terminal::OSC66(info, text);
+                di::writer_print<di::String::Encoding>(buffer, "{}"_sv, osc66.serialize());
+            } else if (need_explicit_sizing) {
+                // We need to explicitly size the cell.
+                auto osc66 = terminal::OSC66({ .width = multi_cell_info.compute_width() }, text);
+                di::writer_print<di::String::Encoding>(buffer, "{}"_sv, osc66.serialize());
+            } else {
+                // We can rely on normal text writing behavior.
+                di::writer_print<di::String::Encoding>(buffer, "{}"_sv, text);
+            }
+        } else if (need_explicit_sizing) {
+            // We need explicit sizing but are getting no help from the terminal.
+            // In this case we first render space characters to ensure the graphics
+            // attributes and previous cell contents are cleared, and then render the
+            // text after moving the cursor back. At this point, we also forget the
+            // current cursor position, as we have no idea how wide the text will
+            // actually be.
+            for (auto _ : di::range(multi_cell_info.compute_width())) {
+                di::writer_print<di::String::Encoding>(buffer, " "_sv);
+            }
+            move_cursor(buffer, row, di::min(col + multi_cell_info.compute_width(), size().cols - 1), row, col);
+            di::writer_print<di::String::Encoding>(buffer, "{}"_sv, text);
+            current_cursor_col = {};
+        } else {
+            // Just render the text. The text should be simple and the terminal will understand it properly.
+            di::writer_print<di::String::Encoding>(buffer, "{}"_sv, text);
+        }
 
-        current_cursor.col += multi_cell_info.compute_width();
-        current_cursor.col = di::min(current_cursor.col, size().cols - 1);
+        if (current_cursor_col.has_value()) {
+            current_cursor_col.value() += multi_cell_info.compute_width();
+            current_cursor_col.value() = di::min(current_cursor_col.value(), size().cols - 1);
+        }
     }
 
     // End sequence: potentially show the cursor, as well as end the synchronized output.
@@ -352,7 +447,8 @@ void Renderer::put_text(c32 text, u32 row, u32 col, GraphicsRendition const& ren
 
 void Renderer::put_cell(di::StringView text, u32 row, u32 col, GraphicsRendition const& rendition,
                         di::Optional<terminal::Hyperlink const&> hyperlink,
-                        terminal::MultiCellInfo const& multi_cell_info) {
+                        terminal::MultiCellInfo const& multi_cell_info, bool explicitly_sized,
+                        bool complex_grapheme_cluster) {
     if (col >= m_bound_width || row >= m_bound_height) {
         return;
     }
@@ -370,11 +466,8 @@ void Renderer::put_cell(di::StringView text, u32 row, u32 col, GraphicsRendition
     m_desired_screen.set_cursor(row, col);
     m_desired_screen.set_current_graphics_rendition(rendition);
     m_desired_screen.set_current_hyperlink(hyperlink);
-    if (multi_cell_info == terminal::narrow_multi_cell_info) {
-        m_desired_screen.put_single_cell(text, terminal::AutoWrapMode::Disabled);
-    } else {
-        m_desired_screen.put_wide_cell(text, multi_cell_info, terminal::AutoWrapMode::Disabled);
-    }
+    m_desired_screen.put_cell(text, multi_cell_info, terminal::AutoWrapMode::Disabled, explicitly_sized,
+                              complex_grapheme_cluster);
 }
 
 void Renderer::clear_row(u32 row, GraphicsRendition const& rendition,

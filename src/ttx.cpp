@@ -150,7 +150,7 @@ static auto main(Args& args) -> di::Result<void> {
     }
 
     // Setup - render thread.
-    auto render_thread = TRY(RenderThread::create(layout_state, set_done));
+    auto render_thread = TRY(RenderThread::create(layout_state, set_done, features));
     auto _ = di::ScopeExit([&] {
         render_thread->request_exit();
     });

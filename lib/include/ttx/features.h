@@ -17,6 +17,7 @@ enum class Feature : u64 {
     Undercurl = 1 << 7,               ///< Supports undercurl (fancy underline) and underline colors.
     BasicGraphemeClustering = 1 << 8, ///< Supports grapheme clustering, but may not match the kitty spec
     FullGraphemeClustering = 1 << 9,  ///< Grapheme clustering behavior matches kitty spec
+    TextSizingPresentation = 1 << 10, ///< Supports text-sizing with scale=1 but fractional scale and alignment.
     All = u64(-1),
 };
 
@@ -31,7 +32,8 @@ constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<Feature>) {
         di::enumerator<"GraphemeClusteringMode", GraphemeClusteringMode>,
         di::enumerator<"KittyKeyProtocol", KittyKeyProtocol>, di::enumerator<"Undercurl", Undercurl>,
         di::enumerator<"BasicGraphemeClustering", BasicGraphemeClustering>,
-        di::enumerator<"FullGraphemeClustering", FullGraphemeClustering>);
+        di::enumerator<"FullGraphemeClustering", FullGraphemeClustering>,
+        di::enumerator<"TextSizingPresentation", TextSizingPresentation>);
 }
 
 auto detect_features(dius::SyncFile& terminal) -> di::Result<Feature>;

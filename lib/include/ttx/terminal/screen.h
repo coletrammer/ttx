@@ -165,10 +165,15 @@ public:
     /// information, including the size and dec modes.
     auto state_as_escape_sequences() const -> di::String;
 
-    void put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode);
-    void put_wide_cell(di::StringView text, MultiCellInfo const& multi_cell_info, AutoWrapMode auto_wrap_mode);
+    void put_cell(di::StringView text, MultiCellInfo const& multi_cell_info, AutoWrapMode auto_wrap_mode,
+                  bool explicitly_sized, bool complex_grapheme_cluster);
 
 private:
+    void put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode, bool explicitly_sized,
+                         bool complex_grapheme_cluster);
+    void put_wide_cell(di::StringView text, MultiCellInfo const& multi_cell_info, AutoWrapMode auto_wrap_mode,
+                       bool explicitly_sized, bool complex_grapheme_cluster);
+
     // Row/column helper functions for dealing with origin mode.
     auto translate_row(u32 row) const -> u32;
     auto translate_col(u32 col) const -> u32;

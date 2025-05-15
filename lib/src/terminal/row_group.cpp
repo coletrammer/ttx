@@ -58,7 +58,8 @@ void RowGroup::drop_cell(Cell& cell) {
     drop_multi_cell_id(cell.multi_cell_id);
 
     cell.left_boundary_of_multicell = false;
-    cell.top_boundary_of_multicell = false;
+    cell.explicitly_sized = false;
+    cell.complex_grapheme_cluster = false;
     cell.stale = cell.stale && was_empty;
 }
 
@@ -133,6 +134,7 @@ auto RowGroup::transfer_from(RowGroup& from, usize from_index, usize to_index, u
             // Insert the new cell as desired.
             auto& [from_cell, to_cell] = cells;
             if (i < cols_to_take) {
+                to_cell = from_cell;
                 if (from_cell.graphics_rendition_id) {
                     to_cell.graphics_rendition_id =
                         to.maybe_allocate_graphics_id(from.graphics_rendition(from_cell.graphics_rendition_id))
@@ -146,9 +148,6 @@ auto RowGroup::transfer_from(RowGroup& from, usize from_index, usize to_index, u
                     to_cell.multi_cell_id =
                         to.maybe_allocate_multi_cell_id(from.multi_cell_info(from_cell.multi_cell_id)).value_or(0);
                 }
-                to_cell.left_boundary_of_multicell = from_cell.left_boundary_of_multicell;
-                to_cell.top_boundary_of_multicell = from_cell.top_boundary_of_multicell;
-                to_cell.text_size = from_cell.text_size;
             }
 
             // Always drop the cell `from` cell. We don't have to worry about clearing the associated text since the
