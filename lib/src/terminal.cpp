@@ -16,6 +16,7 @@
 #include "ttx/terminal/escapes/device_attributes.h"
 #include "ttx/terminal/escapes/device_status.h"
 #include "ttx/terminal/escapes/mode.h"
+#include "ttx/terminal/escapes/osc_66.h"
 #include "ttx/terminal/escapes/osc_8.h"
 #include "ttx/terminal/screen.h"
 
@@ -67,6 +68,10 @@ void Terminal::on_parser_result(OSC const& osc) {
     }
     if (ps == "52"_sv) {
         osc_52(osc.data.substr(ps_end.end()));
+        return;
+    }
+    if (ps == "66"_sv) {
+        osc_66(osc.data.substr(ps_end.end()));
         return;
     }
 }
@@ -527,6 +532,16 @@ void Terminal::osc_52(di::StringView data) {
     }
 
     m_outgoing_events.emplace_back(SetClipboard(di::move(clipboard_data).value().container()));
+}
+
+// OSC 66 - https://github.com/kovidgoyal/kitty/blob/master/docs/text-sizing-protocol.rst
+void Terminal::osc_66(di::StringView data) {
+    auto osc66 = terminal::OSC66::parse(data);
+    if (!osc66) {
+        return;
+    }
+
+    active_screen().screen.put_osc66(osc66.value(), m_auto_wrap_mode);
 }
 
 // DEC Screen Alignment Pattern - https://vt100.net/docs/vt510-rm/DECALN.html

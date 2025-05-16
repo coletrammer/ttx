@@ -79,6 +79,8 @@ public:
             if (m_prev_cursor) {
                 if (!(m_result & Feature::TextSizingWidth)) {
                     m_result |= Feature::TextSizingWidth;
+                } else if (!(m_result & Feature::TextSizingPresentation)) {
+                    m_result |= Feature::TextSizingPresentation;
                 } else {
                     m_result |= Feature::TextSizingFull;
                 }
@@ -174,6 +176,9 @@ auto detect_features(dius::SyncFile& terminal) -> di::Result<Feature> {
     di::writer_print<di::String::Encoding>(request_buffer, "\r\033[K\033[6n"_sv);
     di::writer_print<di::String::Encoding>(request_buffer, "{}"_sv,
                                            terminal::OSC66 { .info = { .width = 2 }, .text = "a"_sv }.serialize());
+    di::writer_print<di::String::Encoding>(request_buffer, "\033[6n"_sv);
+    di::writer_print<di::String::Encoding>(request_buffer, "{}"_sv,
+                                           terminal::OSC66 { .info = { .fractional_scale_numerator=1,.fractional_scale_denominator=2, }, .text = "a"_sv }.serialize());
     di::writer_print<di::String::Encoding>(request_buffer, "\033[6n"_sv);
     di::writer_print<di::String::Encoding>(request_buffer, "{}"_sv,
                                            terminal::OSC66 { .info = { .scale = 2 }, .text = "a"_sv }.serialize());

@@ -398,7 +398,12 @@ auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor) -> d
 
         if (current_cursor_col.has_value()) {
             current_cursor_col.value() += multi_cell_info.compute_width();
-            current_cursor_col.value() = di::min(current_cursor_col.value(), size().cols - 1);
+
+            // Forget cursor column on overflow. For some reason not doing this causes issues with kitty.
+            // This implies relative cursor movement with kitty counts the pending overflow flag as a column?
+            if (current_cursor_col.value() >= size().cols) {
+                current_cursor_col = {};
+            }
         }
     }
 
