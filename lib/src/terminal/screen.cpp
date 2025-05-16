@@ -1,5 +1,6 @@
 #include "ttx/terminal/screen.h"
 
+#include "di/container/algorithm/count_if.h"
 #include "di/container/algorithm/rotate.h"
 #include "di/io/vector_writer.h"
 #include "di/util/clamp.h"
@@ -12,6 +13,7 @@
 #include "ttx/graphics_rendition.h"
 #include "ttx/terminal/cell.h"
 #include "ttx/terminal/cursor.h"
+#include "ttx/terminal/escapes/osc_66.h"
 #include "ttx/terminal/escapes/osc_8.h"
 #include "ttx/terminal/multi_cell_info.h"
 #include "ttx/terminal/selection.h"
@@ -799,7 +801,7 @@ void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
     if (width == 1) {
         auto code_units = di::encoding::convert_to_code_units(di::String::Encoding(), code_point);
         auto view = di::StringView(di::encoding::assume_valid, code_units.begin(), code_units.end());
-        put_single_cell(view, auto_wrap_mode, false, false);
+        put_single_cell(view, narrow_multi_cell_info, auto_wrap_mode, false, false);
         return;
     }
 
@@ -810,17 +812,59 @@ void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
     put_wide_cell(view, terminal::wide_multi_cell_info, auto_wrap_mode, false, false);
 }
 
+void Screen::put_osc66(OSC66 const& sized_text, AutoWrapMode auto_wrap_mode) {
+    // 0. Update flag, which is is used when resizing to prevent committing blank lines to the scroll back buffer
+    //    in cases where the terminal's initial size is changed before we get any input.
+    m_never_got_input = false;
+
+    // 1. Scale>0 (multi-height cell). For now we don't support this.
+    if (sized_text.info.scale > 1) {
+        return;
+    }
+
+    // 2. Explicit width case. This maps directly to put_wide_cell().
+    if (sized_text.info.width > 0) {
+        put_cell(sized_text.text, sized_text.info, auto_wrap_mode, true, false);
+        return;
+    }
+
+    // 3. Auto width mode. We need to break up the text into cells according to our normal algorithm.
+    // We will split text into cells according to the standard algorithm. However, since we know the
+    // full bounds of the text we can optimize/simplify the logic.
+    for (auto grapheme : dius::unicode::grapheme_clusters(sized_text.text)) {
+        auto width = dius::unicode::grapheme_cluster_width(grapheme);
+        if (width == 0) {
+            // If the grapheme width is 0, the text must be appended to the previous cell.
+            // This could be optimized by not going code point by code point.
+            for (auto code_point : grapheme) {
+                put_code_point(code_point, auto_wrap_mode);
+            }
+            continue;
+        }
+        auto info = sized_text.info;
+        info.width = width;
+        auto complex_grapheme =
+            di::count_if(grapheme | di::transform(dius::unicode::code_point_width), [](di::Optional<u8> x) {
+                return x.has_value() && x.value() > 0;
+            }) > 1;
+        put_cell(grapheme, info, auto_wrap_mode, false, complex_grapheme);
+    }
+}
+
 void Screen::put_cell(di::StringView text, MultiCellInfo const& multi_cell_info, AutoWrapMode auto_wrap_mode,
                       bool explicitly_sized, bool complex_grapheme_cluster) {
-    if (multi_cell_info == terminal::narrow_multi_cell_info) {
-        put_single_cell(text, auto_wrap_mode, explicitly_sized, complex_grapheme_cluster);
+    ASSERT_NOT_EQ(multi_cell_info.compute_width(), 0);
+    if (multi_cell_info.compute_width() == 1) {
+        put_single_cell(text, multi_cell_info, auto_wrap_mode, explicitly_sized, complex_grapheme_cluster);
     } else {
         put_wide_cell(text, multi_cell_info, auto_wrap_mode, explicitly_sized, complex_grapheme_cluster);
     }
 }
 
-void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode, bool explicitly_sized,
-                             bool complex_grapheme_cluster) {
+void Screen::put_single_cell(di::StringView text, MultiCellInfo const& multi_cell_info, AutoWrapMode auto_wrap_mode,
+                             bool explicitly_sized, bool complex_grapheme_cluster) {
+    ASSERT_EQ(multi_cell_info.compute_width(), 1);
+
     // Sanity check - if the text size is too large, ignore.
     if (text.size_bytes() > Cell::max_text_size) {
         return;
@@ -844,8 +888,18 @@ void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode, b
         } else {
             m_cursor = new_cursor;
         }
-        put_single_cell(text, auto_wrap_mode, explicitly_sized, complex_grapheme_cluster);
+        put_single_cell(text, multi_cell_info, auto_wrap_mode, explicitly_sized, complex_grapheme_cluster);
         return;
+    }
+
+    // Try to the allocate the multi cell info. This is required, and so we bail if
+    // this fails.
+    auto multi_cell_id = m_active_rows.maybe_allocate_multi_cell_id(multi_cell_info);
+    if (!multi_cell_id.has_value()) {
+        return;
+    }
+    if (multi_cell_id != 0) {
+        dius::eprintln("mid={}"_sv, multi_cell_id);
     }
 
     // We have to clear text starting from the insertion point. However, we have to extend the
@@ -854,8 +908,8 @@ void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode, b
     auto insertion_point = m_cursor.col;
     auto text_start_position = m_cursor.text_offset;
     auto& cell = row.cells[insertion_point];
-    if (cell.multi_cell_id == 0 && cell.graphics_rendition_id == m_graphics_id && cell.hyperlink_id == m_hyperlink_id &&
-        cell.text_size == text.size_bytes()) {
+    if (cell.graphics_rendition_id == m_graphics_id && cell.hyperlink_id == m_hyperlink_id &&
+        cell.multi_cell_id == multi_cell_id && cell.text_size == text.size_bytes()) {
         // Since everything else matches, we only need to update potentially the text.
         auto text_start = row.text.iterator_at_offset(m_cursor.text_offset);
         auto text_end = row.text.iterator_at_offset(m_cursor.text_offset + cell.text_size);
@@ -867,6 +921,7 @@ void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode, b
         }
         cell.explicitly_sized = explicitly_sized;
         cell.complex_grapheme_cluster = complex_grapheme_cluster;
+        m_active_rows.drop_multi_cell_id(multi_cell_id.value());
     } else {
         auto deletion_point = insertion_point;
         if (row.cells[deletion_point].is_nonprimary_in_multi_cell()) {
@@ -897,6 +952,10 @@ void Screen::put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode, b
         if (m_hyperlink_id) {
             cell.hyperlink_id = m_active_rows.use_hyperlink_id(m_hyperlink_id);
         }
+
+        // No need to bump reference because allocation already gave us a reference.
+        cell.left_boundary_of_multicell = (multi_cell_id != 0);
+        cell.multi_cell_id = multi_cell_id.value();
         cell.explicitly_sized = explicitly_sized;
         cell.complex_grapheme_cluster = complex_grapheme_cluster;
         cell.stale = false;
@@ -989,6 +1048,7 @@ void Screen::put_wide_cell(di::StringView text, MultiCellInfo const& multi_cell_
         }
         primary_cell.explicitly_sized = explicitly_sized;
         primary_cell.complex_grapheme_cluster = complex_grapheme_cluster;
+        m_active_rows.drop_multi_cell_id(multi_cell_id.value());
     } else {
         // We have to clear text starting from the insertion point. However, we have to extend the
         // deletion of cells to account for a potential multi cell already partially occuppying the
@@ -1360,13 +1420,18 @@ auto Screen::state_as_escape_sequences() const -> di::String {
 
         auto [row, group] = find_row(r);
         for (auto row : group.iterate_row(row)) {
-            auto [c, _, text, gfx, hyperlink, _] = row;
+            auto [c, cell, text, gfx, hyperlink, multi_cell_info] = row;
 
             // If we're at the cursor, and overflow isn't pending, then save the cursor now.
             auto at_cursor = r >= absolute_row_screen_start() && r - absolute_row_screen_start() == m_cursor.row &&
                              c == m_cursor.col;
             if (at_cursor && (text.empty() || !m_cursor.overflow_pending)) {
                 di::writer_print<di::String::Encoding>(writer, "\0337"_sv);
+            }
+
+            // Ignore rendering non-primary multi cells.
+            if (cell.is_nonprimary_in_multi_cell()) {
+                continue;
             }
 
             // For now, we assume no text means no graphics. If we support https://sw.kovidgoyal.net/kitty/deccara/,
@@ -1387,7 +1452,18 @@ auto Screen::state_as_escape_sequences() const -> di::String {
                 write_hyperlink(hyperlink);
                 prev_hyperlink = hyperlink;
             }
-            di::writer_print<di::String::Encoding>(writer, "{}"_sv, text);
+
+            // Write out the text according the explicit size flag and account for non-standard multi-cell info.
+            if (cell.explicitly_sized) {
+                auto osc66 = OSC66(multi_cell_info, text);
+                di::writer_print<di::String::Encoding>(writer, "{}"_sv, osc66.serialize());
+            } else if (multi_cell_info != narrow_multi_cell_info && multi_cell_info != wide_multi_cell_info) {
+                auto osc66 = OSC66(multi_cell_info, text);
+                osc66.info.width = 0;
+                di::writer_print<di::String::Encoding>(writer, "{}"_sv, osc66.serialize());
+            } else {
+                di::writer_print<di::String::Encoding>(writer, "{}"_sv, text);
+            }
 
             // Since overflow was pending, save the cursor position after writing the cell.
             if (at_cursor && m_cursor.overflow_pending) {

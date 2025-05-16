@@ -75,6 +75,9 @@ public:
     auto maybe_allocate_hyperlink_id(Hyperlink const& hyperlink) -> di::Optional<u16>;
 
     auto multi_cell_id(MultiCellInfo const& multi_cell_info) -> di::Optional<u16> {
+        if (multi_cell_info == narrow_multi_cell_info) {
+            return 0;
+        }
         if (multi_cell_info == wide_multi_cell_info) {
             return 1;
         }

@@ -27,13 +27,15 @@ auto OSC66::parse(di::StringView data) -> di::Optional<OSC66> {
     }
 
     auto parts = data | di::split(U';') | di::to<di::Vector>();
-    ASSERT_GT_EQ(parts.size(), 1);
+    if (parts.size() != 2) {
+        return {};
+    }
 
     auto result = OSC66 { {}, *parts.back() };
     if (result.text.empty() || result.text.size_bytes() > OSC66::max_text_size) {
         return {};
     }
-    for (auto part : parts | di::take(parts.size() - 1)) {
+    for (auto part : parts[0] | di::split(U':')) {
         auto equal = part.find(U'=');
         if (!equal) {
             return {};
@@ -75,7 +77,7 @@ auto OSC66::serialize() const -> di::String {
                           }
                           return *di::present("{}={}"_sv, key.key, info.*key.pointer);
                       }) |
-                      di::filter(di::not_fn(di::empty)) | di::join_with(U';') | di::to<di::String>();
-    return *di::present("\033]66;{}{}{}\033\\"_sv, key_values, key_values.empty() ? ""_sv : ";"_sv, text);
+                      di::filter(di::not_fn(di::empty)) | di::join_with(U':') | di::to<di::String>();
+    return *di::present("\033]66;{};{}\033\\"_sv, key_values, text);
 }
 }

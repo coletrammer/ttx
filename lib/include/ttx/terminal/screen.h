@@ -7,6 +7,7 @@
 #include "ttx/graphics_rendition.h"
 #include "ttx/size.h"
 #include "ttx/terminal/cursor.h"
+#include "ttx/terminal/escapes/osc_66.h"
 #include "ttx/terminal/hyperlink.h"
 #include "ttx/terminal/multi_cell_info.h"
 #include "ttx/terminal/row.h"
@@ -114,6 +115,7 @@ public:
 
     void scroll_down();
     void put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode);
+    void put_osc66(OSC66 const& sized_text, AutoWrapMode auto_wrap_mode);
 
     void invalidate_all() { m_whole_screen_dirty = true; }
     auto whole_screen_dirty() const -> bool { return m_whole_screen_dirty; }
@@ -169,8 +171,8 @@ public:
                   bool explicitly_sized, bool complex_grapheme_cluster);
 
 private:
-    void put_single_cell(di::StringView text, AutoWrapMode auto_wrap_mode, bool explicitly_sized,
-                         bool complex_grapheme_cluster);
+    void put_single_cell(di::StringView text, MultiCellInfo const& multi_cell_info, AutoWrapMode auto_wrap_mode,
+                         bool explicitly_sized, bool complex_grapheme_cluster);
     void put_wide_cell(di::StringView text, MultiCellInfo const& multi_cell_info, AutoWrapMode auto_wrap_mode,
                        bool explicitly_sized, bool complex_grapheme_cluster);
 

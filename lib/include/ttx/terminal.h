@@ -136,6 +136,7 @@ private:
     void osc_7(di::StringView data);
     void osc_8(di::StringView data);
     void osc_52(di::StringView data);
+    void osc_66(di::StringView data);
 
     void csi_ich(Params const& params);
     void csi_cuu(Params const& params);
