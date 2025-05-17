@@ -6,6 +6,9 @@
 #include "di/meta/constexpr.h"
 #include "dius/print.h"
 #include "dius/sync_file.h"
+#include "dius/unicode/general_category.h"
+#include "dius/unicode/grapheme_cluster.h"
+#include "dius/unicode/name.h"
 #include "dius/unicode/width.h"
 #include "ttx/features.h"
 #include "ttx/graphics_rendition.h"
@@ -226,6 +229,76 @@ static void move_cursor(di::VectorWriter<>& buffer, u32 current_row, di::Optiona
     di::writer_print<di::String::Encoding>(buffer, "\033[{};{}H"_sv, desired_row + 1, desired_col + 1);
 }
 
+// Compute an upper bound on the width of the text to be rendered. Because different
+// terminals render text at different widths, we need to be conservative and consider parts
+// of the screen invalid after rendering the text.
+static auto compute_text_upper_bound(di::StringView text) -> usize {
+    // To be conservative, only consider Mn or Me characters as zero-width, instead of the usual
+    // algorithm which considers all marks and Cf (format control) characters. This is to account
+    // of variation in which Cf characters terminals consider to have width 0. This additionally
+    // accounts for variations in how default non-presentable characters are handled.
+    auto conservative_width = [](c32 code_point) -> u8 {
+        auto width = dius::unicode::code_point_width(code_point).value_or(1);
+        if (width == 0) {
+            auto general_category = dius::unicode::general_category(code_point);
+            if (general_category != dius::unicode::GeneralCategory::EnclosingMark &&
+                general_category != dius::unicode::GeneralCategory::NonspacingMark) {
+                width = 1;
+            }
+        }
+        return width;
+    };
+
+    // Surprisingly, the width of text can be larger when measuring using graphemes instead of
+    // computing the text width naively. This is because most terminals implementing grapheme
+    // clustering on a grapheme boundary, even if the character has width 0. This palces a
+    // width 0 character in a width 1 cell. Most width 0 characters are in the "Extend/SpacingMark"
+    // class, so this wouldn't matter. But it does matter for other classes like "Prepend".
+    // Additionally, some terminals assume all ASCII characters form boundaries (which mean
+    // they mishandle "Prepend" code points followed by ASCII).
+    //
+    // This means the following text has larger width in grapheme mode, assuming the terminal
+    // considers U+0600 a 0 width character.
+    // "a<U+0600>b"
+    //
+    // In legacy mode, this should have width 2, by summing the width of all code points.
+    // In kitty and our behavior, this has width 1, because <U+0600> has width and so combines
+    // with a even though there is no grapheme boundary.
+    // In a hypothetical terminal, this would have width 3, by placing each character in a different
+    // cell. In practice, this terminals appear to differ in width here because of diagreement over
+    // the width of <U+0600>, but this issue can affect more characters.
+    //
+    // For that reason, we compute a width using clustering and a width going code point by code
+    // point. Additionally, we need to treat any character followed by variation selector 16 as
+    // width 2, instead of extended pictographic characters with non-emoji default presentation.
+    auto legacy_width = 0_usize;
+    auto grapheme_width = 0_usize;
+    auto clusterer = dius::unicode::GraphemeClusterer {};
+    auto prev = 0;
+    auto cluster_width = 0_u8;
+    for (auto c : text) {
+        auto w = dius::unicode::code_point_width(c).value_or(1);
+        if (clusterer.is_boundary(c)) {
+            grapheme_width += cluster_width;
+            cluster_width = w;
+            legacy_width += w;
+            continue;
+        }
+        if (c == dius::unicode::VariationSelector_16) {
+            legacy_width += 2 - prev;
+            prev = 2;
+            cluster_width = 2;
+            continue;
+        }
+        legacy_width += w;
+        cluster_width = di::max(cluster_width, w);
+        prev = w;
+    }
+    grapheme_width += cluster_width;
+
+    return di::max(legacy_width, grapheme_width);
+}
+
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor) -> di::Result<> {
     // List of changes which are used to determine what updates to the screen are needed. We
@@ -280,11 +353,7 @@ auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor) -> d
                 if (use_phase_0) {
                     // Force changes for the next N - M cells, where N is the correct width and M is
                     // the upper bound on the width.
-                    auto upper_bound = desired_text | di::transform(dius::unicode::code_point_width) |
-                                       di::transform([](di::Optional<u8> x) {
-                                           return x.value_or(0);
-                                       }) |
-                                       di::sum;
+                    auto upper_bound = compute_text_upper_bound(desired_text);
                     if (upper_bound > desired_multi_cell_info.compute_width()) {
                         force_change += upper_bound;
                     }

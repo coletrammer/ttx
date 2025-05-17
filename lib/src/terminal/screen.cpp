@@ -1,14 +1,15 @@
 #include "ttx/terminal/screen.h"
 
-#include "di/container/algorithm/count_if.h"
 #include "di/container/algorithm/rotate.h"
 #include "di/io/vector_writer.h"
 #include "di/util/clamp.h"
 #include "di/util/construct.h"
 #include "di/util/scope_exit.h"
 #include "dius/print.h"
+#include "dius/unicode/emoji.h"
 #include "dius/unicode/general_category.h"
 #include "dius/unicode/grapheme_cluster.h"
+#include "dius/unicode/name.h"
 #include "dius/unicode/width.h"
 #include "ttx/graphics_rendition.h"
 #include "ttx/terminal/cell.h"
@@ -727,28 +728,46 @@ void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
     auto width = dius::unicode::code_point_width(code_point).value_or(0);
 
     // 2. Determine the previous cell.
-    auto prev_cell = di::Optional<di::Tuple<Row&, Cell&, usize>> {};
+    auto prev_cell = di::Optional<di::Tuple<Row&, Cell&, usize, u8, u32, u32>> {};
     if (m_cursor.row > 0 && m_cursor.col == 0) {
         auto& row = rows()[m_cursor.row - 1];
+        auto width = 1_u8;
         auto candidate_position = max_width() - 1;
         while (candidate_position > 0 && row.cells[candidate_position].is_nonprimary_in_multi_cell()) {
             candidate_position--;
+            width++;
         }
         auto& cell = row.cells[candidate_position];
-        prev_cell = { row, cell, row.text.size_bytes() - cell.text_size };
+        prev_cell = { row, cell, row.text.size_bytes() - cell.text_size, width, m_cursor.row - 1, candidate_position };
     } else if (m_cursor.col > 0) {
         auto& row = rows()[m_cursor.row];
-        auto candidate_position = m_cursor.col - 1;
+        auto width = 1_u8;
+        auto candidate_position = m_cursor.col - !m_cursor.overflow_pending;
         while (candidate_position > 0 && row.cells[candidate_position].is_nonprimary_in_multi_cell()) {
             candidate_position--;
+            width++;
         }
         auto& cell = row.cells[candidate_position];
-        prev_cell = { row, cell, m_cursor.text_offset - cell.text_size };
+        if (candidate_position == m_cursor.col) {
+            prev_cell = { row, cell, m_cursor.text_offset, width, m_cursor.row, candidate_position };
+        } else {
+            prev_cell = { row, cell, m_cursor.text_offset - cell.text_size, width, m_cursor.row, candidate_position };
+        }
     }
 
     // 3. Combining path - width is 0, so potentially add the
     //    code point to the previous cell. In certain cases,
-    //    the combining character will be ignored.
+    //    the combining character will be ignored. This is the
+    //    behavior implemented in kitty 0.42.0. This does
+    //    result in problematic cases because it effectively
+    //    disallows using a code point in the Prepend class
+    //    from existing in the start of the cell (without using
+    //    explicit sizing via OSC 66). On the other hand, the
+    //    alternate behavior is less backwards compatible with
+    //    old implementations, which will treat any width 0
+    //    code point as combining. Let's follow kitty as there
+    //    is an open spec documenting its behavior.
+    auto code_units = di::encoding::convert_to_code_units(di::String::Encoding(), code_point);
     if (width == 0) {
         // Ignore code point if there is no previous cell or the
         // previous cell has no text.
@@ -757,9 +776,67 @@ void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
         }
 
         // Now, we're safe to add the 0 width character to the cell's text.
-        auto [row, primary_cell, text_offset] = prev_cell.value();
+        auto [row, primary_cell, text_offset, width, r, c] = prev_cell.value();
+        if (primary_cell.text_size + code_units.size_bytes() > Cell::max_text_size) {
+            return;
+        }
+
+        // Check for variation selector 15 and 16. For now, variation selector 15
+        // results in explicitly sizing the text, but may cause cells to
+        // shrink if terminals to implement that part of the kitty text sizing
+        // spec.
         auto it = row.text.iterator_at_offset(text_offset + primary_cell.text_size);
         ASSERT(it);
+        if (code_point == dius::unicode::VariationSelector_15) {
+            primary_cell.explicitly_sized = true;
+        }
+        if (code_point == dius::unicode::VariationSelector_16) {
+            // For variation selector 16, if the previous character
+            // was an emoji and the cell isn't already a wide cell,
+            // the cell's width is promoted to have width 2.
+            auto prev = *di::prev(it.value());
+            if (width == 1 && !primary_cell.explicitly_sized &&
+                dius::unicode::emoji(prev) == dius::unicode::Emoji::Yes) {
+                // In this case, we need to increase the cell width to 2. This
+                // is especially annoying when this would cause the current cell
+                // to wrap. To implement this cleanly, we fetch the full attributes
+                // and call put_cell() directly, after first clearing the current
+                // cell.
+                auto text_start = row.text.iterator_at_offset(text_offset);
+                ASSERT(text_start);
+                auto new_text = di::StringView(text_start.value(), it.value()).to_owned();
+                new_text.push_back(code_point);
+                row.text.erase(text_start.value(), it.value());
+                primary_cell.text_size = 0;
+
+                // We know our goal is to call put_cell(), but that function requires
+                // the current graphics attributes and hyperlink value are correct. So
+                // we save our current ids and then take the other ids directly from
+                // the primary cell.
+                auto gfx_save = m_graphics_id;
+                auto hyperlink_save = m_hyperlink_id;
+                auto _ = di::ScopeExit([&] {
+                    m_active_rows.drop_graphics_id(m_graphics_id);
+                    m_graphics_id = gfx_save;
+                    m_active_rows.drop_hyperlink_id(m_hyperlink_id);
+                    m_hyperlink_id = hyperlink_save;
+                });
+                m_graphics_id = di::exchange(primary_cell.graphics_rendition_id, 0);
+                m_hyperlink_id = di::exchange(primary_cell.hyperlink_id, 0);
+
+                auto info = m_active_rows.multi_cell_info(primary_cell.multi_cell_id);
+                info.width = 2;
+
+                // Drop the old cell and add the new one, first moving the cursor to the previous cell.
+                m_active_rows.drop_cell(primary_cell);
+                m_cursor.row = r;
+                m_cursor.col = c;
+                m_cursor.text_offset = text_offset;
+                put_cell(new_text.view(), info, auto_wrap_mode, true, false);
+                return;
+            }
+        }
+
         auto [s, e] = row.text.insert(it.value(), code_point);
         auto byte_size = e.data() - s.data();
         if (m_cursor.col > 0) {
@@ -771,10 +848,18 @@ void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
     }
 
     // 4. Perform grapheme clustering w.r.t to the previous cell. If this character is not a grapheme boundary,
-    //    add to the previous cell.
+    //    add to the previous cell. Some terminals (not kitty) seem to guard this condition on the character
+    //    being non-ASCII. This is a useful optimization, but is incorrect because UAX 29 specifies "Prepend"
+    //    characters, which do not break with ASCII. Implementing the aforementioned optimization would result
+    //    in failing the kitty width tests.
+    //
+    //    In the future, we can optimize this routine by caching the grapheme clustering state across calls
+    //    the put_code_point(), which get invalidated whenever any other function is called. This is a significant
+    //    improvement over the algorithm below, which is quadratic when inserting N characters into the same cell.
+    //    This state could also be used to enable the ASCII optimization for 2 subsequent ASCII characters.
     if (prev_cell) {
         auto clusterer = dius::unicode::GraphemeClusterer {};
-        auto [row, primary_cell, text_offset] = prev_cell.value();
+        auto [row, primary_cell, text_offset, _, _, _] = prev_cell.value();
         auto text_start = row.text.iterator_at_offset(text_offset);
         auto text_end = row.text.iterator_at_offset(text_offset + primary_cell.text_size);
         ASSERT(text_start);
@@ -785,6 +870,9 @@ void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
         }
         // Check for the combining case.
         if (!clusterer.is_boundary(code_point)) {
+            if (text.size_bytes() + code_units.size_bytes() > Cell::max_text_size) {
+                return;
+            }
             auto [s, e] = row.text.insert(text_end.value(), code_point);
             auto byte_size = e.data() - s.data();
             if (m_cursor.col > 0) {
@@ -799,7 +887,6 @@ void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
 
     // 5. Happy path - width is 1, so add a single cell.
     if (width == 1) {
-        auto code_units = di::encoding::convert_to_code_units(di::String::Encoding(), code_point);
         auto view = di::StringView(di::encoding::assume_valid, code_units.begin(), code_units.end());
         put_single_cell(view, narrow_multi_cell_info, auto_wrap_mode, false, false);
         return;
@@ -807,7 +894,6 @@ void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
 
     // 6. Multi-cell case - width is 2.
     ASSERT_EQ(width, 2);
-    auto code_units = di::encoding::convert_to_code_units(di::String::Encoding(), code_point);
     auto view = di::StringView(di::encoding::assume_valid, code_units.begin(), code_units.end());
     put_wide_cell(view, terminal::wide_multi_cell_info, auto_wrap_mode, false, false);
 }
@@ -829,31 +915,68 @@ void Screen::put_osc66(OSC66 const& sized_text, AutoWrapMode auto_wrap_mode) {
     }
 
     // 3. Auto width mode. We need to break up the text into cells according to our normal algorithm.
-    // We will split text into cells according to the standard algorithm. However, since we know the
-    // full bounds of the text we can optimize/simplify the logic.
-    for (auto grapheme : dius::unicode::grapheme_clusters(sized_text.text)) {
-        auto width = dius::unicode::grapheme_cluster_width(grapheme);
+    //    Splitting cells text into cell should have the exact same logic from put_code_point() when
+    //    grapheme clustering is enabled. Note there isn't legacy behavior for this escape sequence
+    //    because kitty fully specified this behavior.
+    auto cells = di::Vector<di::Tuple<di::StringView, u8, bool, bool>> {};
+    auto clusterer = dius::unicode::GraphemeClusterer {};
+    for (auto it = sized_text.text.begin(); it != sized_text.text.end(); ++it) {
+        auto code_point = *it;
+        auto width = dius::unicode::code_point_width(code_point).value_or(0);
+        auto is_break = clusterer.is_boundary(code_point);
         if (width == 0) {
-            // If the grapheme width is 0, the text must be appended to the previous cell.
-            // This could be optimized by not going code point by code point.
-            for (auto code_point : grapheme) {
+            if (cells.empty()) {
+                // If the grapheme width is 0, the text must be appended to the previous cell. Since
+                // we're using a previous cell, the multi-cell info is ignored.
                 put_code_point(code_point, auto_wrap_mode);
+                continue;
+            }
+
+            auto& [text, width, explicitly_sized, complex_grapheme_cluster] = cells.back().value();
+            text = { text.begin(), di::next(it) };
+
+            // Variation selector 16 may promote a cell to have width 2. If we do
+            // increase the cell width, force the explicitly sized flag.
+            if (code_point == dius::unicode::VariationSelector_16) {
+                if (dius::unicode::emoji(text.back().value()) == dius::unicode::Emoji::Yes && width < 2) {
+                    width = 2;
+                    explicitly_sized = true;
+                }
+            }
+            if (code_point == dius::unicode::VariationSelector_15) {
+                // Kitty will down-sizes some code points with variation selector 15. Until other terminals
+                // adopt this behavior, we will explicitly size any text with variation selector to override
+                // kitty's default behavior.
+                explicitly_sized = true;
             }
             continue;
         }
+
+        if (is_break || cells.empty()) {
+            cells.push_back({ di::StringView(it, di::next(it)), width, false, false });
+            continue;
+        }
+
+        // This is the combining case. Because this cell's width is non-zero, it is a complex grapheme.
+        auto& [text, _, explicitly_sized, complex_grapheme_cluster] = cells.back().value();
+        text = { text.begin(), di::next(it) };
+        complex_grapheme_cluster = true;
+    }
+
+    for (auto [text, width, explicitly_sized, complex_grapheme_cluster] : cells) {
         auto info = sized_text.info;
         info.width = width;
-        auto complex_grapheme =
-            di::count_if(grapheme | di::transform(dius::unicode::code_point_width), [](di::Optional<u8> x) {
-                return x.has_value() && x.value() > 0;
-            }) > 1;
-        put_cell(grapheme, info, auto_wrap_mode, false, complex_grapheme);
+        put_cell(text, info, auto_wrap_mode, explicitly_sized, complex_grapheme_cluster);
     }
 }
 
 void Screen::put_cell(di::StringView text, MultiCellInfo const& multi_cell_info, AutoWrapMode auto_wrap_mode,
                       bool explicitly_sized, bool complex_grapheme_cluster) {
     ASSERT_NOT_EQ(multi_cell_info.compute_width(), 0);
+
+    if (text.size_bytes() > Cell::max_text_size) {
+        return;
+    }
     if (multi_cell_info.compute_width() == 1) {
         put_single_cell(text, multi_cell_info, auto_wrap_mode, explicitly_sized, complex_grapheme_cluster);
     } else {
@@ -897,9 +1020,6 @@ void Screen::put_single_cell(di::StringView text, MultiCellInfo const& multi_cel
     auto multi_cell_id = m_active_rows.maybe_allocate_multi_cell_id(multi_cell_info);
     if (!multi_cell_id.has_value()) {
         return;
-    }
-    if (multi_cell_id != 0) {
-        dius::eprintln("mid={}"_sv, multi_cell_id);
     }
 
     // We have to clear text starting from the insertion point. However, we have to extend the
