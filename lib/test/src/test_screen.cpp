@@ -242,6 +242,28 @@ static void put_text_wide() {
                           u8"1 xxx\n"
                           u8"qwe 2\n"
                           u8" 猫. e"_sv);
+
+    screen.set_cursor(2, 4);
+    // # folowed by variation selector 16, should be rendered as 2 cells. This
+    // should also wrap.
+    put_text(screen, u8"#\uFE0F"_sv);
+
+    validate_text(screen, u8"ab猫.e\n"
+                          u8"abcd \n"
+                          u8"1 xx \n"
+                          u8"#\uFE0F|.|e| |2\n"
+                          u8" 猫. e"_sv);
+
+    // Another variation selector 16 at the start of the row this time.
+    screen.set_cursor(1, 0);
+    screen.clear_row();
+    put_text(screen, u8"#\uFE0F"_sv);
+
+    validate_text(screen, u8"ab猫.e\n"
+                          u8"#\uFE0F|.| | | \n"
+                          u8"1 xx \n"
+                          u8"#\uFE0F|.|e| |2\n"
+                          u8" 猫. e"_sv);
 }
 
 static void put_text_damage_tracking() {
