@@ -10,6 +10,7 @@
 #include "render.h"
 #include "save_layout.h"
 #include "ttx/features.h"
+#include "ttx/terminal/capability.h"
 
 namespace ttx {
 struct Args {
@@ -21,6 +22,7 @@ struct Args {
     di::Optional<di::PathView> capture_command_output_path;
     di::Optional<di::TransparentStringView> layout_save_name;
     di::Optional<di::TransparentStringView> layout_restore_name;
+    di::Optional<di::TransparentStringView> print_terminfo_mode;
     bool replay { false };
     bool headless { false };
     bool print_features { false };
@@ -39,6 +41,8 @@ struct Args {
             .option<&Args::headless>('h', "headless"_tsv, "Headless mode"_sv)
             .option<&Args::replay>('r', "replay-path"_tsv,
                                    "Replay capture output (file paths are passed via positional args)"_sv)
+            .option<&Args::print_terminfo_mode>({}, "terminfo"_tsv,
+                                                "Print terminfo (mode can be one of: [terminfo, verbose])"_sv)
             .option<&Args::layout_save_name>(
                 'l', "layout-save"_tsv,
                 "Name of a saved layout, automatically synced by ttx (including restore at startup)"_sv)
@@ -79,6 +83,25 @@ static auto main(Args& args) -> di::Result<void> {
             dius::println("{}"_sv, bind);
         }
         return {};
+    }
+
+    if (args.print_terminfo_mode) {
+        auto const& terminfo = terminal::get_ttx_terminfo();
+        if (args.print_terminfo_mode == "terminfo"_tsv) {
+            dius::print("{}"_sv, terminfo.serialize());
+            return {};
+        }
+        if (args.print_terminfo_mode == "verbose"_tsv) {
+            dius::println("{}: {}"_sv, di::Styled("Names"_sv, di::FormatEffect::Bold),
+                          terminfo.names | di::join_with(", "_sv) | di::to<di::String>());
+
+            for (auto const& capability : terminfo.capabilities | di::filter(&terminal::Capability::enabled)) {
+                dius::println("\t{: <32}{: <90}{: <80}"_sv, di::Styled(capability.long_name, di::FormatEffect::Bold),
+                              capability.description, capability.serialize());
+            }
+            return {};
+        }
+        return di::Unexpected(di::BasicError::InvalidArgument);
     }
 
     auto features = Feature::All;

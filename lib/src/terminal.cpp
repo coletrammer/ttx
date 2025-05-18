@@ -762,7 +762,7 @@ void Terminal::csi_da2(Params const& params) {
     if (params.get(0, 0) != 0) {
         return;
     }
-    (void) m_psuedo_terminal.write_exactly(di::as_bytes("\033[>010;0c"_sv.span()));
+    (void) m_psuedo_terminal.write_exactly(di::as_bytes("\033[>0;10;0c"_sv.span()));
 }
 
 // Tertiary Device Attributes - https://vt100.net/docs/vt510-rm/DA3.html

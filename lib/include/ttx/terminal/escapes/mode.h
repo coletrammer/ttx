@@ -46,6 +46,14 @@ enum class DecMode {
     /// cannot move outside of the scroll region.
     OriginMode = 6,
 
+    /// @brief Auto-wrap mode
+    ///
+    /// This controls whether excess text on a line overwrites the last
+    /// cell or causes a soft line break and moves the cursor to the next
+    /// line. Its a soft break because resizing the terminal can reflow
+    /// lines created in this way.
+    AutoWrap = 7,
+
     /// @brief X10 (legacy) mouse mode
     ///
     /// This mode corresponds to both the X10 mosue reporting
@@ -57,6 +65,14 @@ enum class DecMode {
 
     /// @brief Allow selecting 80 or 132 column mode
     Allow80Or132ColumnMode = 40,
+
+    /// @brief Enable setting horizontal margins
+    ///
+    /// This mode appears to be needed as the escape sequence
+    /// used for horizontal margins (CSI s) originally was used
+    /// for saving the cursor. Applications should use ESC 7 for
+    /// that purpose today.
+    HorizontalMargins,
 
     /// @brief VT 200 mouse events - presses only
     VT200Mouse = 1000,
@@ -151,8 +167,9 @@ constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<DecMode>) {
         di::enumerator<"None", None>, di::enumerator<"CursorKeysMode", CursorKeysMode>,
         di::enumerator<"Select80Or132ColumnMode", Select80Or132ColumnMode>,
         di::enumerator<"ReverseVideo", ReverseVideo>, di::enumerator<"OriginMode", OriginMode>,
-        di::enumerator<"X10Mouse", X10Mouse>, di::enumerator<"CursorEnable", CursorEnable>,
-        di::enumerator<"Allow80Or132ColumnMode", Allow80Or132ColumnMode>, di::enumerator<"VT200Mouse", VT200Mouse>,
+        di::enumerator<"AutoWrap", AutoWrap>, di::enumerator<"X10Mouse", X10Mouse>,
+        di::enumerator<"CursorEnable", CursorEnable>, di::enumerator<"Allow80Or132ColumnMode", Allow80Or132ColumnMode>,
+        di::enumerator<"HorizontalMargins", HorizontalMargins>, di::enumerator<"VT200Mouse", VT200Mouse>,
         di::enumerator<"CellMotionMouseTracking", CellMotionMouseTracking>,
         di::enumerator<"AllMotionMouseTracking", AllMotionMouseTracking>, di::enumerator<"FocusEvent", FocusEvent>,
         di::enumerator<"UTF8Mouse", UTF8Mouse>, di::enumerator<"SGRMouse", SGRMouse>,

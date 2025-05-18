@@ -47,3 +47,7 @@ target_sources(
               FILES
               ${headers}
 )
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(ttx_ttx PRIVATE -fconstexpr-steps=10000000)
+endif()
