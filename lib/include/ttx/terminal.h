@@ -19,7 +19,7 @@ struct SetClipboard {
     di::Vector<byte> data;
 };
 
-using TerminalEvent = di::Variant<SetClipboard, terminal::OSC7>;
+using TerminalEvent = di::Variant<SetClipboard, APC, terminal::OSC7>;
 
 class Terminal {
     struct ScreenState {
@@ -43,7 +43,7 @@ public:
     // having state identical to the current state.
     auto state_as_escape_sequences() const -> di::String;
 
-    void on_parser_results(di::Span<ParserResult const> results);
+    void on_parser_results(di::Span<ParserResult> results);
 
     auto active_screen() const -> ScreenState const&;
     auto active_screen() -> ScreenState& {
@@ -92,13 +92,13 @@ public:
     void set_allow_force_terminal_size(bool b = true) { m_allow_force_terminal_size = b; }
 
 private:
-    void on_parser_result(PrintableCharacter const& printable_character);
-    void on_parser_result(DCS const& dcs);
-    void on_parser_result(OSC const& osc);
-    void on_parser_result(APC const& apc);
-    void on_parser_result(CSI const& csi);
-    void on_parser_result(Escape const& escape);
-    void on_parser_result(ControlCharacter const& control);
+    void on_parser_result(PrintableCharacter&& printable_character);
+    void on_parser_result(DCS&& dcs);
+    void on_parser_result(OSC&& osc);
+    void on_parser_result(APC&& apc);
+    void on_parser_result(CSI&& csi);
+    void on_parser_result(Escape&& escape);
+    void on_parser_result(ControlCharacter&& control);
 
     void resize(Size const& size);
 

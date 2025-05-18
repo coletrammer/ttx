@@ -27,31 +27,31 @@ Terminal::Terminal(u64 id, dius::SyncFile& psuedo_terminal, Size const& size)
     , m_available_size(size)
     , m_psuedo_terminal(psuedo_terminal) {}
 
-void Terminal::on_parser_results(di::Span<ParserResult const> results) {
-    for (auto const& result : results) {
+void Terminal::on_parser_results(di::Span<ParserResult> results) {
+    for (auto& result : results) {
         di::visit(
-            [&](auto const& r) {
-                this->on_parser_result(r);
+            [&](auto& r) {
+                this->on_parser_result(di::move(r));
             },
             result);
     }
 }
 
-void Terminal::on_parser_result(PrintableCharacter const& printable_character) {
+void Terminal::on_parser_result(PrintableCharacter&& printable_character) {
     if (printable_character.code_point < 0x7F || printable_character.code_point > 0x9F) {
         put_char(printable_character.code_point);
         m_last_graphics_charcter = printable_character.code_point;
     }
 }
 
-void Terminal::on_parser_result(DCS const& dcs) {
+void Terminal::on_parser_result(DCS&& dcs) {
     if (dcs.intermediate == "$q"_sv) {
         dcs_decrqss(dcs.params, dcs.data);
         return;
     }
 }
 
-void Terminal::on_parser_result(OSC const& osc) {
+void Terminal::on_parser_result(OSC&& osc) {
     auto ps_end = osc.data.find(';');
     if (!ps_end) {
         return;
@@ -76,9 +76,11 @@ void Terminal::on_parser_result(OSC const& osc) {
     }
 }
 
-void Terminal::on_parser_result(APC const&) {}
+void Terminal::on_parser_result(APC&& apc) {
+    m_outgoing_events.push_back(di::move(apc));
+}
 
-void Terminal::on_parser_result(ControlCharacter const& control_character) {
+void Terminal::on_parser_result(ControlCharacter&& control_character) {
     switch (control_character.code_point) {
         case 8: {
             c0_bs();
@@ -111,7 +113,7 @@ void Terminal::on_parser_result(ControlCharacter const& control_character) {
     }
 }
 
-void Terminal::on_parser_result(CSI const& csi) {
+void Terminal::on_parser_result(CSI&& csi) {
     if (csi.intermediate == "?$"_sv) {
         switch (csi.terminator) {
             case 'p': {
@@ -331,7 +333,7 @@ void Terminal::on_parser_result(CSI const& csi) {
     }
 }
 
-void Terminal::on_parser_result(Escape const& escape) {
+void Terminal::on_parser_result(Escape&& escape) {
     if (escape.intermediate == "#"_sv) {
         switch (escape.terminator) {
             case '8': {

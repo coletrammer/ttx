@@ -908,7 +908,7 @@ void Screen::put_osc66(OSC66 const& sized_text, AutoWrapMode auto_wrap_mode) {
         return;
     }
 
-    // 2. Explicit width case. This maps directly to put_wide_cell().
+    // 2. Explicit width case. This maps directly to put_cell().
     if (sized_text.info.width > 0) {
         put_cell(sized_text.text, sized_text.info, auto_wrap_mode, true, false);
         return;
@@ -916,8 +916,7 @@ void Screen::put_osc66(OSC66 const& sized_text, AutoWrapMode auto_wrap_mode) {
 
     // 3. Auto width mode. We need to break up the text into cells according to our normal algorithm.
     //    Splitting cells text into cell should have the exact same logic from put_code_point() when
-    //    grapheme clustering is enabled. Note there isn't legacy behavior for this escape sequence
-    //    because kitty fully specified this behavior.
+    //    grapheme clustering is enabled.
     auto cells = di::Vector<di::Tuple<di::StringView, u8, bool, bool>> {};
     auto clusterer = dius::unicode::GraphemeClusterer {};
     for (auto it = sized_text.text.begin(); it != sized_text.text.end(); ++it) {
@@ -1029,7 +1028,7 @@ void Screen::put_single_cell(di::StringView text, MultiCellInfo const& multi_cel
     auto text_start_position = m_cursor.text_offset;
     auto& cell = row.cells[insertion_point];
     if (cell.graphics_rendition_id == m_graphics_id && cell.hyperlink_id == m_hyperlink_id &&
-        cell.multi_cell_id == multi_cell_id && cell.text_size == text.size_bytes()) {
+        cell.multi_cell_id == multi_cell_id) {
         // Since everything else matches, we only need to update potentially the text.
         auto text_start = row.text.iterator_at_offset(m_cursor.text_offset);
         auto text_end = row.text.iterator_at_offset(m_cursor.text_offset + cell.text_size);
@@ -1039,6 +1038,7 @@ void Screen::put_single_cell(di::StringView text, MultiCellInfo const& multi_cel
             row.text.replace(text_start.value(), text_end.value(), text);
             cell.stale = false;
         }
+        cell.text_size = text.size_bytes();
         cell.explicitly_sized = explicitly_sized;
         cell.complex_grapheme_cluster = complex_grapheme_cluster;
         m_active_rows.drop_multi_cell_id(multi_cell_id.value());
@@ -1155,8 +1155,7 @@ void Screen::put_wide_cell(di::StringView text, MultiCellInfo const& multi_cell_
     // Fast path: check for redundant updates. This means we're putting the same text into a cell.
     auto& primary_cell = row.cells[insertion_point];
     if (primary_cell.is_primary_in_multi_cell() && primary_cell.multi_cell_id == multi_cell_id.value() &&
-        primary_cell.graphics_rendition_id == m_graphics_id && primary_cell.hyperlink_id == m_hyperlink_id &&
-        primary_cell.text_size == text.size_bytes()) {
+        primary_cell.graphics_rendition_id == m_graphics_id && primary_cell.hyperlink_id == m_hyperlink_id) {
         // Since everything else matches, we only need to update potentially the text.
         auto text_start = row.text.iterator_at_offset(m_cursor.text_offset);
         auto text_end = row.text.iterator_at_offset(m_cursor.text_offset + primary_cell.text_size);
@@ -1168,6 +1167,7 @@ void Screen::put_wide_cell(di::StringView text, MultiCellInfo const& multi_cell_
         }
         primary_cell.explicitly_sized = explicitly_sized;
         primary_cell.complex_grapheme_cluster = complex_grapheme_cluster;
+        primary_cell.text_size = text.size_bytes();
         m_active_rows.drop_multi_cell_id(multi_cell_id.value());
     } else {
         // We have to clear text starting from the insertion point. However, we have to extend the

@@ -98,8 +98,8 @@ public:
         Input,
     };
 
-    auto parse_application_escape_sequences(di::StringView data) -> di::Vector<ParserResult>;
-    auto parse_input_escape_sequences(di::StringView data, bool flush = true) -> di::Vector<ParserResult>;
+    auto parse_application_escape_sequences(di::StringView data) -> di::Span<ParserResult>;
+    auto parse_input_escape_sequences(di::StringView data, bool flush = true) -> di::Span<ParserResult>;
 
 private:
 // VT500-Series parser states from https://vt100.net/emu/dec_ansi_parser
