@@ -85,6 +85,12 @@ if(NOT ttx_LIB_ONLY)
     add_executable(ttx_app src/ttx.cpp)
     set_property(TARGET ttx_app PROPERTY OUTPUT_NAME ttx)
     target_link_libraries(ttx_app PRIVATE ttx::ttx_app_lib)
+
+    # ---- Terminfo ----
+
+    if(ttx_BUILD_TERMINFO)
+        include(meta/cmake/terminfo.cmake)
+    endif()
 endif()
 
 # ---- Install rules ----

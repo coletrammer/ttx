@@ -1,5 +1,20 @@
+# ---- Dependencies ----
+
+include(CMakePackageConfigHelpers)
+include(GNUInstallDirs)
+
 if(NOT ttx_LIB_ONLY)
+    # ttx binary
     install(TARGETS ttx_app RUNTIME COMPONENT ttx_Runtime)
+
+    # terminfo
+    if(ttx_BUILD_TERMINFO)
+        install(
+            DIRECTORY "${CMAKE_BINARY_DIR}/terminfo/"
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/terminfo"
+            COMPONENT ttx_Runtime
+        )
+    endif()
 endif()
 
 if(NOT ttx_APP_ONLY)
@@ -10,9 +25,6 @@ if(NOT ttx_APP_ONLY)
         )
         set_property(CACHE CMAKE_INSTALL_INCLUDEDIR PROPERTY TYPE PATH)
     endif()
-
-    include(CMakePackageConfigHelpers)
-    include(GNUInstallDirs)
 
     # find_package(<package>) call for consumers to find this project
     set(package ttx)

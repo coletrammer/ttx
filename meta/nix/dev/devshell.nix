@@ -48,6 +48,9 @@
             # Kitty - for __width_test__
             kitty
 
+            # For terminfo compilation
+            ncurses
+
             # Dependencies
             inputs.dius.packages.${system}.default
           ]);

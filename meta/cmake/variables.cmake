@@ -31,3 +31,4 @@ endif()
 
 option(ttx_APP_ONLY "Only build ttx app" OFF)
 option(ttx_LIB_ONLY "Only build ttx lib" ${default_lib_mode})
+option(ttx_BUILD_TERMINFO "Build terminfo" ON)
