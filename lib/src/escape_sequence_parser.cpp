@@ -647,16 +647,20 @@ void EscapeSequenceParser::on_input(c32 code_point) {
     }
 }
 
-auto EscapeSequenceParser::parse_application_escape_sequences(di::StringView data) -> di::Vector<ParserResult> {
+auto EscapeSequenceParser::parse_application_escape_sequences(di::StringView data) -> di::Span<ParserResult> {
+    m_result.clear();
+
     m_mode = Mode::Application;
     for (auto code_point : data) {
         on_input(code_point);
     }
 
-    return di::move(m_result);
+    return m_result.span();
 }
 
-auto EscapeSequenceParser::parse_input_escape_sequences(di::StringView data, bool flush) -> di::Vector<ParserResult> {
+auto EscapeSequenceParser::parse_input_escape_sequences(di::StringView data, bool flush) -> di::Span<ParserResult> {
+    m_result.clear();
+
     m_mode = Mode::Input;
     for (auto code_point : data) {
         on_input(code_point);
@@ -683,6 +687,6 @@ auto EscapeSequenceParser::parse_input_escape_sequences(di::StringView data, boo
         m_result.push_back(ControlCharacter('P', true));
     }
 
-    return di::move(m_result);
+    return m_result.span();
 }
 }

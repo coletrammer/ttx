@@ -246,8 +246,8 @@ static auto main(Args& args) -> di::Result<void> {
         return {};
     }));
 
-    // In headless mode, exit immediately.
-    if (args.headless) {
+    // In headless and replay mode, exit immediately.
+    if (args.headless && replay_mode) {
         return {};
     }
 

@@ -86,15 +86,6 @@ auto Pane::create_from_replay(u64 id, di::Optional<di::Path> cwd, di::PathView r
         auto utf8_string = utf8_decoder.decode(buffer | di::take(*nread));
 
         auto parser_result = parser.parse_application_escape_sequences(utf8_string);
-        di::erase_if(parser_result, [&](auto const& event) {
-            if (auto ev = di::get_if<APC>(event)) {
-                if (pane->m_hooks.apc_passthrough) {
-                    pane->m_hooks.apc_passthrough(ev->data);
-                }
-                return true;
-            }
-            return false;
-        });
 
         auto events = pane->m_terminal.with_lock([&](Terminal& terminal) {
             terminal.on_parser_results(parser_result.span());
@@ -106,6 +97,11 @@ auto Pane::create_from_replay(u64 id, di::Optional<di::Path> cwd, di::PathView r
                           [&](SetClipboard&& ev) {
                               if (pane->m_hooks.did_selection) {
                                   pane->m_hooks.did_selection(ev.data.span(), false);
+                              }
+                          },
+                          [&](APC&& apc) {
+                              if (pane->m_hooks.apc_passthrough) {
+                                  pane->m_hooks.apc_passthrough(apc.data.view());
                               }
                           },
                           [&](terminal::OSC7&&) {}),
@@ -213,15 +209,6 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
                 auto utf8_string = utf8_decoder.decode(buffer | di::take(*nread));
 
                 auto parser_result = parser.parse_application_escape_sequences(utf8_string);
-                di::erase_if(parser_result, [&](auto const& event) {
-                    if (auto ev = di::get_if<APC>(event)) {
-                        if (pane.m_hooks.apc_passthrough) {
-                            pane.m_hooks.apc_passthrough(ev->data);
-                        }
-                        return true;
-                    }
-                    return false;
-                });
 
                 auto events = pane.m_terminal.with_lock([&](Terminal& terminal) {
                     terminal.on_parser_results(parser_result.span());
@@ -233,6 +220,11 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
                                   [&](SetClipboard&& ev) {
                                       if (pane.m_hooks.did_selection) {
                                           pane.m_hooks.did_selection(ev.data.span(), false);
+                                      }
+                                  },
+                                  [&](APC&& apc) {
+                                      if (pane.m_hooks.apc_passthrough) {
+                                          pane.m_hooks.apc_passthrough(apc.data.view());
                                       }
                                   },
                                   [&](terminal::OSC7&& osc7) {

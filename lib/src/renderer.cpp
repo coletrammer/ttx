@@ -277,8 +277,8 @@ static auto compute_text_upper_bound(di::StringView text) -> usize {
     auto prev = 0;
     auto cluster_width = 0_u8;
     for (auto c : text) {
-        auto w = dius::unicode::code_point_width(c).value_or(1);
-        if (clusterer.is_boundary(c)) {
+        auto w = conservative_width(c);
+        if (c <= 127 || clusterer.is_boundary(c)) {
             grapheme_width += cluster_width;
             cluster_width = w;
             legacy_width += w;
@@ -315,9 +315,8 @@ auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor) -> d
     // needed, we need to establish an upper bound on the length of text. This is done using
     // the legacy algorithm of summing the code points widths across all code points. This can
     // actually still under count the text if the outer terminals thinks some code point is
-    // larger than we do, but that's extremely unlikely. We only perform grapheme clustering
-    // ourselves if the terminal has at least some support so this entire case is fairly
-    // unlikely to begin with.
+    // larger than we do, but that's extremely unlikely. This is crucial for rendering in
+    // older terminals as we unconditionally perform grapheme clustering ourselves.
     auto changes = di::TreeSet<Change> {};
 
     ASSERT_EQ(m_current_screen.absolute_row_start(), 0);
