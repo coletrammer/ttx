@@ -266,7 +266,7 @@ auto Tab::set_is_active(bool b) -> bool {
 auto Tab::make_pane(u64 pane_id, CreatePaneArgs args, Size const& size, RenderThread& render_thread)
     -> di::Result<di::Box<Pane>> {
     if (!args.hooks.did_exit) {
-        args.hooks.did_exit = [this, &render_thread](Pane& pane) {
+        args.hooks.did_exit = [this, &render_thread](Pane& pane, di::Optional<dius::system::ProcessResult>) {
             render_thread.push_event(PaneExited(m_session, this, &pane));
         };
     }

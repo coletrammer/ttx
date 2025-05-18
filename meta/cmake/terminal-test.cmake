@@ -25,3 +25,6 @@ foreach(terminal_test ${terminal_tests})
                                                   "${test_name}"
     )
 endforeach()
+
+# ---- Kitty width test ----
+add_test(NAME "kitty:width" COMMAND "${PROJECT_SOURCE_DIR}/meta/scripts/run-kitty-width-test.sh")

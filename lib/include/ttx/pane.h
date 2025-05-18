@@ -25,7 +25,7 @@ class Pane;
 
 struct PaneHooks {
     /// @brief Application controlled callback when the internal process exits.
-    di::Function<void(Pane&)> did_exit;
+    di::Function<void(Pane&, di::Optional<dius::system::ProcessResult>)> did_exit;
 
     /// @brief controlled callback when the terminal buffer has updated.
     di::Function<void(Pane&)> did_update;

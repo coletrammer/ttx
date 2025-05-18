@@ -192,6 +192,7 @@ static auto main(Args& args) -> di::Result<void> {
     });
 
     // Setup - initial tab and pane.
+    auto exit_status = 0;
     TRY(layout_state.with_lock([&](LayoutState& state) -> di::Result<> {
         if (replay_mode) {
             for (auto replay_path : args.command) {
@@ -210,6 +211,24 @@ static auto main(Args& args) -> di::Result<void> {
                 }
             }
         } else {
+            auto make_pane_args = [&] -> CreatePaneArgs {
+                auto result = CreatePaneArgs {
+                    .command = di::clone(command),
+                    .capture_command_output_path = args.capture_command_output_path.transform(di::to_owned),
+                };
+                if (args.headless) {
+                    result.hooks.did_exit = [&](Pane&, di::Optional<dius::system::ProcessResult> result) {
+                        if (result && result.value().exited() && result.value().exit_code() == 0) {
+                            exit_status = 0;
+                        } else {
+                            exit_status = 1;
+                        }
+                        render_thread->request_exit();
+                    };
+                }
+                return result;
+            };
+
             // Attempt to restore layout when running in auto-layout mode, or when specifically requested.
             if (args.layout_save_name || args.layout_restore_name) {
                 auto path = session_save_dir.clone();
@@ -222,25 +241,14 @@ static auto main(Args& args) -> di::Result<void> {
                 if (file) {
                     auto string = TRY(di::read_to_string(file.value()));
                     auto json = TRY(di::from_json_string<json::Layout>(string));
-                    TRY(state.restore_json(
-                        json,
-                        {
-                            .command = di::clone(command),
-                            .capture_command_output_path = args.capture_command_output_path.transform(di::to_owned),
-                        },
-                        *render_thread));
+                    TRY(state.restore_json(json, make_pane_args(), *render_thread));
                 } else if (args.layout_restore_name) {
                     return di::Unexpected(di::move(file).error());
                 }
             }
 
             if (state.empty()) {
-                TRY(state.add_session(
-                    {
-                        .command = di::clone(command),
-                        .capture_command_output_path = args.capture_command_output_path.transform(di::to_owned),
-                    },
-                    *render_thread));
+                TRY(state.add_session(make_pane_args(), *render_thread));
             }
         }
         return {};
@@ -275,6 +283,9 @@ static auto main(Args& args) -> di::Result<void> {
         render_thread->push_event(Size::from_window_size(size.value()));
     }
 
+    if (exit_status) {
+        return di::Unexpected(di::BasicError::InvalidArgument);
+    }
     return {};
 }
 }

@@ -173,15 +173,12 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
 #endif
 
     pane->m_process_thread = TRY(dius::Thread::create([&pane = *pane] mutable {
-        auto guard = di::ScopeExit([&] {
-            pane.m_done.store(true, di::MemoryOrder::Release);
+        auto result = pane.m_process.wait();
+        pane.m_done.store(true, di::MemoryOrder::Release);
 
-            if (pane.m_hooks.did_exit) {
-                pane.m_hooks.did_exit(pane);
-            }
-        });
-
-        (void) pane.m_process.wait();
+        if (pane.m_hooks.did_exit) {
+            pane.m_hooks.did_exit(pane, result.optional_value());
+        }
     }));
 
     pane->m_reader_thread =

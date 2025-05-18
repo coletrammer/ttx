@@ -45,6 +45,9 @@
             # Coverage
             lcov
 
+            # Kitty - for __width_test__
+            kitty
+
             # Dependencies
             inputs.dius.packages.${system}.default
           ]);
