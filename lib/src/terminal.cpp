@@ -13,6 +13,7 @@
 #include "ttx/mouse_event_io.h"
 #include "ttx/params.h"
 #include "ttx/paste_event_io.h"
+#include "ttx/terminal/capability.h"
 #include "ttx/terminal/escapes/device_attributes.h"
 #include "ttx/terminal/escapes/device_status.h"
 #include "ttx/terminal/escapes/mode.h"
@@ -47,6 +48,10 @@ void Terminal::on_parser_result(PrintableCharacter&& printable_character) {
 void Terminal::on_parser_result(DCS&& dcs) {
     if (dcs.intermediate == "$q"_sv) {
         dcs_decrqss(dcs.params, dcs.data);
+        return;
+    }
+    if (dcs.intermediate == "+q"_sv) {
+        dcs_xtgettcap(dcs.params, dcs.data);
         return;
     }
 }
@@ -480,6 +485,18 @@ void Terminal::dcs_decrqss(Params const&, di::StringView data) {
     }
 
     auto response_string = response.serialize();
+    (void) m_psuedo_terminal.write_exactly(di::as_bytes(response_string.span()));
+}
+
+// Request Terminfo String -
+// https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h4-Device-Control-functions:DCS-plus-q-Pt-ST.F95
+void Terminal::dcs_xtgettcap(Params const& params, di::StringView data) {
+    if (!params.empty()) {
+        return;
+    }
+
+    auto result = terminal::lookup_terminfo_string(data);
+    auto response_string = result.serialize();
     (void) m_psuedo_terminal.write_exactly(di::as_bytes(response_string.span()));
 }
 

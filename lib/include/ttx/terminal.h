@@ -132,6 +132,7 @@ private:
     void c1_ri();
 
     void dcs_decrqss(Params const& params, di::StringView data);
+    void dcs_xtgettcap(Params const& params, di::StringView data);
 
     void osc_7(di::StringView data);
     void osc_8(di::StringView data);

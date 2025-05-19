@@ -13,6 +13,7 @@
 #include "ttx/terminal/escapes/device_attributes.h"
 #include "ttx/terminal/escapes/device_status.h"
 #include "ttx/terminal/escapes/mode.h"
+#include "ttx/terminal/escapes/terminfo_string.h"
 
 namespace ttx {
 auto TerminalInputParser::parse(di::StringView input) -> di::Vector<Event> {
@@ -50,6 +51,9 @@ void TerminalInputParser::handle(PrintableCharacter const& printable_character) 
 void TerminalInputParser::handle(DCS const& dcs) {
     if (auto status_string_response = terminal::StatusStringResponse::from_dcs(dcs)) {
         m_events.emplace_back(di::move(status_string_response).value());
+    }
+    if (auto terminfo_string = terminal::TerminfoString::from_dcs(dcs)) {
+        m_events.emplace_back(di::move(terminfo_string).value());
     }
 }
 

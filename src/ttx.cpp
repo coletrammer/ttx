@@ -191,7 +191,8 @@ static auto main(Args& args) -> di::Result<void> {
         }
         if (args.print_terminfo_mode == "verbose"_tsv) {
             dius::println("{}: {}"_sv, di::Styled("Names"_sv, di::FormatEffect::Bold),
-                          terminfo.names | di::join_with(", "_sv) | di::to<di::String>());
+                          terminfo.names | di::transform(di::to_string) | di::join_with(", "_sv) |
+                              di::to<di::String>());
 
             for (auto const& capability : terminfo.capabilities | di::filter(&terminal::Capability::enabled)) {
                 dius::println("\t{: <32}{: <90}{: <80}"_sv, di::Styled(capability.long_name, di::FormatEffect::Bold),

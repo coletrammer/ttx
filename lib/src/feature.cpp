@@ -9,6 +9,7 @@
 #include "ttx/terminal/escapes/device_status.h"
 #include "ttx/terminal/escapes/mode.h"
 #include "ttx/terminal/escapes/osc_66.h"
+#include "ttx/terminal/escapes/terminfo_string.h"
 #include "ttx/terminal_input.h"
 #include "ttx/utf8_stream_decoder.h"
 
@@ -23,6 +24,17 @@ constexpr static auto dec_mode_queries = di::Array {
     ModeQuery(Feature::ThemeDetection, terminal::DecMode::ThemeDetection),
     ModeQuery(Feature::InBandSizeReports, terminal::DecMode::InBandSizeReports),
     ModeQuery(Feature::GraphemeClusteringMode, terminal::DecMode::GraphemeClustering),
+};
+
+struct TerminfoQuery {
+    Feature feature = Feature::None;
+    di::TransparentStringView name;
+};
+
+constexpr static auto terminfo_queries = di::Array {
+    TerminfoQuery(Feature::Clipboard, "Ms"_tsv),
+    TerminfoQuery(Feature::DynamicPalette, "ccc"_tsv),
+    TerminfoQuery(Feature::BackgroundCharacterErase, "bce"_tsv),
 };
 
 class FeatureDetector {
@@ -98,6 +110,14 @@ public:
         }
     }
 
+    void handle_event(terminal::TerminfoString const& response) {
+        for (auto const& [feature, name] : terminfo_queries) {
+            if (response.name == name) {
+                m_result |= feature;
+            }
+        }
+    }
+
 private:
     Feature m_result = Feature::None;
     bool m_done = false;
@@ -122,6 +142,12 @@ auto detect_features(dius::SyncFile& terminal) -> di::Result<Feature> {
     // Undercurl support query (this sets urderline mode=3 (undercurl) and then requests what the
     // terminal currently thinks the graphics attributes are).
     di::writer_print<di::String::Encoding>(request_buffer, "\x1b[0m\x1b[4:3m\x1bP$qm\x1b\\\x1b[0m"_sv);
+
+    // XTGETTCAP queries
+    for (auto [_, name] : terminfo_queries) {
+        di::writer_print<di::String::Encoding>(request_buffer, "\x1bP+q{}\033\\"_sv,
+                                               terminal::TerminfoString::hex(name));
+    }
 
     // Kitty keyboard protocol query
     di::writer_print<di::String::Encoding>(request_buffer, "\033[?u"_sv);

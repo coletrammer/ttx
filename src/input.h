@@ -13,6 +13,7 @@
 #include "ttx/terminal/escapes/device_attributes.h"
 #include "ttx/terminal/escapes/device_status.h"
 #include "ttx/terminal/escapes/mode.h"
+#include "ttx/terminal/escapes/terminfo_string.h"
 
 namespace ttx {
 class RenderThread;
@@ -44,6 +45,7 @@ private:
     void handle_event(terminal::CursorPositionReport const&) {}
     void handle_event(terminal::KittyKeyReport const&) {}
     void handle_event(terminal::StatusStringResponse const&) {}
+    void handle_event(terminal::TerminfoString const&) {}
 
     auto handle_drag(LayoutState& state, MouseCoordinate const& coordinate) -> bool;
 

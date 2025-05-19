@@ -7,17 +7,20 @@
 namespace ttx {
 enum class Feature : u64 {
     None = 0,
-    SyncronizedOutput = 1 << 0,       ///< Allow using DEC mode 2026 to synchronize screen updates
-    TextSizingWidth = 1 << 1,         ///< Supports using the text sizing protocol to specify explicit text width.
-    TextSizingFull = 1 << 2,          ///< Supports using the text sizing protocol to multi-height cells.
-    ThemeDetection = 1 << 3,          ///< Supports light/dark mode detection via mode 2031.
-    InBandSizeReports = 1 << 4,       ///< Supports in-band size reports via mode 2048.
-    GraphemeClusteringMode = 1 << 5,  ///< Supports grapheme clustering mode via mode 2027.
-    KittyKeyProtocol = 1 << 6,        ///< Supports kitty key protocol.
-    Undercurl = 1 << 7,               ///< Supports undercurl (fancy underline) and underline colors.
-    BasicGraphemeClustering = 1 << 8, ///< Supports grapheme clustering, but may not match the kitty spec
-    FullGraphemeClustering = 1 << 9,  ///< Grapheme clustering behavior matches kitty spec
-    TextSizingPresentation = 1 << 10, ///< Supports text-sizing with scale=1 but fractional scale and alignment.
+    SyncronizedOutput = 1 << 0,         ///< Allow using DEC mode 2026 to synchronize screen updates.
+    TextSizingWidth = 1 << 1,           ///< Supports using the text sizing protocol to specify explicit text width.
+    TextSizingFull = 1 << 2,            ///< Supports using the text sizing protocol to multi-height cells.
+    ThemeDetection = 1 << 3,            ///< Supports light/dark mode detection via mode 2031.
+    InBandSizeReports = 1 << 4,         ///< Supports in-band size reports via mode 2048.
+    GraphemeClusteringMode = 1 << 5,    ///< Supports grapheme clustering mode via mode 2027.
+    KittyKeyProtocol = 1 << 6,          ///< Supports kitty key protocol.
+    Undercurl = 1 << 7,                 ///< Supports undercurl (fancy underline) and underline colors.
+    BasicGraphemeClustering = 1 << 8,   ///< Supports grapheme clustering, but may not match the kitty spec.
+    FullGraphemeClustering = 1 << 9,    ///< Grapheme clustering behavior matches kitty spec.
+    TextSizingPresentation = 1 << 10,   ///< Supports text-sizing with scale=1 but fractional scale and alignment.
+    Clipboard = 1 << 11,                ///< Supports setting the clipboard (OSC 52).
+    DynamicPalette = 1 << 12,           ///< Supports changing the color palette dynamically.
+    BackgroundCharacterErase = 1 << 13, ///< Clearing the screen sets the current SGR background color.
     All = u64(-1),
 };
 
@@ -33,7 +36,9 @@ constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<Feature>) {
         di::enumerator<"KittyKeyProtocol", KittyKeyProtocol>, di::enumerator<"Undercurl", Undercurl>,
         di::enumerator<"BasicGraphemeClustering", BasicGraphemeClustering>,
         di::enumerator<"FullGraphemeClustering", FullGraphemeClustering>,
-        di::enumerator<"TextSizingPresentation", TextSizingPresentation>);
+        di::enumerator<"TextSizingPresentation", TextSizingPresentation>, di::enumerator<"Clipboard", Clipboard>,
+        di::enumerator<"DynamicPalette", DynamicPalette>,
+        di::enumerator<"BackgroundCharacterErase", BackgroundCharacterErase>);
 }
 
 auto detect_features(dius::SyncFile& terminal) -> di::Result<Feature>;

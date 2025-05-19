@@ -4,9 +4,9 @@
 
 namespace ttx::terminal {
 constexpr auto ttx_names = di::Array {
-    "xterm-ttx"_sv,
-    "ttx"_sv,
-    "ttx terminal multiplexer"_sv,
+    "xterm-ttx"_tsv,
+    "ttx"_tsv,
+    "ttx terminal multiplexer"_tsv,
 };
 
 // These capabilities are sourced from different places, including:
@@ -20,19 +20,19 @@ constexpr auto ttx_names = di::Array {
 constexpr auto ttx_capabilities = di::Array {
     Capability {
         .long_name = "Automatic right margin"_sv,
-        .short_name = "am"_sv,
+        .short_name = "am"_tsv,
         .description = "Automatic margins (autowrap enabled by default)"_sv,
     },
     Capability {
         .long_name = "Background character erase"_sv,
-        .short_name = "bce"_sv,
+        .short_name = "bce"_tsv,
         .description = "Clearing the screens sets the background color, instead of resetting the cell fully"_sv,
         // TODO: enable if we ever decide to implement bce
         .enabled = false,
     },
     Capability {
         .long_name = "Modifiable palette"_sv,
-        .short_name = "ccc"_sv,
+        .short_name = "ccc"_tsv,
         .description = "Terminal allows modifying the color palette dynamically"_sv,
         // TODO: enable after support this xterm escape (and the kitty version)
         // https://sw.kovidgoyal.net/kitty/color-stack/
@@ -40,70 +40,70 @@ constexpr auto ttx_capabilities = di::Array {
     },
     Capability {
         .long_name = "Has status line"_sv,
-        .short_name = "hs"_sv,
+        .short_name = "hs"_tsv,
         .description = "Has status line (for displaying window title)"_sv,
         .enabled = false, // TODO: enable after implementing OSC 1 (set window title)
     },
     Capability {
         .long_name = "Has meta key"_sv,
-        .short_name = "km"_sv,
+        .short_name = "km"_tsv,
         .description = "Keyboard reports include meta key bit on modifiers"_sv,
     },
     Capability {
         .long_name = "No built-in echo"_sv,
-        .short_name = "mc5i"_sv,
+        .short_name = "mc5i"_tsv,
         .description = "Terminal won't echo (presumably key presses) automatically"_sv,
     },
     Capability {
         .long_name = "Move in insert mode"_sv,
-        .short_name = "mir"_sv,
+        .short_name = "mir"_tsv,
         .description = "Cursor can move in insert mode"_sv,
     },
     Capability {
         .long_name = "Move in standout mode"_sv,
-        .short_name = "msgr"_sv,
+        .short_name = "msgr"_tsv,
         .description = "Cursor can move in standout mode (apparently standout mode is inverse (SGR 7))"_sv,
     },
     Capability {
         .long_name = "No pad character"_sv,
-        .short_name = "npc"_sv,
+        .short_name = "npc"_tsv,
         .description = "? What is a pad character"_sv,
     },
     Capability {
         .long_name = "Newline ignored after 80 cols"_sv,
-        .short_name = "xenl"_sv,
+        .short_name = "xenl"_tsv,
         .description = "? - This is set by xterm"_sv,
     },
     Capability {
         .long_name = "Default colors"_sv,
-        .short_name = "AX"_sv,
+        .short_name = "AX"_tsv,
         .description = "Supports resetting the foreground/background via SGR 39/49"_sv,
     },
     Capability {
         .long_name = "Colored underlines"_sv,
-        .short_name = "Su"_sv,
+        .short_name = "Su"_tsv,
         .description = "Supports changing underline color via SGR 58-59"_sv,
     },
     Capability {
         .long_name = "Truecolor"_sv,
-        .short_name = "Tc"_sv,
+        .short_name = "Tc"_tsv,
         .description = "Supports 24 bit true color via SGR 38/38"_sv,
     },
     Capability {
         .long_name = "Xterm extnesions"_sv,
-        .short_name = "XT"_sv,
+        .short_name = "XT"_tsv,
         .description = "Supports various xterm extensions (tmux uses this to set some default capabilities)"_sv,
         // TODO: enable if supporting bce
         .enabled = false,
     },
     Capability {
         .long_name = "Kitty keyboard protocol"_sv,
-        .short_name = "fullkbd"_sv,
+        .short_name = "fullkbd"_tsv,
         .description = "Supports kitty keyboard protocol"_sv,
     },
     Capability {
         .long_name = "Maximum colors"_sv,
-        .short_name = "colors"_sv,
+        .short_name = "colors"_tsv,
         // TODO: support 256 color palette instead of just 16 colors.
         // We may have to lie about supporting 256 colors to get applications
         // to use our truecolor support, in the mean-time.
@@ -112,307 +112,307 @@ constexpr auto ttx_capabilities = di::Array {
     },
     Capability {
         .long_name = "Columns"_sv,
-        .short_name = "cols"_sv,
+        .short_name = "cols"_tsv,
         .value = 80u,
         .description = "Number of columns on screen (this is dynamic)"_sv,
     },
     Capability {
         .long_name = "Initial tab spacing"_sv,
-        .short_name = "it"_sv,
+        .short_name = "it"_tsv,
         .value = 8u,
         .description = "Default spacing used for tab characters"_sv,
     },
     Capability {
         .long_name = "Lines"_sv,
-        .short_name = "lines"_sv,
+        .short_name = "lines"_tsv,
         .value = 24u,
         .description = "Number of lines (rows) on screen (this is dynamic)"_sv,
     },
     Capability {
         .long_name = "Maximum color pairs"_sv,
-        .short_name = "pairs"_sv,
+        .short_name = "pairs"_tsv,
         .value = 0x7fffu, // We use a 16-bit style id internally
         .description = "Number of different graphics renditions which can co-exist on the screen"_sv,
     },
     Capability {
         .long_name = "UTF-8 always"_sv,
-        .short_name = "U8"_sv,
+        .short_name = "U8"_tsv,
         // TODO: remove this capability after supporting box drawing characters
         .value = 1u,
         .description = "Disable box drawing characters by saying we only support UTF-8"_sv,
     },
     Capability {
         .long_name = "Alternate charset pairs"_sv,
-        .short_name = "acsc"_sv,
-        .value = "``aaffggiijjkkllmmnnooppqqrrssttuuvvwwxxyyzz{{||}}~~"_sv, // Magic copied from xterm's terminfo
+        .short_name = "acsc"_tsv,
+        .value = "``aaffggiijjkkllmmnnooppqqrrssttuuvvwwxxyyzz{{||}}~~"_tsv, // Magic copied from xterm's terminfo
         .description = "Alternate charset mapping (this is the identity)"_sv,
     },
     Capability {
         .long_name = "Bell"_sv,
-        .short_name = "bel"_sv,
-        .value = "^G"_sv,
+        .short_name = "bel"_tsv,
+        .value = "^G"_tsv,
         .description = "Bell character - \\a"_sv,
     },
     Capability {
         .long_name = "Blink"_sv,
-        .short_name = "blink"_sv,
-        .value = "\\E[5m"_sv,
+        .short_name = "blink"_tsv,
+        .value = "\\E[5m"_tsv,
         .description = "Set blinking cell via SGR 5"_sv,
     },
     Capability {
         .long_name = "Bold"_sv,
-        .short_name = "bold"_sv,
-        .value = "\\E[1m"_sv,
+        .short_name = "bold"_tsv,
+        .value = "\\E[1m"_tsv,
         .description = "Set bold cell via SGR 1"_sv,
     },
     Capability {
         .long_name = "Shift tab"_sv,
-        .short_name = "cbt"_sv,
-        .value = "\\E[Z"_sv,
+        .short_name = "cbt"_tsv,
+        .value = "\\E[Z"_tsv,
         .description = "Terminal sends CSI Z on shift+tab"_sv,
     },
     Capability {
         .long_name = "Invisible cursor"_sv,
-        .short_name = "civis"_sv,
-        .value = "\\E[?25l"_sv,
+        .short_name = "civis"_tsv,
+        .value = "\\E[?25l"_tsv,
         .description = "Hide the cursor via CSI ? 25 l"_sv,
     },
     Capability {
         .long_name = "Clear"_sv,
-        .short_name = "clear"_sv,
-        .value = "\\E[H\\E[2J"_sv,
+        .short_name = "clear"_tsv,
+        .value = "\\E[H\\E[2J"_tsv,
         .description = "Clear the scren by sending CSI H (cursor to 0,0) and CSI 2 J (clear full screen)"_sv,
     },
     Capability {
         .long_name = "Cursor Normal"_sv,
-        .short_name = "cnorm"_sv,
+        .short_name = "cnorm"_tsv,
         // We currently don't support mode 12 to control the cursor blinking, but
         // there's no harm in adding it now.
-        .value = "\\E[?12h\\E[?25h"_sv,
+        .value = "\\E[?12h\\E[?25h"_tsv,
         .description = "Reset the cursor by enabling blinking (CSI ? 12 h) and showing the cursor (CSI ? 25 h)"_sv,
     },
     Capability {
         .long_name = "Carriage return"_sv,
-        .short_name = "cr"_sv,
-        .value = "\\r"_sv,
+        .short_name = "cr"_tsv,
+        .value = "\\r"_tsv,
         .description = "Terminal recognizes \\r as carrigate return"_sv,
     },
     Capability {
         .long_name = "Change scroll region"_sv,
-        .short_name = "csr"_sv,
-        .value = "\\E[%i%p1%d;%p2%dr"_sv, // Copied from ghostty/kitty
+        .short_name = "csr"_tsv,
+        .value = "\\E[%i%p1%d;%p2%dr"_tsv, // Copied from ghostty/kitty
         .description = "Set vertical scroll region via CSI b; t r"_sv,
     },
     Capability {
         .long_name = "Paramaterized cursor back"_sv,
-        .short_name = "cub"_sv,
-        .value = "\\E[%p1%dD"_sv, // Copied from ghostty/kitty
+        .short_name = "cub"_tsv,
+        .value = "\\E[%p1%dD"_tsv, // Copied from ghostty/kitty
         .description = "Move cursor left via CSI Ps D"_sv,
     },
     Capability {
         .long_name = "Cursor back"_sv,
-        .short_name = "cub1"_sv,
-        .value = "^H"_sv,
+        .short_name = "cub1"_tsv,
+        .value = "^H"_tsv,
         .description = "Move cursor left 1 via \\b (^H)"_sv,
     },
     Capability {
         .long_name = "Paramaterized cursor down"_sv,
-        .short_name = "cud"_sv,
-        .value = "\\E[%p1%dB"_sv,
+        .short_name = "cud"_tsv,
+        .value = "\\E[%p1%dB"_tsv,
         .description = "Move cursor down via CSI Ps B"_sv,
     },
     Capability {
         .long_name = "Cursor down"_sv,
-        .short_name = "cud1"_sv,
-        .value = "\\n"_sv,
+        .short_name = "cud1"_tsv,
+        .value = "\\n"_tsv,
         .description = "Move cursor down 1 via \\n"_sv,
     },
     Capability {
         .long_name = "Paramaterized cursor right"_sv,
-        .short_name = "cuf"_sv,
-        .value = "\\E[%p1%dC"_sv,
+        .short_name = "cuf"_tsv,
+        .value = "\\E[%p1%dC"_tsv,
         .description = "Move cursor right via CSI Ps C"_sv,
     },
     Capability {
         .long_name = "Cursor right"_sv,
-        .short_name = "cuf1"_sv,
-        .value = "\\E[C"_sv,
+        .short_name = "cuf1"_tsv,
+        .value = "\\E[C"_tsv,
         .description = "Move cursor right 1 via CSI C"_sv,
     },
     Capability {
         .long_name = "Cursor address"_sv,
-        .short_name = "cup"_sv,
-        .value = "\\E[%i%p1%d;%p2%dH"_sv, // Copied from ghostty/kitty
+        .short_name = "cup"_tsv,
+        .value = "\\E[%i%p1%d;%p2%dH"_tsv, // Copied from ghostty/kitty
         .description = "Move cursor to r,c via CSI r; c H"_sv,
     },
     Capability {
         .long_name = "Paramaterized cursor up"_sv,
-        .short_name = "cuu"_sv,
-        .value = "\\E[%p1%dA"_sv,
+        .short_name = "cuu"_tsv,
+        .value = "\\E[%p1%dA"_tsv,
         .description = "Move cursor up via CSI Ps A"_sv,
     },
     Capability {
         .long_name = "Cursor up"_sv,
-        .short_name = "cuu1"_sv,
-        .value = "\\E[A"_sv,
+        .short_name = "cuu1"_tsv,
+        .value = "\\E[A"_tsv,
         .description = "Move cursor up 1 via CSI A"_sv,
     },
     Capability {
         .long_name = "Cursor visible"_sv,
-        .short_name = "cvvis"_sv,
+        .short_name = "cvvis"_tsv,
         // This is the same as cnorm except in a single CSI sequence.
-        .value = "\\E[?12;25h"_sv, // copied from ghostty/kitty
+        .value = "\\E[?12;25h"_tsv, // copied from ghostty/kitty
         .description = "Make cursor visible via CSI ? 12 ; 25 h"_sv,
     },
     Capability {
         .long_name = "Delete characters"_sv,
-        .short_name = "dch"_sv,
-        .value = "\\E[%p1%dP"_sv,
+        .short_name = "dch"_tsv,
+        .value = "\\E[%p1%dP"_tsv,
         .description = "Delete characters via CSI Ps P"_sv,
     },
     Capability {
         .long_name = "Delete character"_sv,
-        .short_name = "dch1"_sv,
-        .value = "\\E[P"_sv,
+        .short_name = "dch1"_tsv,
+        .value = "\\E[P"_tsv,
         .description = "Delete character via CSI P"_sv,
     },
     Capability {
         .long_name = "Dim"_sv,
-        .short_name = "dim"_sv,
-        .value = "\\E[2m"_sv,
+        .short_name = "dim"_tsv,
+        .value = "\\E[2m"_tsv,
         .description = "Dim the cell via SGR 2"_sv,
     },
     Capability {
         .long_name = "Delete lines"_sv,
-        .short_name = "dl"_sv,
-        .value = "\\E[%p1%dM"_sv,
+        .short_name = "dl"_tsv,
+        .value = "\\E[%p1%dM"_tsv,
         .description = "Delete lines via CSI Ps M"_sv,
     },
     Capability {
         .long_name = "Delete line"_sv,
-        .short_name = "dl1"_sv,
-        .value = "\\E[M"_sv,
+        .short_name = "dl1"_tsv,
+        .value = "\\E[M"_tsv,
         .description = "Delete line via CSI M"_sv,
     },
     Capability {
         .long_name = "Disable status line"_sv,
-        .short_name = "dsl"_sv,
-        .value = "\\E]2;\\E\\\\"_sv,
+        .short_name = "dsl"_tsv,
+        .value = R"(\E]2;\E\\)"_tsv,
         .description = "Disable window title via blank OSC 2"_sv,
         // TODO: enable once we support OSC 1/2
         .enabled = false,
     },
     Capability {
         .long_name = "Erase characters"_sv,
-        .short_name = "ech"_sv,
-        .value = "\\E[%p1%dX"_sv,
+        .short_name = "ech"_tsv,
+        .value = "\\E[%p1%dX"_tsv,
         .description = "Erase characters via CSI Ps X"_sv,
     },
     Capability {
         .long_name = "Erase display"_sv,
-        .short_name = "ed"_sv,
-        .value = "\\E[J"_sv,
+        .short_name = "ed"_tsv,
+        .value = "\\E[J"_tsv,
         .description = "Erase to screen end via CSI J"_sv,
     },
     Capability {
         .long_name = "Erase line"_sv,
-        .short_name = "el"_sv,
-        .value = "\\E[K"_sv,
+        .short_name = "el"_tsv,
+        .value = "\\E[K"_tsv,
         .description = "Erase to line end via CSI K"_sv,
     },
     Capability {
         .long_name = "Erase line beginning"_sv,
-        .short_name = "el1"_sv,
-        .value = "\\E[1K"_sv,
+        .short_name = "el1"_tsv,
+        .value = "\\E[1K"_tsv,
         .description = "Erase to beginning of line end via CSI 1 K"_sv,
     },
     Capability {
         .long_name = "Flash"_sv,
-        .short_name = "flash"_sv,
-        .value = "\\E[?5h$<100/>\\E[?5l"_sv, // Copied from ghostty/kitty
+        .short_name = "flash"_tsv,
+        .value = "\\E[?5h$<100/>\\E[?5l"_tsv, // Copied from ghostty/kitty
         .description = "Flash screen via enabling/disabling video reverse mode (CSI ? 5 h/l), after 100 ms"_sv,
     },
     Capability {
         .long_name = "From status line"_sv,
-        .short_name = "fsl"_sv,
-        .value = "^G"_sv,
+        .short_name = "fsl"_tsv,
+        .value = "^G"_tsv,
         .description = "Terminate OSC sequence via \\a (^G)"_sv,
         // TODO: enable after supporting OSC 2
         .enabled = false,
     },
     Capability {
         .long_name = "Home"_sv,
-        .short_name = "home"_sv,
-        .value = "\\E[H"_sv,
+        .short_name = "home"_tsv,
+        .value = "\\E[H"_tsv,
         .description = "Move cursor to home via CSI H"_sv,
     },
     Capability {
         .long_name = "Horizontal position absolute"_sv,
-        .short_name = "hpa"_sv,
-        .value = "\\E[%i%p1%dG"_sv,
+        .short_name = "hpa"_tsv,
+        .value = "\\E[%i%p1%dG"_tsv,
         .description = "Set cursor col to n via CSI n G"_sv,
     },
     Capability {
         .long_name = "Horizontal tab"_sv,
-        .short_name = "ht"_sv,
-        .value = "^I"_sv,
+        .short_name = "ht"_tsv,
+        .value = "^I"_tsv,
         .description = "Terminal recognizes tab as \\t (^I)"_sv,
     },
     Capability {
         .long_name = "Horizontal tab set"_sv,
-        .short_name = "hts"_sv,
-        .value = "\\EH"_sv,
+        .short_name = "hts"_tsv,
+        .value = "\\EH"_tsv,
         .description = "Set horizontal tab via CI HTS (ESC H)"_sv,
     },
     Capability {
         .long_name = "Insert characters"_sv,
-        .short_name = "ich"_sv,
-        .value = "\\E[%p1%d@"_sv,
+        .short_name = "ich"_tsv,
+        .value = "\\E[%p1%d@"_tsv,
         .description = "Insert characters via CSI Ps @"_sv,
     },
     Capability {
         .long_name = "Insert character"_sv,
-        .short_name = "ich1"_sv,
-        .value = "\\E[@"_sv,
+        .short_name = "ich1"_tsv,
+        .value = "\\E[@"_tsv,
         .description = "Insert character via CSI @"_sv,
     },
     Capability {
         .long_name = "Insert lines"_sv,
-        .short_name = "il"_sv,
-        .value = "\\E[%p1%dL"_sv,
+        .short_name = "il"_tsv,
+        .value = "\\E[%p1%dL"_tsv,
         .description = "Insert lines via CSI Ps L"_sv,
     },
     Capability {
         .long_name = "Insert line"_sv,
-        .short_name = "il1"_sv,
-        .value = "\\E[L"_sv,
+        .short_name = "il1"_tsv,
+        .value = "\\E[L"_tsv,
         .description = "Insert line via CSI L"_sv,
     },
     Capability {
         .long_name = "Index"_sv,
-        .short_name = "ind"_sv,
-        .value = "\\n"_sv,
+        .short_name = "ind"_tsv,
+        .value = "\\n"_tsv,
         .description = "Scroll text down via \\n (we auto-scroll when moving the cursor down via \\n)"_sv,
     },
     Capability {
         .long_name = "Scroll up"_sv,
-        .short_name = "indn"_sv,
-        .value = "\\E[%p1%dS"_sv,
+        .short_name = "indn"_tsv,
+        .value = "\\E[%p1%dS"_tsv,
         .description = "Scroll up via CSI Ps S"_sv,
     },
     Capability {
         .long_name = "Initialize color"_sv,
-        .short_name = "initc"_sv,
+        .short_name = "initc"_tsv,
         .value =
-            "\\E]4;%p1%d;rgb:%p2%{255}%*%{1000}%/%2.2X/%p3%{255}%*%{1000}%/%2.2X/%p4%{255}%*%{1000}%/%2.2X\\E\\\\"_sv,
+            R"(\E]4;%p1%d;rgb:%p2%{255}%*%{1000}%/%2.2X/%p3%{255}%*%{1000}%/%2.2X/%p4%{255}%*%{1000}%/%2.2X\E\\)"_tsv,
         .description = "Initialize color value via OSC 4"_sv,
         // TODO: enable once we support setting color palette via OSC 4
         .enabled = false,
     },
     Capability {
         .long_name = "Invisible"_sv,
-        .short_name = "invis"_sv,
-        .value = "\\E[8m"_sv,
+        .short_name = "invis"_tsv,
+        .value = "\\E[8m"_tsv,
         .description = "Make cell invisible via CSI 8"_sv,
     },
 
@@ -420,8 +420,8 @@ constexpr auto ttx_capabilities = di::Array {
 #define KEY_CAP(short, v, name)                                              \
     Capability {                                                             \
         .long_name = name ""_sv,                                             \
-        .short_name = short ""_sv,                                           \
-        .value = v ""_sv,                                                    \
+        .short_name = short ""_tsv,                                          \
+        .value = v ""_tsv,                                                   \
         .description = "Escape terminal sends when " #name " is pressed"_sv, \
     },
 
@@ -521,387 +521,387 @@ constexpr auto ttx_capabilities = di::Array {
 
     Capability {
         .long_name = "Original colors"_sv,
-        .short_name = "oc"_sv,
-        .value = "\\E]104\\007"_sv,
+        .short_name = "oc"_tsv,
+        .value = "\\E]104\\007"_tsv,
         .description = "Reset color palette via OSC 104"_sv,
         // TODO: enable once we support OSC 104 to set the palette
         .enabled = false,
     },
     Capability {
         .long_name = "Original pair"_sv,
-        .short_name = "op"_sv,
-        .value = "\\E[39;49m"_sv,
+        .short_name = "op"_tsv,
+        .value = "\\E[39;49m"_tsv,
         .description = "Reset grahics rendition fg/bg via CSI 39;49 m"_sv,
     },
     Capability {
         .long_name = "Restore cursor"_sv,
-        .short_name = "rc"_sv,
-        .value = "\\E8"_sv,
+        .short_name = "rc"_tsv,
+        .value = "\\E8"_tsv,
         .description = "Reset cursor via ESC 8 (DECRC)"_sv,
     },
     Capability {
         .long_name = "Repeat character"_sv,
-        .short_name = "rep"_sv,
-        .value = "%p1%c\\E[%p2%{1}%-%db"_sv, // Copied from ghostty/kitty
+        .short_name = "rep"_tsv,
+        .value = "%p1%c\\E[%p2%{1}%-%db"_tsv, // Copied from ghostty/kitty
         .description = "Repeat character via CSI Ps b"_sv,
     },
     Capability {
         .long_name = "Reverse video"_sv,
-        .short_name = "rev"_sv,
-        .value = "\\E[7m"_sv,
+        .short_name = "rev"_tsv,
+        .value = "\\E[7m"_tsv,
         .description = "Invert cell via SGR 7"_sv,
     },
     Capability {
         .long_name = "Reverse index"_sv,
-        .short_name = "ri"_sv,
-        .value = "\\EM"_sv,
+        .short_name = "ri"_tsv,
+        .value = "\\EM"_tsv,
         .description = "Reverse index (scroll down) via C1 RI (ESC M)"_sv,
     },
     Capability {
         .long_name = "Scroll down"_sv,
-        .short_name = "rin"_sv,
-        .value = "\\E[%p1%dT"_sv,
+        .short_name = "rin"_tsv,
+        .value = "\\E[%p1%dT"_tsv,
         .description = "Scroll down via CSI Ps T"_sv,
     },
     Capability {
         .long_name = "Italic"_sv,
-        .short_name = "ritm"_sv,
-        .value = "\\E[23m"_sv,
+        .short_name = "ritm"_tsv,
+        .value = "\\E[23m"_tsv,
         .description = "Italicize cell via SGR 23"_sv,
     },
     Capability {
         .long_name = "End alternate character set"_sv,
-        .short_name = "rmacs"_sv,
-        .value = "\\E(B"_sv,
+        .short_name = "rmacs"_tsv,
+        .value = "\\E(B"_tsv,
         .description = "End altnerate character set via ESC ( B"_sv,
         // TODO: enable once box drawing charset is supported
         .enabled = false,
     },
     Capability {
         .long_name = "Reset automatic margins"_sv,
-        .short_name = "rmam"_sv,
-        .value = "\\E[?7l"_sv,
+        .short_name = "rmam"_tsv,
+        .value = "\\E[?7l"_tsv,
         .description = "Disable auto-wrap via CSI ? 7 l"_sv,
     },
     Capability {
         .long_name = "Reset alternate screen"_sv,
-        .short_name = "rmcup"_sv,
-        .value = "\\E[?1049l"_sv,
+        .short_name = "rmcup"_tsv,
+        .value = "\\E[?1049l"_tsv,
         .description = "Leave alternate screen mode via CSI ? 1049 l"_sv,
     },
     Capability {
         .long_name = "Exit insert mode"_sv,
-        .short_name = "rmir"_sv,
-        .value = "\\E[4l"_sv,
+        .short_name = "rmir"_tsv,
+        .value = "\\E[4l"_tsv,
         .description = "Leave insert mode via CSI 4 l"_sv,
         // TODO: enable once insert mode is supported
         .enabled = false,
     },
     Capability {
         .long_name = "Exit keyboard transmit mode"_sv,
-        .short_name = "rmkx"_sv,
-        .value = "\\E[?1l\\E>"_sv,
+        .short_name = "rmkx"_tsv,
+        .value = "\\E[?1l\\E>"_tsv,
         // We don't yet support alternate keypad mode, but its safe to put the sequence in.
         .description = "Reset keyboard modes via CSI ? 1 l (cursor keys) and ESC > (alternate keypad mode)"_sv,
     },
     Capability {
         .long_name = "Exit standout mode"_sv,
-        .short_name = "rmso"_sv,
-        .value = "\\E[27m"_sv,
+        .short_name = "rmso"_tsv,
+        .value = "\\E[27m"_tsv,
         .description = "Exit standout mode via SGR 27 (clears inverted graphics rendition)"_sv,
     },
     Capability {
         .long_name = "Exit underline"_sv,
-        .short_name = "rmul"_sv,
-        .value = "\\E[24m"_sv,
+        .short_name = "rmul"_tsv,
+        .value = "\\E[24m"_tsv,
         .description = "Exit underline via SGR 24"_sv,
     },
     Capability {
         .long_name = "Reset string"_sv,
-        .short_name = "rs1"_sv,
+        .short_name = "rs1"_tsv,
         // We don't yet support ESC c (RIS), but its safe to include.
-        .value = "\\E]\\E\\\\\\Ec"_sv, // Copied from ghostty/kitty
+        .value = R"(\E]\E\\\Ec)"_tsv, // Copied from ghostty/kitty
         .description = "Reset via empty OSC sequence followed by ESC c (full reset)"_sv,
     },
     Capability {
         .long_name = "Set cursor"_sv,
-        .short_name = "sc"_sv,
-        .value = "\\E7"_sv,
+        .short_name = "sc"_tsv,
+        .value = "\\E7"_tsv,
         .description = "Save the cursor via ESC 7"_sv,
     },
     Capability {
         .long_name = "Set background color"_sv,
-        .short_name = "setab"_sv,
-        .value = "\\E[%?%p1%{8}%<%t4%p1%d%e%p1%{16}%<%t10%p1%{8}%-%d%e48;5;%p1%d%;m"_sv, // Copied from ghostty/kitty
+        .short_name = "setab"_tsv,
+        .value = "\\E[%?%p1%{8}%<%t4%p1%d%e%p1%{16}%<%t10%p1%{8}%-%d%e48;5;%p1%d%;m"_tsv, // Copied from ghostty/kitty
         .description = "Set the graphics background via CSI 48"_sv,
     },
     Capability {
         .long_name = "Set foreground color"_sv,
-        .short_name = "setaf"_sv,
-        .value = "\\E[%?%p1%{8}%<%t3%p1%d%e%p1%{16}%<%t9%p1%{8}%-%d%e38;5;%p1%d%;m"_sv, // Copied from ghostty/kitty
+        .short_name = "setaf"_tsv,
+        .value = "\\E[%?%p1%{8}%<%t3%p1%d%e%p1%{16}%<%t9%p1%{8}%-%d%e38;5;%p1%d%;m"_tsv, // Copied from ghostty/kitty
         .description = "Set the graphics foregroup via CSI 38"_sv,
     },
     Capability {
         .long_name = "Set graphics rendition"_sv,
-        .short_name = "sgr"_sv,
+        .short_name = "sgr"_tsv,
         // TODO: since we don't yet support box drawing characters I removed the first conditional.
         // .value =
         //     "%?%p9%t\\E(0%e\\E(B%;\\E[0%?%p6%t;1%;%?%p5%t;2%;%?%p2%t;4%;%?%p1%p3%|%t;7%;%?%p4%t;5%;%?%p7%t;8%;m"_sv,
         //     Copied from xterm
-        .value = "\\E[0%?%p6%t;1%;%?%p5%t;2%;%?%p2%t;4%;%?%p1%p3%|%t;7%;%?%p4%t;5%;%?%p7%t;8%;m"_sv,
+        .value = "\\E[0%?%p6%t;1%;%?%p5%t;2%;%?%p2%t;4%;%?%p1%p3%|%t;7%;%?%p4%t;5%;%?%p7%t;8%;m"_tsv,
         .description = "Set the graphics rendition via CSI m, and charset via ESC ( C"_sv,
 
     },
     Capability {
         .long_name = "Reset graphics rendition"_sv,
-        .short_name = "sgr0"_sv,
-        /// .value = "\\E(B\\E[m"_sv, // Copied from ghostty/kitty
+        .short_name = "sgr0"_tsv,
+        /// .value = "\\E(B\\E[m"_tsv, // Copied from ghostty/kitty
         // TODO: since we don't yet support box drawing characters I removed the first conditional.
-        .value = "\\E[m"_sv,
+        .value = "\\E[m"_tsv,
         .description = "Reset the graphics rendition via CSI m and charset via ESC ( B"_sv,
 
     },
     Capability {
         .long_name = "Set italics"_sv,
-        .short_name = "sitm"_sv,
-        .value = "\\E[3m"_sv,
+        .short_name = "sitm"_tsv,
+        .value = "\\E[3m"_tsv,
         .description = "Set italics via SGR 3"_sv,
     },
     Capability {
         .long_name = "Enter alternate charset"_sv,
-        .short_name = "smacs"_sv,
-        .value = "\\E(0"_sv,
+        .short_name = "smacs"_tsv,
+        .value = "\\E(0"_tsv,
         .description = "Enter box drawing charset via ESC ( 0"_sv,
         // TODO: enable once we support box drawing charset
         .enabled = false,
     },
     Capability {
         .long_name = "Set automatic margins"_sv,
-        .short_name = "smam"_sv,
-        .value = "\\E[?7h"_sv,
+        .short_name = "smam"_tsv,
+        .value = "\\E[?7h"_tsv,
         .description = "Enable auto-wrap via CSI ? 7 h"_sv,
     },
     Capability {
         .long_name = "Set alternate screen"_sv,
-        .short_name = "smcup"_sv,
-        .value = "\\E[?1049h"_sv,
+        .short_name = "smcup"_tsv,
+        .value = "\\E[?1049h"_tsv,
         .description = "Enter alternate screen mode via CSI ? 1049 h"_sv,
     },
     Capability {
         .long_name = "Enter insert mode"_sv,
-        .short_name = "smir"_sv,
-        .value = "\\E[4h"_sv,
+        .short_name = "smir"_tsv,
+        .value = "\\E[4h"_tsv,
         .description = "Enter insert mode via CSI 4 h"_sv,
         // TODO: enable once insert mode is supported
         .enabled = false,
     },
     Capability {
         .long_name = "Enter keyboard transmit mode"_sv,
-        .short_name = "smkx"_sv,
-        .value = "\\E[?1h\\E="_sv,
+        .short_name = "smkx"_tsv,
+        .value = "\\E[?1h\\E="_tsv,
         // We don't yet support alternate keypad mode, but its safe to put the sequence in.
         .description = "Enter keyboard modes via CSI ? 1 h (cursor keys) and ESC = (alternate keypad mode)"_sv,
     },
     Capability {
         .long_name = "Enter standout mode"_sv,
-        .short_name = "smso"_sv,
-        .value = "\\E[7m"_sv,
+        .short_name = "smso"_tsv,
+        .value = "\\E[7m"_tsv,
         .description = "Enter standout mode via SGR 7 (inverted graphics rendition)"_sv,
     },
     Capability {
         .long_name = "Enter underline"_sv,
-        .short_name = "smul"_sv,
-        .value = "\\E[4m"_sv,
+        .short_name = "smul"_tsv,
+        .value = "\\E[4m"_tsv,
         .description = "Enter underline via SGR 4"_sv,
     },
     Capability {
         .long_name = "Clear all tabs"_sv,
-        .short_name = "tbc"_sv,
-        .value = "\\E[3g"_sv,
+        .short_name = "tbc"_tsv,
+        .value = "\\E[3g"_tsv,
         .description = "Clear all tabstops via CSI 3 g"_sv,
     },
     Capability {
         .long_name = "Move to status line"_sv,
-        .short_name = "tsl"_sv,
-        .value = "\\E]2;"_sv,
+        .short_name = "tsl"_tsv,
+        .value = "\\E]2;"_tsv,
         .description = "Enter status line (window title) via OSC 2"_sv,
         // TODO: enable after supporting OSC 1/2
         .enabled = false,
     },
     Capability {
         .long_name = "User string 6"_sv,
-        .short_name = "u6"_sv,
-        .value = "\\E[%i%d;%dR"_sv, // Copied from ghostty/kitty
+        .short_name = "u6"_tsv,
+        .value = "\\E[%i%d;%dR"_tsv, // Copied from ghostty/kitty
         .description = "String format of cursor position reports CSI Ps ; Ps R"_sv,
     },
     Capability {
         .long_name = "User string 7"_sv,
-        .short_name = "u7"_sv,
-        .value = "\\E[6n"_sv, // Copied from ghostty/kitty
+        .short_name = "u7"_tsv,
+        .value = "\\E[6n"_tsv, // Copied from ghostty/kitty
         .description = "Device status report (cursor position) via CSI 6 n"_sv,
     },
     Capability {
         .long_name = "User string 8"_sv,
-        .short_name = "u8"_sv,
-        .value = "\\E[?%[;0123456789]c"_sv, // Copied from ghostty/kitty
+        .short_name = "u8"_tsv,
+        .value = "\\E[?%[;0123456789]c"_tsv, // Copied from ghostty/kitty
         .description = "String format of primary device attributes response - CSI ? Ps c"_sv,
     },
     Capability {
         .long_name = "User string 9"_sv,
-        .short_name = "u9"_sv,
-        .value = "\\E[c"_sv, // Copied from ghostty/kitty
+        .short_name = "u9"_tsv,
+        .value = "\\E[c"_tsv, // Copied from ghostty/kitty
         .description = "Device primary attributes (DA1) via CSI c"_sv,
     },
     Capability {
         .long_name = "Vertical position absolute"_sv,
-        .short_name = "vpa"_sv,
-        .value = "\\E[%i%p1%dd"_sv,
+        .short_name = "vpa"_tsv,
+        .value = "\\E[%i%p1%dd"_tsv,
         .description = "Set cursor vertical position via CSI Ps d"_sv,
     },
     Capability {
         .long_name = "Leave bracketed paste"_sv,
-        .short_name = "BD"_sv,
-        .value = "\\E[?2004l"_sv,
+        .short_name = "BD"_tsv,
+        .value = "\\E[?2004l"_tsv,
         .description = "Leave bracketed paste via CSI ? 2004 l"_sv,
     },
     Capability {
         .long_name = "Enter bracketed paste"_sv,
-        .short_name = "BE"_sv,
-        .value = "\\E[?2004h"_sv,
+        .short_name = "BE"_tsv,
+        .value = "\\E[?2004h"_tsv,
         .description = "Enter bracketed paste via CSI ? 2004 h"_sv,
     },
     Capability {
         .long_name = "Reset horizontal margins"_sv,
-        .short_name = "Clmg"_sv,
-        .value = "\\E[s"_sv,
+        .short_name = "Clmg"_tsv,
+        .value = "\\E[s"_tsv,
         .description = "Reset horizontal margins via CSI s"_sv,
         // TODO: enable with support for horizontal margins
         .enabled = false,
     },
     Capability {
         .long_name = "Set horizontal margins"_sv,
-        .short_name = "Cmg"_sv,
-        .value = "\\E[%i%p1%d;%p2%ds"_sv,
+        .short_name = "Cmg"_tsv,
+        .value = "\\E[%i%p1%d;%p2%ds"_tsv,
         .description = "Set horizontal margins via CSI Ps ; Ps s"_sv,
         // TODO: enable with support for horizontal margins
         .enabled = false,
     },
     Capability {
         .long_name = "Reset cursor color"_sv,
-        .short_name = "Cr"_sv,
-        .value = "\\E]112\\007"_sv, // Copied from kitty
+        .short_name = "Cr"_tsv,
+        .value = "\\E]112\\007"_tsv, // Copied from kitty
         .description = "Reset cursor palette color via OSC 112"_sv,
         // TODO: enable after support dynamic palette (OSC 12+112)
         .enabled = false,
     },
     Capability {
         .long_name = "Set cursor color"_sv,
-        .short_name = "Cs"_sv,
-        .value = "\\E]12;%p1%s\\007"_sv, // Copied from kitty
+        .short_name = "Cs"_tsv,
+        .value = "\\E]12;%p1%s\\007"_tsv, // Copied from kitty
         .description = "Set cursor palette color via OSC 12"_sv,
         // TODO: enable after support dynamic palette (OSC 12+112)
         .enabled = false,
     },
     Capability {
         .long_name = "Disable horizontal margins"_sv,
-        .short_name = "Dsmg"_sv,
-        .value = "\\E[?69l"_sv,
+        .short_name = "Dsmg"_tsv,
+        .value = "\\E[?69l"_tsv,
         .description = "Disable horizontal margin mode via CSI ? 69 l"_sv,
         // TODO: enable with support for horizontal margins
         .enabled = false,
     },
     Capability {
         .long_name = "Clear with scroll back"_sv,
-        .short_name = "E3"_sv,
-        .value = "\\E[3J"_sv,
+        .short_name = "E3"_tsv,
+        .value = "\\E[3J"_tsv,
         .description = "Clear screen including scroll back via CSI 3 J"_sv,
     },
     Capability {
         .long_name = "Enable horizontal margins"_sv,
-        .short_name = "Enmg"_sv,
-        .value = "\\E[?69h"_sv,
+        .short_name = "Enmg"_tsv,
+        .value = "\\E[?69h"_tsv,
         .description = "Enable horizontal margin mode via CSI ? 69 h"_sv,
         // TODO: enable with support for horizontal margins
         .enabled = false,
     },
     Capability {
         .long_name = "Save clipboard"_sv,
-        .short_name = "Ms"_sv,
-        .value = "\\E]52;%p1%s;%p2%s\\007"_sv, // Copied from ghostty/kitty
+        .short_name = "Ms"_tsv,
+        .value = "\\E]52;%p1%s;%p2%s\\007"_tsv, // Copied from ghostty/kitty
         .description = "Set clipboard via OSC 52"_sv,
     },
     Capability {
         .long_name = "Bracketed paste end"_sv,
-        .short_name = "PE"_sv,
-        .value = "\\E[201~"_sv,
+        .short_name = "PE"_tsv,
+        .value = "\\E[201~"_tsv,
         .description = "Terminal uses CSI 201 ~ to end a bracketed paste"_sv,
     },
     Capability {
         .long_name = "Bracketed paste start"_sv,
-        .short_name = "PS"_sv,
-        .value = "\\E[200~"_sv,
+        .short_name = "PS"_tsv,
+        .value = "\\E[200~"_tsv,
         .description = "Terminal uses CSI 200 ~ to start a bracketed paste"_sv,
     },
     Capability {
         .long_name = "Report version"_sv,
-        .short_name = "RV"_sv,
-        .value = "\\E[>c"_sv,
+        .short_name = "RV"_tsv,
+        .value = "\\E[>c"_tsv,
         .description = "Request secondary device attributes via CSI > c"_sv,
     },
     Capability {
         .long_name = "Reset cursor style"_sv,
-        .short_name = "Se"_sv,
-        .value = "\\E[2 q"_sv,
+        .short_name = "Se"_tsv,
+        .value = "\\E[2 q"_tsv,
         .description = "Reset cursor style via CSI 2 SP q (steady block cursor)"_sv,
     },
     Capability {
         .long_name = "Set underline color"_sv,
-        .short_name = "Setulc"_sv,
-        .value = "\\E[58:2:%p1%{65536}%/%d:%p1%{256}%/%{255}%&%d:%p1%{255}%&%d%;m"_sv, // Copied from ghostty/kitty
+        .short_name = "Setulc"_tsv,
+        .value = "\\E[58:2:%p1%{65536}%/%d:%p1%{256}%/%{255}%&%d:%p1%{255}%&%d%;m"_tsv, // Copied from ghostty/kitty
         .description = "Set underline color via SGR 58"_sv,
     },
     Capability {
         .long_name = "Set extended underline"_sv,
-        .short_name = "Smulx"_sv,
-        .value = "\\E[4:%p1%dm"_sv, // Copied from ghostty/kitty
+        .short_name = "Smulx"_tsv,
+        .value = "\\E[4:%p1%dm"_tsv, // Copied from ghostty/kitty
         .description = "Set extended unline mode via SGR 4:Ps"_sv,
     },
     Capability {
         .long_name = "Set cursor style"_sv,
-        .short_name = "Ss"_sv,
-        .value = "\\E[%p1%d q"_sv,
+        .short_name = "Ss"_tsv,
+        .value = "\\E[%p1%d q"_tsv,
         .description = "Set cursor style via CSI Ps SP q"_sv,
     },
     Capability {
         .long_name = "Synchronized output"_sv,
-        .short_name = "Sync"_sv,
-        .value = "\\E[?2026%?%p1%{1}%-%tl%eh%;"_sv, // Copied from ghostty (kitty uses a DCS sequence)
+        .short_name = "Sync"_tsv,
+        .value = "\\E[?2026%?%p1%{1}%-%tl%eh%;"_tsv, // Copied from ghostty (kitty uses a DCS sequence)
         .description = "Toggle synchronized output via CSI ? 2026 h/l"_sv,
     },
     Capability {
         .long_name = "Extended mouse"_sv,
-        .short_name = "XM"_sv,
-        .value = "\\E[?1006;1000%?%p1%{1}%=%th%el%;"_sv, // Copied from ghostty
+        .short_name = "XM"_tsv,
+        .value = "\\E[?1006;1000%?%p1%{1}%=%th%el%;"_tsv, // Copied from ghostty
         .description = "Toggle SGR mouse mode via CSI ? 1006 ; 1000 h/l"_sv,
     },
     Capability {
         .long_name = "Extended version"_sv,
-        .short_name = "XR"_sv,
-        .value = "\\E[>0q"_sv, // Copied from ghostty
+        .short_name = "XR"_tsv,
+        .value = "\\E[>0q"_tsv, // Copied from ghostty
         .description = "Request XTVERSION via CSI > 0 q"_sv,
         // TODO: enable after supporting XTVERSION
         .enabled = false,
     },
     Capability {
         .long_name = "Reset focus reports"_sv,
-        .short_name = "fd"_sv,
-        .value = "\\E[?1004l"_sv,
+        .short_name = "fd"_tsv,
+        .value = "\\E[?1004l"_tsv,
         .description = "Reset focus reports via CSI ? 1004 l"_sv,
     },
     Capability {
         .long_name = "Set focus reports"_sv,
-        .short_name = "fe"_sv,
-        .value = "\\E[?1004h"_sv,
+        .short_name = "fe"_tsv,
+        .value = "\\E[?1004h"_tsv,
         .description = "Set focus reports via CSI ? 1004 h"_sv,
     },
 
@@ -969,58 +969,58 @@ constexpr auto ttx_capabilities = di::Array {
 
     Capability {
         .long_name = "Focus in"_sv,
-        .short_name = "kxIN"_sv,
-        .value = "\\E[I"_sv,
+        .short_name = "kxIN"_tsv,
+        .value = "\\E[I"_tsv,
         .description = "Report send by terminal when gaining focus - CSI I"_sv,
     },
     Capability {
         .long_name = "Focus out"_sv,
-        .short_name = "kxOUT"_sv,
-        .value = "\\E[O"_sv,
+        .short_name = "kxOUT"_tsv,
+        .value = "\\E[O"_tsv,
         .description = "Report send by terminal when losing focus - CSI o"_sv,
     },
     Capability {
         .long_name = "Reset strikethrough"_sv,
-        .short_name = "rmxx"_sv,
-        .value = "\\E[29m"_sv,
+        .short_name = "rmxx"_tsv,
+        .value = "\\E[29m"_tsv,
         .description = "Reset strikethrough cell via SGR 29"_sv,
     },
     Capability {
         .long_name = "Report version response"_sv,
-        .short_name = "rv"_sv,
+        .short_name = "rv"_tsv,
         // NOTE: this value looks wrong, as the response should include a '<' after the CSI. However,
         // both ghostty and xterm leave it off. Probably no one uses this string.
-        .value = "\\E\\\\[[0-9]+;[0-9]+;[0-9]+c"_sv, // Copied from ghostty
+        .value = R"(\E\\[[0-9]+;[0-9]+;[0-9]+c)"_tsv, // Copied from ghostty
         .description = "String format of device secondary attirbutes response - CSI < Ps ; Ps ; Ps c"_sv,
     },
     Capability {
         .long_name = "Set RGB background"_sv,
-        .short_name = "setrgbb"_sv,
-        .value = "\\E[48:2:%p1%d:%p2%d:%p3%dm"_sv, // Copied from ghostty/kitty
+        .short_name = "setrgbb"_tsv,
+        .value = "\\E[48:2:%p1%d:%p2%d:%p3%dm"_tsv, // Copied from ghostty/kitty
         .description = "Set RGB background via SGR 48"_sv,
     },
     Capability {
         .long_name = "Set RGB foreground"_sv,
-        .short_name = "setrgbf"_sv,
-        .value = "\\E[38:2:%p1%d:%p2%d:%p3%dm"_sv, // Copied from ghostty/kitty
+        .short_name = "setrgbf"_tsv,
+        .value = "\\E[38:2:%p1%d:%p2%d:%p3%dm"_tsv, // Copied from ghostty/kitty
         .description = "Set RGB foreground via SGR 38"_sv,
     },
     Capability {
         .long_name = "Strikethrough"_sv,
-        .short_name = "smxx"_sv,
-        .value = "\\E[9m"_sv,
+        .short_name = "smxx"_tsv,
+        .value = "\\E[9m"_tsv,
         .description = "Set strikethrough cell via SGR 9"_sv,
     },
     Capability {
         .long_name = "Extended mouse report"_sv,
-        .short_name = "xm"_sv,
-        .value = "\\E[<%i%p3%d;%p1%d;%p2%d;%?%p4%tM%em%;"_sv, // Copied from ghostty
+        .short_name = "xm"_tsv,
+        .value = "\\E[<%i%p3%d;%p1%d;%p2%d;%?%p4%tM%em%;"_tsv, // Copied from ghostty
         .description = "Format of extended mouse reports - CSI Ps ; Ps ; Ps M/m"_sv,
     },
     Capability {
         .long_name = "Extended version report"_sv,
-        .short_name = "xr"_sv,
-        .value = "\\EP>\\|[ -~]+a\\E\\\\"_sv, // Copied from ghostty
+        .short_name = "xr"_tsv,
+        .value = R"(\EP>\|[ -~]+a\E\\)"_tsv, // Copied from ghostty
         .description = "Format of XTVERSION response - DCS > version ST"_sv,
         // TODO: enable after supporting XTVERSION
         .enabled = false,
