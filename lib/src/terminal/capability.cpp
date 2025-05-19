@@ -1,7 +1,8 @@
 #include "ttx/terminal/capability.h"
 
 #include "capabilities.h"
-#include "di/container/tree/tree_set.h"
+#include "di/container/algorithm/sort.h"
+#include "di/container/algorithm/unique.h"
 #include "di/format/prelude.h"
 
 namespace ttx::terminal {
@@ -42,14 +43,9 @@ auto get_ttx_terminfo() -> Terminfo const& {
 }
 
 consteval static auto validate_terminfo(Terminfo const& terminfo) -> bool {
-    auto short_names = di::TreeSet<di::StringView> {};
-    for (auto const& capability : terminfo.capabilities) {
-        if (short_names.contains(capability.short_name)) {
-            return false;
-        }
-        short_names.insert(capability.short_name);
-    }
-    return true;
+    auto short_names = terminfo.capabilities | di::transform(&Capability::short_name) | di::to<di::Vector>();
+    di::sort(short_names);
+    return di::unique(short_names).end() == short_names.end();
 }
 
 static_assert(validate_terminfo(ttx_terminfo));

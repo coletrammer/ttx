@@ -39,6 +39,12 @@
               default = null;
               description = ''Enable auto-layout with specific name'';
             };
+
+            term = lib.mkOption {
+              type = with lib.types; nullOr str;
+              default = null;
+              description = ''Set TERM enviornment variable'';
+            };
           };
         };
       };
@@ -50,13 +56,18 @@
               " --layout-save ${config.programs.ttx.settings.autolayout}"
             else
               "";
+          term =
+            if config.programs.ttx.settings.term != null then
+              " --term ${config.programs.ttx.settings.term}"
+            else
+              "";
         in
         lib.mkIf config.programs.ttx.enable {
           home.packages =
             if config.programs.ttx.package == null then [ ] else [ config.programs.ttx.package ];
 
           home.shellAliases = {
-            ttx = "ttx --prefix ${config.programs.ttx.settings.prefix}${autolayout} ${config.programs.ttx.settings.shell}";
+            ttx = "ttx --prefix ${config.programs.ttx.settings.prefix}${autolayout}${term} ${config.programs.ttx.settings.shell}";
           };
         };
     };

@@ -5,12 +5,11 @@
 #include "ttx/popup.h"
 
 namespace ttx {
-auto Fzf::popup_args() && -> di::Tuple<CreatePaneArgs, PopupLayout> {
+auto Fzf::popup_args(CreatePaneArgs&& base) && -> di::Tuple<CreatePaneArgs, PopupLayout> {
     // Setup the pipes for fzf.
-    auto create_pane_args = CreatePaneArgs {
-        .pipe_input = m_input | di::join_with(U'\n') | di::to<di::String>(),
-        .pipe_output = true,
-    };
+    auto create_pane_args = di::move(base);
+    create_pane_args.pipe_input = m_input | di::join_with(U'\n') | di::to<di::String>();
+    create_pane_args.pipe_output = true;
 
     // Build the command string based on the configuration. For now, most
     // fields are hard-coded.

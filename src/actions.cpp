@@ -80,11 +80,7 @@ auto create_tab() -> Action {
                 context.layout_state.with_lock([&](LayoutState& state) {
                     for (auto& session : state.active_session()) {
                         auto cwd = session.active_pane().and_then(&Pane::current_working_directory);
-                        (void) state.add_tab(session,
-                                             {
-                                                 .command = di::clone(context.command),
-                                                 .cwd = cwd.transform(di::to_owned),
-                                             },
+                        (void) state.add_tab(session, context.create_pane_args.with_cwd(cwd.transform(di::to_owned)),
                                              context.render_thread);
                     }
                 });
@@ -110,7 +106,7 @@ auto rename_tab() -> Action {
                                                                     .with_title("Rename Tab"_s)
                                                                     .with_prompt("Name"_s)
                                                                     .with_query(tab.name().to_owned())
-                                                                    .popup_args();
+                                                                    .popup_args(context.create_pane_args.clone());
                         create_pane_args.hooks.did_finish_output = di::make_function<void(di::StringView)>(
                             [&layout_state = context.layout_state, &tab,
                              &render_thread = context.render_thread](di::StringView contents) {
@@ -224,7 +220,7 @@ auto find_tab() -> Action {
                                                                     .with_prompt("Switch to tab"_s)
                                                                     .with_title("Tabs"_s)
                                                                     .with_input(di::move(tab_names))
-                                                                    .popup_args();
+                                                                    .popup_args(context.create_pane_args.clone());
                         create_pane_args.hooks.did_finish_output = di::make_function<void(di::StringView)>(
                             [&layout_state = context.layout_state, &render_thread = context.render_thread,
                              &session](di::StringView contents) {
@@ -258,7 +254,7 @@ auto create_session() -> Action {
         .apply =
             [](ActionContext const& context) {
                 context.layout_state.with_lock([&](LayoutState& state) {
-                    (void) state.add_session({ .command = di::clone(context.command) }, context.render_thread);
+                    (void) state.add_session(context.create_pane_args.clone(), context.render_thread);
                 });
                 context.render_thread.request_render();
             },
@@ -277,7 +273,7 @@ auto rename_session() -> Action {
                                                                     .with_title("Rename Session"_s)
                                                                     .with_prompt("Name"_s)
                                                                     .with_query(session.name().to_owned())
-                                                                    .popup_args();
+                                                                    .popup_args(context.create_pane_args.clone());
                         create_pane_args.hooks.did_finish_output = di::make_function<void(di::StringView)>(
                             [&layout_state = context.layout_state, &session,
                              &render_thread = context.render_thread](di::StringView contents) {
@@ -372,7 +368,7 @@ auto find_session() -> Action {
                                                                 .with_prompt("Switch to session"_s)
                                                                 .with_title("Sessions"_s)
                                                                 .with_input(di::move(session_names))
-                                                                .popup_args();
+                                                                .popup_args(context.create_pane_args.clone());
                     create_pane_args.hooks.did_finish_output = di::make_function<void(di::StringView)>(
                         [&layout_state = context.layout_state,
                          &render_thread = context.render_thread](di::StringView contents) {
@@ -416,8 +412,11 @@ auto save_layout() -> Action {
         .description = "Create a manual layout save"_s,
         .apply =
             [](ActionContext const& context) {
-                auto [create_pane_args, popup_layout] =
-                    Fzf().as_text_box().with_title("Save Layout To File"_s).with_prompt("Name"_s).popup_args();
+                auto [create_pane_args, popup_layout] = Fzf()
+                                                            .as_text_box()
+                                                            .with_title("Save Layout To File"_s)
+                                                            .with_prompt("Name"_s)
+                                                            .popup_args(context.create_pane_args.clone());
                 create_pane_args.hooks.did_finish_output = di::make_function<void(di::StringView)>(
                     [&save_layout_thread = context.save_layout_thread](di::StringView contents) {
                         while (contents.ends_with(U'\n')) {
@@ -510,10 +509,8 @@ auto hard_reset() -> Action {
                     for (auto& tab : state.active_tab()) {
                         for (auto& pane : tab.active()) {
                             (void) tab.replace_pane(pane,
-                                                    {
-                                                        .command = di::clone(context.command),
-                                                        .cwd = pane.current_working_directory().transform(di::to_owned),
-                                                    },
+                                                    context.create_pane_args.with_cwd(
+                                                        pane.current_working_directory().transform(di::to_owned)),
                                                     context.render_thread);
                         }
                     }
@@ -553,10 +550,7 @@ auto add_pane(Direction direction) -> Action {
                         for (auto& tab : session.active_tab()) {
                             auto cwd = tab.active().and_then(&Pane::current_working_directory);
                             (void) state.add_pane(session, tab,
-                                                  {
-                                                      .command = di::clone(context.command),
-                                                      .cwd = cwd.transform(di::to_owned),
-                                                  },
+                                                  context.create_pane_args.with_cwd(cwd.transform(di::to_owned)),
                                                   direction, context.render_thread);
                         }
                     }

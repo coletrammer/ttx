@@ -66,7 +66,7 @@ public:
             .with_print_query();
     }
 
-    auto popup_args() && -> di::Tuple<CreatePaneArgs, PopupLayout>;
+    auto popup_args(CreatePaneArgs&& base) && -> di::Tuple<CreatePaneArgs, PopupLayout>;
 
 private:
     di::Optional<di::String> m_prompt;

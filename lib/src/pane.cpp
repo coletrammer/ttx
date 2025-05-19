@@ -20,9 +20,8 @@
 #include "ttx/utf8_stream_decoder.h"
 
 namespace ttx {
-static auto spawn_child(di::Vector<di::TransparentString> command, di::Optional<di::Path> cwd, dius::SyncFile& pty,
-                        Size const& size, i32 stdin_fd, i32 stdout_fd, di::Vector<i32> const& close_fds)
-    -> di::Result<dius::system::ProcessHandle> {
+static auto spawn_child(CreatePaneArgs& args, dius::SyncFile& pty, Size const& size, i32 stdin_fd, i32 stdout_fd,
+                        di::Vector<i32> const& close_fds) -> di::Result<dius::system::ProcessHandle> {
     auto tty_path = TRY(pty.get_psuedo_terminal_path());
 
 #ifdef __linux__
@@ -33,13 +32,16 @@ static auto spawn_child(di::Vector<di::TransparentString> command, di::Optional<
     TRY(pty.set_tty_window_size(size.as_window_size()));
 #endif
 
-    auto result = dius::system::Process(di::move(command));
-    if (cwd) {
-        result = di::move(result).with_optional_current_working_directory(di::move(cwd).value());
+    auto result = dius::system::Process(di::move(args.command));
+    if (args.cwd) {
+        result = di::move(result).with_optional_current_working_directory(args.cwd.value().clone());
+    }
+    if (args.terminfo_dir) {
+        result = di::move(result).with_env("TERMINFO"_ts, args.terminfo_dir.value().data().to_owned());
     }
     result = di::move(result)
                  .with_new_session()
-                 .with_env("TERM"_ts, "xterm-256color"_ts)
+                 .with_env("TERM"_ts, args.term.to_owned())
                  .with_env("COLORTERM"_ts, "truecolor"_ts)
                  .with_env("TERM_PROGRAM"_ts, "ttx"_ts)
                  .with_file_open(2, di::move(tty_path), dius::OpenMode::ReadWrite)
@@ -164,8 +166,7 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
         close_fds.push_back(di::get<1>(read_pipes.value()).file_descriptor());
     }
 
-    auto process = TRY(
-        spawn_child(di::move(args.command), args.cwd.clone(), pty_controller, size, stdin_fd, stdout_fd, close_fds));
+    auto process = TRY(spawn_child(args, pty_controller, size, stdin_fd, stdout_fd, close_fds));
     auto pane =
         di::make_box<Pane>(id, di::move(args.cwd), di::move(pty_controller), size, process, di::move(args.hooks));
 #ifdef __linux__

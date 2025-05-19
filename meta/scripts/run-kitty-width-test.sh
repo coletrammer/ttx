@@ -16,7 +16,7 @@ if ! command -v kitten >/dev/null; then
 fi
 
 # Produce output
-"$TTX_BUILD_DIR/ttx" --headless -- sh -c "kitten __width_test__ | tee $output"
+"$TTX_BUILD_DIR/ttx" --force-local-terminfo --headless -- sh -c "kitten __width_test__ | tee $output"
 
 status=$?
 cat "$output"

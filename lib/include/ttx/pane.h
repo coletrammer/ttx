@@ -1,6 +1,7 @@
 #pragma once
 
 #include "di/container/string/string_view.h"
+#include "di/container/tree/tree_map.h"
 #include "di/container/vector/vector.h"
 #include "di/function/container/function.h"
 #include "di/sync/atomic.h"
@@ -52,9 +53,17 @@ struct CreatePaneArgs {
                  save_state_path.clone(),
                  pipe_input.clone(),
                  cwd.clone(),
+                 terminfo_dir.clone(),
+                 term,
                  pipe_output,
                  mock,
                  {} };
+    }
+
+    auto with_cwd(di::Optional<di::Path> cwd) const& -> CreatePaneArgs {
+        auto result = clone();
+        result.cwd = di::move(cwd);
+        return result;
     }
 
     di::Vector<di::TransparentString> command {};
@@ -63,6 +72,8 @@ struct CreatePaneArgs {
     di::Optional<di::Path> save_state_path {};
     di::Optional<di::String> pipe_input {};
     di::Optional<di::Path> cwd {};
+    di::Optional<di::Path> terminfo_dir {};
+    di::TransparentStringView term { "xterm-ttx"_tsv };
     bool pipe_output { false };
     bool mock { false };
     PaneHooks hooks {};

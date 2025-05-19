@@ -4,6 +4,7 @@
 #include "render.h"
 #include "save_layout.h"
 #include "ttx/key_event.h"
+#include "ttx/pane.h"
 
 namespace ttx {
 struct ActionContext {
@@ -11,7 +12,7 @@ struct ActionContext {
     di::Synchronized<LayoutState>& layout_state;
     RenderThread& render_thread;
     SaveLayoutThread& save_layout_thread;
-    di::Vector<di::TransparentString> const& command;
+    CreatePaneArgs const& create_pane_args;
     di::Atomic<bool>& done;
 };
 

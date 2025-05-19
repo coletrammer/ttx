@@ -2,6 +2,7 @@
 #include "di/container/string/string_view.h"
 #include "di/io/writer_print.h"
 #include "di/sync/synchronized.h"
+#include "dius/filesystem/operations.h"
 #include "dius/main.h"
 #include "dius/sync_file.h"
 #include "dius/system/process.h"
@@ -23,9 +24,11 @@ struct Args {
     di::Optional<di::TransparentStringView> layout_save_name;
     di::Optional<di::TransparentStringView> layout_restore_name;
     di::Optional<di::TransparentStringView> print_terminfo_mode;
+    di::Optional<di::TransparentStringView> term;
     bool replay { false };
     bool headless { false };
     bool print_features { false };
+    bool force_local_terminfo { false };
     bool help { false };
 
     constexpr static auto get_cli_parser() {
@@ -41,8 +44,12 @@ struct Args {
             .option<&Args::headless>('h', "headless"_tsv, "Headless mode"_sv)
             .option<&Args::replay>('r', "replay-path"_tsv,
                                    "Replay capture output (file paths are passed via positional args)"_sv)
+            .option<&Args::term>('t', "term"_tsv, "Set TERM environment variable (default xterm-ttx)"_sv)
             .option<&Args::print_terminfo_mode>({}, "terminfo"_tsv,
                                                 "Print terminfo (mode can be one of: [terminfo, verbose])"_sv)
+            .option<&Args::force_local_terminfo>(
+                {}, "force-local-terminfo"_tsv,
+                "Always try and compile built-in terminfo, and set TERMINFO env variable"_sv)
             .option<&Args::layout_save_name>(
                 'l', "layout-save"_tsv,
                 "Name of a saved layout, automatically synced by ttx (including restore at startup)"_sv)
@@ -72,6 +79,97 @@ static auto get_session_save_dir() -> di::Result<di::Path> {
     result /= "ttx"_tsv;
     result /= "layouts"_tsv;
     return di::move(result);
+}
+
+static auto get_local_terminfo_dir() -> di::Result<di::Path> {
+    auto const& env = dius::system::get_environment();
+    auto data_home = env.at("XDG_STATE_HOME"_tsv)
+                         .transform([&](di::TransparentStringView path) {
+                             return di::PathView(path).to_owned();
+                         })
+                         .or_else([&] {
+                             return env.at("HOME"_tsv).transform([&](di::TransparentStringView home) {
+                                 return di::PathView(home).to_owned() / ".local"_tsv / "state"_tsv;
+                             });
+                         });
+    if (!data_home) {
+        return di::Unexpected(di::BasicError::NoSuchFileOrDirectory);
+    }
+
+    auto& result = data_home.value();
+    result /= "ttx"_tsv;
+    result /= "terminfo"_tsv;
+    return di::move(result);
+}
+
+static auto maybe_get_terminfo_dir(di::Optional<di::TransparentStringView> term, bool force_local_terminfo)
+    -> di::Result<di::Optional<di::Path>> {
+    // If the user is overriding TERM, don't setup our terminfo.
+    if (term.has_value() && term != "ttx"_tsv && term != "xterm-ttx"_tsv) {
+        return {};
+    }
+
+    if (!force_local_terminfo) {
+        // First, start by searching for an existing terminfo for ttx. We could try and implement
+        // this check ourselves, but its probably better to rely on the actual curses implementation.
+        // This does slow down start-up time, but we can rework this logic later on. For now, this
+        // is very convenient.
+        auto null = TRY(dius::open_sync("/dev/null"_pv, dius::OpenMode::ReadWrite));
+        auto process_result = TRY(dius::system::Process(di::Array {
+                                                            "tput"_ts,
+                                                            "-T"_ts,
+                                                            "xterm-ttx"_ts,
+                                                            "colors"_ts,
+                                                        } |
+                                                        di::to<di::Vector>())
+                                      .with_file_dup(null.file_descriptor(), 1)
+                                      .with_file_dup(null.file_descriptor(), 2)
+                                      .spawn_and_wait());
+        if (process_result.exited() && process_result.exit_code() == 0) {
+            return {};
+        }
+    }
+
+    // In this case, we're going to compile our terminfo ourselves and then return the
+    // PATH to it. We will store the data in $XDG_STATE_HOME/ttx/terminfo.
+    auto terminfo_dir = TRY(get_local_terminfo_dir());
+    TRY(dius::filesystem::create_directories(terminfo_dir));
+
+    // To avoid recessive recompilations, hash our serialized terminfo and see if we're already written
+    // it out.
+    auto const& terminfo = terminal::get_ttx_terminfo();
+    auto serialized_terminfo = terminfo.serialize();
+    auto terminfo_hash = di::hash(serialized_terminfo);
+    if (auto result = dius::read_to_string(terminfo_dir.clone() / "ttx.terminfo.hash"_pv)) {
+        if (result.value() == di::to_string(terminfo_hash)) {
+            return terminfo_dir;
+        }
+    }
+
+    auto terminfo_file = TRY(dius::open_sync(terminfo_dir.clone() / "ttx.terminfo"_pv, dius::OpenMode::WriteClobber));
+    di::writer_print<di::String::Encoding>(terminfo_file, "{}"_sv, serialized_terminfo);
+
+    auto null = TRY(dius::open_sync("/dev/null"_pv, dius::OpenMode::ReadWrite));
+    auto process_result = TRY(dius::system::Process(di::Array {
+                                                        "tic"_ts,
+                                                        "-x"_ts,
+                                                        "-o"_ts,
+                                                        terminfo_dir.data().to_owned(),
+                                                        (terminfo_dir.clone() / "ttx.terminfo"_pv).data().to_owned(),
+                                                    } |
+                                                    di::to<di::Vector>())
+                                  .with_file_dup(null.file_descriptor(), 1)
+                                  .with_file_dup(null.file_descriptor(), 2)
+                                  .spawn_and_wait());
+    if (!process_result.exited() || process_result.exit_code() != 0) {
+        return di::Unexpected(di::BasicError::InvalidArgument);
+    }
+
+    auto terminfo_hash_file =
+        TRY(dius::open_sync(terminfo_dir.clone() / "ttx.terminfo.hash"_pv, dius::OpenMode::WriteClobber));
+    di::writer_print<di::String::Encoding>(terminfo_hash_file, "{}"_sv, di::to_string(terminfo_hash));
+
+    return terminfo_dir;
 }
 
 static auto main(Args& args) -> di::Result<void> {
@@ -126,6 +224,18 @@ static auto main(Args& args) -> di::Result<void> {
 
     // Setup - log to file.
     [[maybe_unused]] auto& log = dius::stderr = TRY(dius::open_sync("/tmp/ttx.log"_pv, dius::OpenMode::WriteClobber));
+
+    // Setup - potentially compile terminfo database
+    auto maybe_terminfo_dir = TRY(maybe_get_terminfo_dir(args.term, args.force_local_terminfo));
+
+    // Setup - initialize pane arguments
+    auto base_create_pane_args = CreatePaneArgs {
+        .command = command.clone(),
+        .capture_command_output_path = args.capture_command_output_path.transform(di::to_owned),
+        .save_state_path = args.save_state_path.transform(di::to_owned),
+        .terminfo_dir = di::move(maybe_terminfo_dir),
+        .term = args.term.value_or("xterm-ttx"_tsv),
+    };
 
     // Setup - in headless mode there is no terminal. Ensure stdin is not valid.
     if (args.headless) {
@@ -183,7 +293,7 @@ static auto main(Args& args) -> di::Result<void> {
         if (args.headless) {
             return nullptr;
         }
-        return InputThread::create(command.clone(), di::move(key_binds), layout_state, *render_thread,
+        return InputThread::create(base_create_pane_args.clone(), di::move(key_binds), layout_state, *render_thread,
                                    *layout_save_thread);
     }());
     auto _ = di::ScopeExit([&] {
@@ -219,26 +329,19 @@ static auto main(Args& args) -> di::Result<void> {
     TRY(layout_state.with_lock([&](LayoutState& state) -> di::Result<> {
         if (replay_mode) {
             for (auto replay_path : args.command) {
+                auto create_pane_args = base_create_pane_args.clone();
+                create_pane_args.replay_path = di::PathView(replay_path).to_owned();
                 if (state.empty()) {
-                    TRY(state.add_session(
-                        {
-                            .replay_path = di::PathView(replay_path).to_owned(),
-                            .save_state_path = args.save_state_path.transform(di::to_owned),
-                        },
-                        *render_thread));
+                    TRY(state.add_session(di::move(create_pane_args), *render_thread));
                 } else {
                     // Horizontal split (means vertical layout)
-                    TRY(state.add_pane(*state.active_session(), *state.active_tab(),
-                                       { .replay_path = di::PathView(replay_path).to_owned() }, Direction::Vertical,
-                                       *render_thread));
+                    TRY(state.add_pane(*state.active_session(), *state.active_tab(), di::move(create_pane_args),
+                                       Direction::Vertical, *render_thread));
                 }
             }
         } else {
             auto make_pane_args = [&] -> CreatePaneArgs {
-                auto result = CreatePaneArgs {
-                    .command = di::clone(command),
-                    .capture_command_output_path = args.capture_command_output_path.transform(di::to_owned),
-                };
+                auto result = base_create_pane_args.clone();
                 if (args.headless) {
                     result.hooks.did_exit = [&](Pane&, di::Optional<dius::system::ProcessResult> result) {
                         if (result && result.value().exited() && result.value().exit_code() == 0) {

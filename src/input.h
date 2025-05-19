@@ -8,6 +8,7 @@
 #include "ttx/focus_event.h"
 #include "ttx/key_event.h"
 #include "ttx/mouse.h"
+#include "ttx/pane.h"
 #include "ttx/paste_event.h"
 #include "ttx/terminal/escapes/device_attributes.h"
 #include "ttx/terminal/escapes/device_status.h"
@@ -18,11 +19,11 @@ class RenderThread;
 
 class InputThread {
 public:
-    static auto create(di::Vector<di::TransparentString> command, di::Vector<KeyBind> key_binds,
+    static auto create(CreatePaneArgs create_pane_args, di::Vector<KeyBind> key_binds,
                        di::Synchronized<LayoutState>& layout_state, RenderThread& render_thread,
                        SaveLayoutThread& save_layout_thread) -> di::Result<di::Box<InputThread>>;
 
-    explicit InputThread(di::Vector<di::TransparentString> command, di::Vector<KeyBind> key_binds,
+    explicit InputThread(CreatePaneArgs create_pane_args, di::Vector<KeyBind> key_binds,
                          di::Synchronized<LayoutState>& layout_state, RenderThread& render_thread,
                          SaveLayoutThread& save_layout_thread);
     ~InputThread();
@@ -48,7 +49,7 @@ private:
 
     InputMode m_mode { InputMode::Insert };
     di::Vector<KeyBind> m_key_binds;
-    di::Vector<di::TransparentString> m_command;
+    CreatePaneArgs m_create_pane_args;
     di::Atomic<bool> m_done { false };
     di::Optional<MouseCoordinate> m_drag_origin;
     di::Synchronized<LayoutState>& m_layout_state;

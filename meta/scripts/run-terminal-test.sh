@@ -32,7 +32,7 @@ mkdir -p "$(dirname "$output")"
 rm -f "$output"
 
 # Produce output
-"$TTX_BUILD_DIR/ttx" --headless -S "$output" -r "$input"
+"$TTX_BUILD_DIR/ttx" --force-local-terminfo --headless -S "$output" -r "$input"
 
 # Validate output
 diff <(xxd "$expected") <(xxd "$output") || {
