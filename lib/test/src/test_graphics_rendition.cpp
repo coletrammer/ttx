@@ -1,6 +1,7 @@
 #include "di/container/view/cartesian_product.h"
 #include "di/container/view/join_with.h"
 #include "di/test/prelude.h"
+#include "ttx/features.h"
 #include "ttx/graphics_rendition.h"
 #include "ttx/params.h"
 
@@ -95,15 +96,30 @@ static void as_csi_params() {
     rendition.blink_mode = ttx::BlinkMode::Rapid;
     rendition.italic = true;
     rendition.font_weight = ttx::FontWeight::Bold;
+    rendition.underline_mode = ttx::UnderlineMode::Curly;
     rendition.fg = ttx::Color(2, 45, 67);
     rendition.bg = ttx::Color(3, 88, 99);
     rendition.underline_color = ttx::Color(22, 35, 87);
 
-    auto actual = combine_csi_params(rendition.as_csi_params());
+    // Without undercurl, we use normal underline and legacy graphics codes
+    auto actual = combine_csi_params(rendition.as_csi_params(ttx::Feature::None));
     auto expected = ttx::Params {
-        { 0 }, { 1 }, { 3 },  { 6 },  { 38 },
-        { 2 }, { 2 }, { 45 }, { 67 }, { 48 },
-        { 2 }, { 3 }, { 88 }, { 99 }, { 58, 2, {}, 22, 35, 87 },
+        { 0 },  { 1 },  { 3 },  { 6 }, { 4 }, { 38 }, { 2 },  { 2 },
+        { 45 }, { 67 }, { 48 }, { 2 }, { 3 }, { 88 }, { 99 }, { 58, 2, {}, 22, 35, 87 },
+    };
+    ASSERT_EQ(actual, expected);
+
+    // With undercurl, we use the modern graphics forms
+    actual = combine_csi_params(rendition.as_csi_params(ttx::Feature::Undercurl));
+    expected = ttx::Params {
+        { 0 },
+        { 1 },
+        { 3 },
+        { 6 },
+        { 4, 3 },
+        { 38, 2, {}, 2, 45, 67 },
+        { 48, 2, {}, 3, 88, 99 },
+        { 58, 2, {}, 22, 35, 87 },
     };
     ASSERT_EQ(actual, expected);
 }
@@ -119,32 +135,52 @@ static void roundtrip() {
     auto font_weights = di::Array { ttx::FontWeight::None, ttx::FontWeight::Bold, ttx::FontWeight::Dim };
     auto blink_modes = di::Array { ttx::BlinkMode::None, ttx::BlinkMode::Normal, ttx::BlinkMode::Rapid };
     auto underline_modes =
-        di::Array { ttx::UnderlineMode::Normal, ttx::UnderlineMode::Normal, ttx::UnderlineMode::Curly,
+        di::Array { ttx::UnderlineMode::None,   ttx::UnderlineMode::Normal, ttx::UnderlineMode::Curly,
                     ttx::UnderlineMode::Dashed, ttx::UnderlineMode::Dotted, ttx::UnderlineMode::Double };
     auto italics = di::Array { false, true };
     auto overlines = di::Array { false, true };
     auto inverteds = di::Array { false, true };
     auto invisibles = di::Array { false, true };
     auto strike_throughs = di::Array { false, true };
+    auto features = di::Array { ttx::Feature::None, ttx::Feature::Undercurl };
+    auto use_prevs = di::Array { false, true };
 
-    for (auto [fg, bg, underline_color, font_weight, blink_mode, underline_mode, italic, overline, inverted, invisible,
-               strike_through] :
-         di::cartesian_product(colors, colors, colors, font_weights, blink_modes, underline_modes, italics, overlines,
-                               inverteds, invisibles, strike_throughs)) {
+    auto prev = di::Optional<ttx::GraphicsRendition> {};
+    for (auto [use_prev, fg, bg, underline_color, font_weight, blink_mode, underline_mode, italic, overline, inverted,
+               invisible, strike_through, feature] :
+         di::cartesian_product(use_prevs, colors, colors, colors, font_weights, blink_modes, underline_modes, italics,
+                               overlines, inverteds, invisibles, strike_throughs, features)) {
         auto expected = ttx::GraphicsRendition {};
         expected.fg = fg;
         expected.bg = bg;
         expected.underline_color = underline_color;
         expected.font_weight = font_weight;
-        expected.font_weight = font_weight;
+        expected.underline_mode = underline_mode;
+        expected.blink_mode = blink_mode;
         expected.italic = italic;
         expected.overline = overline;
         expected.inverted = inverted;
         expected.invisible = invisible;
         expected.strike_through = strike_through;
 
-        auto actual = ttx::GraphicsRendition::from_csi_params(combine_csi_params(expected.as_csi_params()));
+        auto actual = use_prev ? prev.value_or(ttx::GraphicsRendition {}) : ttx::GraphicsRendition {};
+        if (!(feature & ttx::Feature::Undercurl)) {
+            if (expected.underline_mode != ttx::UnderlineMode::Normal &&
+                expected.underline_mode != ttx::UnderlineMode::None &&
+                expected.underline_mode != ttx::UnderlineMode::Double &&
+                expected.underline_mode != actual.underline_mode) {
+                expected.underline_mode = ttx::UnderlineMode::Normal;
+            }
+        }
+
+        auto params =
+            combine_csi_params(expected.as_csi_params(feature, use_prev ? prev.transform(di::cref) : di::nullopt));
+        if (!use_prev || !params.empty()) {
+            actual.update_with_csi_params(params);
+        }
         ASSERT_EQ(expected, actual);
+
+        prev = actual;
     }
 }
 

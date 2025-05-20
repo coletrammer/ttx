@@ -35,6 +35,7 @@ constexpr static auto terminfo_queries = di::Array {
     TerminfoQuery(Feature::Clipboard, "Ms"_tsv),
     TerminfoQuery(Feature::DynamicPalette, "ccc"_tsv),
     TerminfoQuery(Feature::BackgroundCharacterErase, "bce"_tsv),
+    TerminfoQuery(Feature::Undercurl, "Smulx"_tsv),
 };
 
 class FeatureDetector {

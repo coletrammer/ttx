@@ -12,6 +12,7 @@
 #include "dius/unicode/width.h"
 #include "ttx/features.h"
 #include "ttx/graphics_rendition.h"
+#include "ttx/params.h"
 #include "ttx/size.h"
 #include "ttx/terminal/cursor.h"
 #include "ttx/terminal/escapes/osc_66.h"
@@ -301,6 +302,23 @@ static auto compute_text_upper_bound(di::StringView text) -> usize {
     return di::max(legacy_width, grapheme_width);
 }
 
+static auto render_graphics_rendition(GraphicsRendition const& desired, Feature features,
+                                      GraphicsRendition const& current) -> di::String {
+    auto as_sgr = [](Params const& params) -> di::String {
+        return *di::present("\033[{}m"_sv, params);
+    };
+
+    // For optimization, try both a delta graphics rendition as well as clearing the graphics rendition
+    // completely.
+    auto from_scratch = desired.as_csi_params(features) | di::transform(as_sgr) | di::join | di::to<di::String>();
+    auto from_current =
+        desired.as_csi_params(features, current) | di::transform(as_sgr) | di::join | di::to<di::String>();
+    if (from_scratch.size_bytes() < from_current.size_bytes()) {
+        return from_scratch;
+    }
+    return from_current;
+}
+
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor) -> di::Result<> {
     // List of changes which are used to determine what updates to the screen are needed. We
@@ -367,22 +385,22 @@ auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor) -> d
     auto buffer = di::VectorWriter<> {};
     if (!changes.empty()) {
         di::writer_print<di::String::Encoding>(buffer, "\033[?2026h"_sv);
+    }
+    if (m_current_cursor.transform(&RenderedCursor::hidden) != true) {
         di::writer_print<di::String::Encoding>(buffer, "\033[?25l"_sv);
+    }
+    if (di::exchange(m_size_changed, false)) {
+        di::writer_print<di::String::Encoding>(buffer, "\033[H"_sv);
+        m_current_screen.set_cursor(0, 0);
 
-        if (di::exchange(m_size_changed, false)) {
-            di::writer_print<di::String::Encoding>(buffer, "\033[H"_sv);
-            m_current_screen.set_cursor(0, 0);
+        di::writer_print<di::String::Encoding>(buffer, "\033[m"_sv);
+        m_current_screen.set_current_graphics_rendition({});
 
-            di::writer_print<di::String::Encoding>(buffer, "\033[m"_sv);
-            m_current_screen.set_current_graphics_rendition({});
+        di::writer_print<di::String::Encoding>(buffer, terminal::OSC8().serialize());
+        m_current_screen.set_current_hyperlink({});
 
-            di::writer_print<di::String::Encoding>(buffer, terminal::OSC8().serialize());
-            m_current_screen.set_current_hyperlink({});
-
-            di::writer_print<di::String::Encoding>(buffer, "\033[2J"_sv);
-            m_current_screen.clear();
-        }
-    } else if (cursor == m_current_cursor) {
+        di::writer_print<di::String::Encoding>(buffer, "\033[2J"_sv);
+    } else if (changes.empty() && cursor == m_current_cursor) {
         // No updates, so do nothing.
         return {};
     }
@@ -402,9 +420,8 @@ auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor) -> d
         }
         if (current_gfx != gfx) {
             m_current_screen.set_current_graphics_rendition(gfx);
-            for (auto& params : gfx.as_csi_params()) {
-                di::writer_print<di::String::Encoding>(buffer, "\033[{}m"_sv, params);
-            }
+            di::writer_print<di::String::Encoding>(buffer, "{}"_sv,
+                                                   render_graphics_rendition(gfx, m_features, current_gfx));
             current_gfx = gfx;
         }
         if (current_cursor_row != row || current_cursor_col != col) {
@@ -483,12 +500,16 @@ auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor) -> d
         }
     }
 
-    // End sequence: potentially show the cursor, as well as end the synchronized output.
-    if (!cursor.hidden) {
-        di::writer_print<di::String::Encoding>(buffer, "\033[{};{}H"_sv, cursor.cursor_row + 1, cursor.cursor_col + 1);
-        m_current_screen.set_cursor(cursor.cursor_row, cursor.cursor_col);
+    // End sequence: Move cursor to the correct location, maybe show the cursor,
+    // as well as end the synchronized output.
+    m_current_screen.set_cursor(cursor.cursor_row, cursor.cursor_col);
+    move_cursor(buffer, current_cursor_row, current_cursor_col, cursor.cursor_row, cursor.cursor_col);
 
+    if (m_current_cursor.transform(&RenderedCursor::style) != cursor.style) {
         di::writer_print<di::String::Encoding>(buffer, "\033[{} q"_sv, i32(cursor.style));
+    }
+
+    if (!cursor.hidden) {
         di::writer_print<di::String::Encoding>(buffer, "\033[?25h"_sv);
     }
     m_current_cursor = cursor;

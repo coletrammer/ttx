@@ -1570,7 +1570,7 @@ auto Screen::state_as_escape_sequences() const -> di::String {
 
             // Write out the cell
             if (gfx != prev_sgr) {
-                for (auto& params : gfx.as_csi_params()) {
+                for (auto& params : gfx.as_csi_params(Feature::All)) {
                     di::writer_print<di::String::Encoding>(writer, "\033[{}m"_sv, params);
                 }
                 prev_sgr = gfx;

@@ -35,7 +35,7 @@ Date:   Mon Apr 27 13:48:52 2015 +0200
 ]8;;\A URL wrapping to the next line, and a trailing whitespace: ]8;id=42;http://example.com/foobar\foo
 bar 
 [C
-[0m[31m]8;id=43;http://example.com/colors\M[0m[32mu[0m[33ml[0m[34mt[0m[35mi[0m[36m-[0m[113mc[0m[119mo[0m[125ml[0m[131mo[0m[137mu[0m[143mr[0m [0;1ml[0;3mi[0;4mn[0;9mk[0m also tests that "\e[m" or "\e[0m" does [0;3mnot[0m terminate the link
+[0m[31m]8;id=43;http://example.com/colors\M[0m[32mu[0m[33ml[0m[34mt[0m[35mi[0m[36m-[0m[48:5:21mc[0m[48:5:27mo[0m[48:5:33ml[0m[48:5:39mo[0m[48:5:45mu[0m[48:5:51mr[0m [0;1ml[0;3mi[0;4mn[0;9mk[0m also tests that "\e[m" or "\e[0m" does [0;3mnot[0m terminate the link
 [C
 ]8;;\Soft reset "\e[!p" resets attributes and terminates link: [0;3m[31m]8;id=44;http://example.com/softreset\foo]8;;\bar
 [C

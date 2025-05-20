@@ -3,6 +3,7 @@
 #include "di/container/vector/vector.h"
 #include "di/parser/integral.h"
 #include "di/vocab/tuple/prelude.h"
+#include "ttx/features.h"
 #include "ttx/params.h"
 
 namespace ttx {
@@ -241,16 +242,21 @@ enum class ColorType {
     Underine,
 };
 
-static auto color_to_params(Color c, ColorType type) -> Params {
+static auto color_to_params(Color c, ColorType type, bool use_legacy) -> Params {
     if (c.type == Color::Type::Custom) {
         auto code = type == ColorType::Fg ? 38u : type == ColorType::Bg ? 48u : 58u;
-        if (type == ColorType::Underine) {
+        if (type == ColorType::Underine || !use_legacy) {
             // Underline color isn't constrained by backwards compatability, so use the new form:
             //   code:2::r:g:b
             return { { code, 2, {}, c.r, c.g, c.b } };
-        } // For compatability, use the old escape sequence form for fg and bg.
+        }
+        // For compatability, use the old escape sequence form for fg and bg.
         //   code; 2; r; g; b
         return { { code }, { 2 }, { c.r }, { c.g }, { c.b } };
+    }
+    if (c.type == Color::Type::Default) {
+        auto code = type == ColorType::Fg ? 39u : type == ColorType::Bg ? 49u : 59u;
+        return { { code } };
     }
     if (type == ColorType::Underine) {
         // Use palette index.
@@ -266,94 +272,150 @@ static auto color_to_params(Color c, ColorType type) -> Params {
     }
     // Indexed color
     auto base_value = type == ColorType::Fg ? 38u : 48u;
-    return { { base_value }, { 5 }, { c.r } };
+    if (use_legacy) {
+        return { { base_value }, { 5 }, { c.r } };
+    }
+    return { { base_value, 5, c.r } };
 }
 
-auto GraphicsRendition::as_csi_params() const -> di::Vector<Params> {
+auto GraphicsRendition::as_csi_params(Feature features, di::Optional<GraphicsRendition const&> prev) const
+    -> di::Vector<Params> {
     // Start by clearing all attributes.
     auto result = di::Vector<Params>();
     auto& basic = result.emplace_back();
-    basic.add_param(0);
-
-    switch (font_weight) {
-        case FontWeight::Bold:
-            basic.add_param(1);
-            break;
-        case FontWeight::Dim:
-            basic.add_param(2);
-            break;
-        case FontWeight::None:
-            break;
-    }
-    if (italic) {
-        basic.add_param(3);
-    }
-    switch (blink_mode) {
-        case BlinkMode::Normal:
-            basic.add_param(5);
-            break;
-        case BlinkMode::Rapid:
-            basic.add_param(6);
-            break;
-        case BlinkMode::None:
-            break;
-    }
-    if (inverted) {
-        basic.add_param(7);
-    }
-    if (invisible) {
-        basic.add_param(8);
-    }
-    if (strike_through) {
-        basic.add_param(9);
-    }
-    if (overline) {
-        basic.add_param(53);
+    if (!prev) {
+        basic.add_param(0);
     }
 
-    switch (underline_mode) {
-        case UnderlineMode::Normal:
-            basic.add_param(4);
-            break;
-        case UnderlineMode::Double:
-            basic.add_param(21);
-            break;
-        case UnderlineMode::Curly: {
-            // For compatability, include the subparameters for specifying the underline type
-            // in its own SGR escape. This way we won't mix an escape sequence with both
-            // parameters and subparameters.
-            auto params = Params {};
-            params.add_subparams({ 4, 3 });
-            result.push_back(di::move(params));
-            break;
+    auto compare = prev.transform([](auto&& x) {
+                           return x;
+                       })
+                       .value_or(GraphicsRendition {});
+    if (compare.font_weight != font_weight) {
+        switch (font_weight) {
+            case FontWeight::Bold:
+                basic.add_param(1);
+                break;
+            case FontWeight::Dim:
+                basic.add_param(2);
+                break;
+            case FontWeight::None:
+                basic.add_param(22);
+                break;
         }
-        case UnderlineMode::Dotted: {
-            auto params = Params {};
-            params.add_subparams({ 4, 4 });
-            result.push_back(di::move(params));
-            break;
+    }
+    if (compare.italic != italic) {
+        if (italic) {
+            basic.add_param(3);
+        } else {
+            basic.add_param(23);
         }
-        case UnderlineMode::Dashed: {
-            auto params = Params {};
-            params.add_subparams({ 4, 5 });
-            result.push_back(di::move(params));
-            break;
+    }
+    if (compare.blink_mode != blink_mode) {
+        switch (blink_mode) {
+            case BlinkMode::Normal:
+                basic.add_param(5);
+                break;
+            case BlinkMode::Rapid:
+                basic.add_param(6);
+                break;
+            case BlinkMode::None:
+                basic.add_param(25);
+                break;
         }
-        case UnderlineMode::None:
-            break;
+    }
+    if (compare.inverted != inverted) {
+        if (inverted) {
+            basic.add_param(7);
+        } else {
+            basic.add_param(27);
+        }
+    }
+    if (compare.invisible != invisible) {
+        if (invisible) {
+            basic.add_param(8);
+        } else {
+            basic.add_param(28);
+        }
+    }
+    if (compare.strike_through != strike_through) {
+        if (strike_through) {
+            basic.add_param(9);
+        } else {
+            basic.add_param(29);
+        }
+    }
+    if (compare.overline != overline) {
+        if (overline) {
+            basic.add_param(53);
+        } else {
+            basic.add_param(55);
+        }
+    }
+
+    if (compare.underline_mode != underline_mode) {
+        switch (underline_mode) {
+            case UnderlineMode::Normal:
+                basic.add_param(4);
+                break;
+            case UnderlineMode::Double:
+                basic.add_param(21);
+                break;
+            case UnderlineMode::Curly: {
+                // For compatability, include the subparameters for specifying the underline type
+                // in its own SGR escape. This way we won't mix an escape sequence with both
+                // parameters and subparameters.
+                if (!!(features & Feature::Undercurl)) {
+                    auto params = Params {};
+                    params.add_subparams({ 4, 3 });
+                    result.push_back(di::move(params));
+                } else {
+                    basic.add_param(4);
+                }
+                break;
+            }
+            case UnderlineMode::Dotted: {
+                if (!!(features & Feature::Undercurl)) {
+                    auto params = Params {};
+                    params.add_subparams({ 4, 4 });
+                    result.push_back(di::move(params));
+                } else {
+                    basic.add_param(4);
+                }
+                break;
+            }
+            case UnderlineMode::Dashed: {
+                if (!!(features & Feature::Undercurl)) {
+                    auto params = Params {};
+                    params.add_subparams({ 4, 5 });
+                    result.push_back(di::move(params));
+                } else {
+                    basic.add_param(4);
+                }
+                break;
+            }
+            case UnderlineMode::None:
+                basic.add_param(24);
+                break;
+        }
     }
 
     // To ensure we don't exceed to maximum number of parameters allowed (16), split each color
     // spec into its own set of parameters.
-    if (fg.type != Color::Type::Default) {
-        result.push_back(color_to_params(fg, ColorType::Fg));
+    //
+    // Also, use legacy true color sequences (with ';' instead of ':') unless the terminal is new
+    // enough to support undercurl.
+    auto use_legacy = !(features & Feature::Undercurl);
+    if (compare.fg != fg) {
+        result.push_back(color_to_params(fg, ColorType::Fg, use_legacy));
     }
-    if (bg.type != Color::Type::Default) {
-        result.push_back(color_to_params(bg, ColorType::Bg));
+    if (compare.bg != bg) {
+        result.push_back(color_to_params(bg, ColorType::Bg, use_legacy));
     }
-    if (underline_color.type != Color::Type::Default) {
-        result.push_back(color_to_params(underline_color, ColorType::Underine));
+    if (compare.underline_color != underline_color) {
+        result.push_back(color_to_params(underline_color, ColorType::Underine, use_legacy));
     }
+    di::erase_if(result, &Params::empty);
     return result;
 }
 }

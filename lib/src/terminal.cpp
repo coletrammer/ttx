@@ -7,6 +7,7 @@
 #include "dius/print.h"
 #include "ttx/cursor_style.h"
 #include "ttx/escape_sequence_parser.h"
+#include "ttx/features.h"
 #include "ttx/focus_event_io.h"
 #include "ttx/graphics_rendition.h"
 #include "ttx/key_event_io.h"
@@ -479,7 +480,7 @@ void Terminal::dcs_decrqss(Params const&, di::StringView data) {
     // Set graphics rendition
     auto response = terminal::StatusStringResponse {};
     if (data == "m"_sv) {
-        auto sgr_string = active_screen().screen.current_graphics_rendition().as_csi_params() |
+        auto sgr_string = active_screen().screen.current_graphics_rendition().as_csi_params(Feature::All) |
                           di::transform(di::to_string) | di::join_with(U';') | di::to<di::String>();
         response.response = *di::present("{}m"_sv, sgr_string);
     }
