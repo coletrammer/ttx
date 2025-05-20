@@ -1123,21 +1123,27 @@ void Screen::put_wide_cell(di::StringView text, MultiCellInfo const& multi_cell_
     ASSERT_LT(m_cursor.col, max_width());
     ASSERT_EQ(row.cells.size(), max_width());
 
-    // Check for the overflow condition, which will evenually induce scrolling.
-    if (auto_wrap_mode == AutoWrapMode::Enabled && m_cursor.col + width > max_width()) {
-        // Mark the current row as having overflowed, and then advance the cursor.
-        row.overflow = true;
-
-        auto new_cursor = Cursor { m_cursor.row + 1, 0, 0, false };
-        if (m_cursor.row + 1 == m_scroll_region.end_row) {
-            // This was the last line - so induce scrolling by adding a new row.
-            scroll_down();
-            m_cursor.col = 0;
+    // Check for the overflow condition, which induces scrolling when autowrap is enabled.
+    if (m_cursor.col + width > max_width()) {
+        if (auto_wrap_mode == AutoWrapMode::Disabled) {
+            // In this case, we need to truncate the cell. To do so, first move the cursor
+            // to the insertion point.
+            set_cursor_col(max_width() - width);
         } else {
-            m_cursor = new_cursor;
+            // Mark the current row as having overflowed, and then advance the cursor.
+            row.overflow = true;
+
+            auto new_cursor = Cursor { m_cursor.row + 1, 0, 0, false };
+            if (m_cursor.row + 1 == m_scroll_region.end_row) {
+                // This was the last line - so induce scrolling by adding a new row.
+                scroll_down();
+                m_cursor.col = 0;
+            } else {
+                m_cursor = new_cursor;
+            }
+            put_wide_cell(text, multi_cell_info, auto_wrap_mode, explicitly_sized, complex_grapheme_cluster);
+            return;
         }
-        put_wide_cell(text, multi_cell_info, auto_wrap_mode, explicitly_sized, complex_grapheme_cluster);
-        return;
     }
 
     // Try to the allocate the multi cell info. This is required, and so we bail if
@@ -1149,7 +1155,8 @@ void Screen::put_wide_cell(di::StringView text, MultiCellInfo const& multi_cell_
 
     // Determine the insertion point. This may not be the cursor column when we're at the
     // end of the line.
-    auto insertion_point = di::min(m_cursor.col, max_width() - width);
+    ASSERT_LT_EQ(m_cursor.col, max_width() - width);
+    auto insertion_point = m_cursor.col;
     auto text_start_position = m_cursor.text_offset;
 
     // Fast path: check for redundant updates. This means we're putting the same text into a cell.

@@ -264,6 +264,21 @@ static void put_text_wide() {
                           u8"1 xx \n"
                           u8"#\uFE0F|.|e| |2\n"
                           u8" 猫. e"_sv);
+
+    // Putting a wide character at the end of a column overwrites
+    // when not wrapping
+    screen.set_cursor(4, 3);
+    put_text(screen, "xy"_sv);
+    screen.set_cursor(4, 4);
+    screen.put_code_point(U'猫', AutoWrapMode::Disabled);
+    cursor = screen.cursor();
+    ASSERT_EQ(cursor.text_offset, 6);
+
+    validate_text(screen, u8"ab猫.e\n"
+                          u8"#\uFE0F|.| | | \n"
+                          u8"1 xx \n"
+                          u8"#\uFE0F|.|e| |2\n"
+                          u8" 猫.猫."_sv);
 }
 
 static void put_text_damage_tracking() {
