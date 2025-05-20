@@ -11,7 +11,7 @@ namespace ttx {
 //   38:2:R:G:B   -- normal form with subparameters but without color space.
 //   38:2:X:R:G:B -- subparameters with color space argument, which is ignored.
 //   38;5;I       -- lagecy index form used for backwards compatability.
-//   38:5:I       -- index form, specifices an index into color palette. For now, only 16 colors are supported.
+//   38:5:I       -- index form, specifices an index into color palette. Palette indices must be less than 256.
 // This returns both the number of parameters consumed as well as the parsed color.
 static auto parse_complex_color(Params const& params, usize start_index) -> di::Tuple<usize, Color> {
     auto subparams = params.subparams(start_index);
@@ -28,7 +28,10 @@ static auto parse_complex_color(Params const& params, usize start_index) -> di::
                 if (params.size() - start_index < 3) {
                     return { 1, {} };
                 }
-                return { 3, Color(Color::Palette(Color::Palette::Black + params.get(start_index + 2))) };
+                if (params.get(start_index + 2) >= 256) {
+                    return { 3, Color() };
+                }
+                return { 3, Color(Color::Palette(params.get(start_index + 2))) };
             default:
                 return { 1, {} };
         }
@@ -44,7 +47,10 @@ static auto parse_complex_color(Params const& params, usize start_index) -> di::
             return { 1, Color(subparams.get(subparams.size() - 3), subparams.get(subparams.size() - 2),
                               subparams.get(subparams.size() - 1)) };
         case 5:
-            return { 1, Color(Color::Palette(Color::Palette::Black + subparams.get(2))) };
+            if (subparams.get(2) >= 256) {
+                return { 1, Color() };
+            }
+            return { 1, Color(Color::Palette(subparams.get(2))) };
         default:
             break;
     }
@@ -236,7 +242,7 @@ enum class ColorType {
 };
 
 static auto color_to_params(Color c, ColorType type) -> Params {
-    if (c.c == Color::Palette::Custom) {
+    if (c.type == Color::Type::Custom) {
         auto code = type == ColorType::Fg ? 38u : type == ColorType::Bg ? 48u : 58u;
         if (type == ColorType::Underine) {
             // Underline color isn't constrained by backwards compatability, so use the new form:
@@ -248,14 +254,19 @@ static auto color_to_params(Color c, ColorType type) -> Params {
     }
     if (type == ColorType::Underine) {
         // Use palette index.
-        return { { 58, 5, u32(c.c - Color::Palette::Black) } };
+        return { { 58, 5, u32(c.r - Color::Palette::Black) } };
     }
-    if (c.c <= Color::Palette::LightGrey) {
+    if (c.r <= Color::Palette::LightGrey) {
         auto base_value = type == ColorType::Fg ? 30u : 40u;
-        return { { base_value + c.c - Color::Palette::Black } };
+        return { { base_value + c.r - Color::Palette::Black } };
     }
-    auto base_value = type == ColorType::Fg ? 90u : 100u;
-    return { { base_value + c.c - Color::Palette::DarkGrey } };
+    if (c.r <= Color::Palette::White) {
+        auto base_value = type == ColorType::Fg ? 90u : 100u;
+        return { { base_value + c.r - Color::Palette::DarkGrey } };
+    }
+    // Indexed color
+    auto base_value = type == ColorType::Fg ? 38u : 48u;
+    return { { base_value }, { 5 }, { c.r } };
 }
 
 auto GraphicsRendition::as_csi_params() const -> di::Vector<Params> {
@@ -334,13 +345,13 @@ auto GraphicsRendition::as_csi_params() const -> di::Vector<Params> {
 
     // To ensure we don't exceed to maximum number of parameters allowed (16), split each color
     // spec into its own set of parameters.
-    if (fg.c != Color::None) {
+    if (fg.type != Color::Type::Default) {
         result.push_back(color_to_params(fg, ColorType::Fg));
     }
-    if (bg.c != Color::None) {
+    if (bg.type != Color::Type::Default) {
         result.push_back(color_to_params(bg, ColorType::Bg));
     }
-    if (underline_color.c != Color::None) {
+    if (underline_color.type != Color::Type::Default) {
         result.push_back(color_to_params(underline_color, ColorType::Underine));
     }
     return result;

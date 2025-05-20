@@ -56,7 +56,7 @@ auto lookup_terminfo_string(di::StringView hex_name) -> TerminfoString {
         result[0] = Capability {
             .long_name = {},
             .short_name = "Co"_tsv,
-            .value = 16u, // TODO: update to 256 after supporting 256 color palette
+            .value = 256u,
             .description = {},
         };
         result[1] = Capability {

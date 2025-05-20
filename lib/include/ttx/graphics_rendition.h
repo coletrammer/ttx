@@ -9,9 +9,13 @@
 
 namespace ttx {
 struct Color {
+    enum class Type {
+        Default, ///< Color is the default (unset SGR)
+        Palette, ///< Color is a palette color (256 colors are available)
+        Custom,  ///< Color is true color (r, b, g fully specified)
+    };
+
     enum Palette : u8 {
-        None,
-        Custom,
         Black,
         Red,
         Green,
@@ -31,10 +35,10 @@ struct Color {
     };
 
     Color() = default;
-    constexpr Color(Palette c) : c(c) {}
-    constexpr Color(u8 r, u8 g, u8 b) : c(Palette::Custom), r(r), g(g), b(b) {}
+    constexpr Color(Palette c) : type(Type::Palette), r(c) {}
+    constexpr Color(u8 r, u8 g, u8 b) : type(Type::Custom), r(r), g(g), b(b) {}
 
-    Palette c = Palette::None;
+    Type type = Type::Default;
     u8 r = 0;
     u8 g = 0;
     u8 b = 0;
@@ -43,18 +47,23 @@ struct Color {
     auto operator<=>(Color const& other) const = default;
 
     constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<Color>) {
-        return di::make_fields<"Color">(di::field<"c", &Color::c>, di::field<"r", &Color::r>, di::field<"g", &Color::g>,
-                                        di::field<"b", &Color::b>);
+        return di::make_fields<"Color">(di::field<"type", &Color::type>, di::field<"r", &Color::r>,
+                                        di::field<"g", &Color::g>, di::field<"b", &Color::b>);
     }
 };
+
+constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<Color::Type>) {
+    using enum Color::Type;
+    return di::make_enumerators<"Color::Type">(di::enumerator<"Default", Default>, di::enumerator<"Palette", Palette>,
+                                               di::enumerator<"Custom", Custom>);
+}
 
 constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<Color::Palette>) {
     using enum Color::Palette;
     return di::make_enumerators<"Color::Palette">(
-        di::enumerator<"None", None>, di::enumerator<"Custom", Custom>, di::enumerator<"Black", Black>,
-        di::enumerator<"Red", Red>, di::enumerator<"Green", Green>, di::enumerator<"Brown", Brown>,
-        di::enumerator<"Blue", Blue>, di::enumerator<"Magenta", Magenta>, di::enumerator<"Cyan", Cyan>,
-        di::enumerator<"LightGrey", LightGrey>, di::enumerator<"DarkGrey", DarkGrey>,
+        di::enumerator<"Black", Black>, di::enumerator<"Red", Red>, di::enumerator<"Green", Green>,
+        di::enumerator<"Brown", Brown>, di::enumerator<"Blue", Blue>, di::enumerator<"Magenta", Magenta>,
+        di::enumerator<"Cyan", Cyan>, di::enumerator<"LightGrey", LightGrey>, di::enumerator<"DarkGrey", DarkGrey>,
         di::enumerator<"LightRed", LightRed>, di::enumerator<"LightGreen", LightGreen>,
         di::enumerator<"Yellow", Yellow>, di::enumerator<"LightBlue", LightBlue>,
         di::enumerator<"LightMagenta", LightMagenta>, di::enumerator<"LightCyan", LightCyan>,

@@ -58,7 +58,7 @@ static void lookup() {
         // Valid
         Case {
             "436F"_sv,
-            TerminfoString("Co"_ts, "16"_ts),
+            TerminfoString("Co"_ts, "256"_ts),
         },
         Case {
             "524742"_sv,

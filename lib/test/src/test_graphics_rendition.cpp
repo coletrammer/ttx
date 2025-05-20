@@ -35,12 +35,12 @@ static void parse() {
     ASSERT_EQ(auto(rendition.underline_mode), ttx::UnderlineMode::Curly);
 
     rendition.update_with_csi_params({ { 33 }, { 44 } });
-    ASSERT_EQ(auto(rendition.fg.c), ttx::Color::Palette::Brown);
-    ASSERT_EQ(auto(rendition.bg.c), ttx::Color::Palette::Blue);
+    ASSERT_EQ(auto(rendition.fg.r), ttx::Color::Palette::Brown);
+    ASSERT_EQ(auto(rendition.bg.r), ttx::Color::Palette::Blue);
 
     rendition.update_with_csi_params({ { 93 }, { 104 } });
-    ASSERT_EQ(auto(rendition.fg.c), ttx::Color::Palette::Yellow);
-    ASSERT_EQ(auto(rendition.bg.c), ttx::Color::Palette::LightBlue);
+    ASSERT_EQ(auto(rendition.fg.r), ttx::Color::Palette::Yellow);
+    ASSERT_EQ(auto(rendition.bg.r), ttx::Color::Palette::LightBlue);
 
     // legacy 256 color
     rendition.update_with_csi_params({ { 38 }, { 2 }, { 1 }, { 2 }, { 3 } });
@@ -64,9 +64,9 @@ static void parse() {
 
     // clear
     rendition.update_with_csi_params({ { 39 }, { 49 }, { 59 } });
-    ASSERT_EQ(auto(rendition.fg.c), ttx::Color::Palette::None);
-    ASSERT_EQ(auto(rendition.bg.c), ttx::Color::Palette::None);
-    ASSERT_EQ(auto(rendition.underline_color.c), ttx::Color::Palette::None);
+    ASSERT_EQ(auto(rendition.fg.type), ttx::Color::Type::Default);
+    ASSERT_EQ(auto(rendition.bg.type), ttx::Color::Type::Default);
+    ASSERT_EQ(auto(rendition.underline_color.type), ttx::Color::Type::Default);
 }
 
 static auto combine_csi_params(di::Vector<ttx::Params> params_list) -> ttx::Params {
@@ -109,8 +109,13 @@ static void as_csi_params() {
 }
 
 static void roundtrip() {
-    auto colors =
-        di::Array { ttx::Color(), ttx::Color(ttx::Color::Palette::Blue), ttx::Color(ttx::Color::Palette::LightCyan) };
+    auto colors = di::Array {
+        ttx::Color(),
+        ttx::Color(ttx::Color::Palette::Blue),
+        ttx::Color(ttx::Color::Palette::LightCyan),
+        ttx::Color(ttx::Color::Palette(255)),
+        ttx::Color(ttx::Color(123, 255, 99)),
+    };
     auto font_weights = di::Array { ttx::FontWeight::None, ttx::FontWeight::Bold, ttx::FontWeight::Dim };
     auto blink_modes = di::Array { ttx::BlinkMode::None, ttx::BlinkMode::Normal, ttx::BlinkMode::Rapid };
     auto underline_modes =

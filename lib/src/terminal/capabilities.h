@@ -104,10 +104,7 @@ constexpr auto ttx_capabilities = di::Array {
     Capability {
         .long_name = "Maximum colors"_sv,
         .short_name = "colors"_tsv,
-        // TODO: support 256 color palette instead of just 16 colors.
-        // We may have to lie about supporting 256 colors to get applications
-        // to use our truecolor support, in the mean-time.
-        .value = 16u,
+        .value = 256u,
         .description = "Number of colors in the palette"_sv,
     },
     Capability {
