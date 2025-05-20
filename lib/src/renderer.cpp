@@ -198,7 +198,9 @@ static void move_cursor(di::VectorWriter<>& buffer, u32 current_row, di::Optiona
 
     if (desired_col == 0) {
         // Desired col = 0: Use CPL or CNL for relative movement.
-        if (desired_row == current_row + 1) {
+        if (desired_row == 0) {
+            di::writer_print<di::String::Encoding>(buffer, "\033[H"_sv);
+        } else if (desired_row == current_row + 1) {
             di::writer_print<di::String::Encoding>(buffer, "\r\n"_sv);
         } else if (desired_row + 1 == current_row) {
             di::writer_print<di::String::Encoding>(buffer, "\r\033M"_sv);
@@ -366,11 +368,19 @@ auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor) -> d
     if (!changes.empty()) {
         di::writer_print<di::String::Encoding>(buffer, "\033[?2026h"_sv);
         di::writer_print<di::String::Encoding>(buffer, "\033[?25l"_sv);
-        di::writer_print<di::String::Encoding>(buffer, "\033[H"_sv);
-        di::writer_print<di::String::Encoding>(buffer, "\033[m"_sv);
-        di::writer_print<di::String::Encoding>(buffer, terminal::OSC8().serialize());
+
         if (di::exchange(m_size_changed, false)) {
+            di::writer_print<di::String::Encoding>(buffer, "\033[H"_sv);
+            m_current_screen.set_cursor(0, 0);
+
+            di::writer_print<di::String::Encoding>(buffer, "\033[m"_sv);
+            m_current_screen.set_current_graphics_rendition({});
+
+            di::writer_print<di::String::Encoding>(buffer, terminal::OSC8().serialize());
+            m_current_screen.set_current_hyperlink({});
+
             di::writer_print<di::String::Encoding>(buffer, "\033[2J"_sv);
+            m_current_screen.clear();
         }
     } else if (cursor == m_current_cursor) {
         // No updates, so do nothing.
@@ -379,12 +389,10 @@ auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor) -> d
 
     // Now apply the changes. While we're iterating over all the changes,
     // also update the current terminal configuration.
-    auto current_hyperlink = di::Optional<terminal::Hyperlink const&> {};
-    auto current_gfx = GraphicsRendition {};
-    auto current_cursor_row = 0_u32;
-    auto current_cursor_col = di::Optional(0_u32);
-    m_current_screen.set_current_hyperlink({});
-    m_current_screen.set_current_graphics_rendition({});
+    auto current_hyperlink = m_current_screen.current_hyperlink();
+    auto current_gfx = m_current_screen.current_graphics_rendition();
+    auto current_cursor_row = m_current_screen.cursor().row;
+    auto current_cursor_col = di::Optional<u32>(m_current_screen.cursor().col);
     for (auto [_, hyperlink, gfx, row, col, text, multi_cell_info, explicitly_sized, complex_grapheme_cluster] :
          changes) {
         if (current_hyperlink != hyperlink) {
@@ -478,6 +486,8 @@ auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor) -> d
     // End sequence: potentially show the cursor, as well as end the synchronized output.
     if (!cursor.hidden) {
         di::writer_print<di::String::Encoding>(buffer, "\033[{};{}H"_sv, cursor.cursor_row + 1, cursor.cursor_col + 1);
+        m_current_screen.set_cursor(cursor.cursor_row, cursor.cursor_col);
+
         di::writer_print<di::String::Encoding>(buffer, "\033[{} q"_sv, i32(cursor.style));
         di::writer_print<di::String::Encoding>(buffer, "\033[?25h"_sv);
     }
