@@ -117,6 +117,7 @@ private:
     M(CsiParam, csi_param)                     \
     M(CsiIntermediate, csi_intermediate)       \
     M(CsiIgnore, csi_ignore)                   \
+    M(Ss3, ss3)                                \
     M(DcsEntry, dcs_entry)                     \
     M(DcsParam, dcs_param)                     \
     M(DcsIntermediate, dcs_intermediate)       \
@@ -124,8 +125,7 @@ private:
     M(DcsIgnore, dcs_ignore)                   \
     M(OscString, osc_string)                   \
     M(ApcString, apc_string)                   \
-    M(SosPmString, sos_pm_string)              \
-    M(Ss3, ss3)
+    M(SosPmString, sos_pm_string)
 
     enum class State {
 #define __ENUMERATE_STATE(N, n) N,
@@ -172,6 +172,7 @@ private:
     Params m_params;
     bool m_last_separator_was_colon { false };
     bool m_saw_legacy_string_terminator { false };
+    c32 m_prev {};
     Mode m_mode { Mode::Application };
     di::Vector<ParserResult> m_result;
 };

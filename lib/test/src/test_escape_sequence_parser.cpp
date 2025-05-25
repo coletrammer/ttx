@@ -86,7 +86,7 @@ static void apc() {
 static void input() {
     using namespace ttx;
 
-    constexpr auto input = "\033A\033OA\033\x00\033\033\033[AA\x18\x1a\033\x1a\033]"_sv;
+    constexpr auto input = "\033A\033OA\033\x00\033\033\033[AA\x18\x1a\033\x1a\033]8;asdf\033\\\033]"_sv;
 
     auto expected = di::Array {
         ParserResult { ControlCharacter(U'A', true) },
@@ -98,6 +98,7 @@ static void input() {
         ParserResult { ControlCharacter(U'\x18', false) },
         ParserResult { ControlCharacter(U'\x1a', false) },
         ParserResult { ControlCharacter(U'\x1a', true) },
+        ParserResult { OSC("8;asdf"_s, "\033\\"_sv) },
         ParserResult { ControlCharacter(U']', true) },
     };
 

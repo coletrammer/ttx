@@ -38,9 +38,9 @@ static inline auto is_intermediate(c32 code_point) -> bool {
     return code_point >= 0x20 && code_point <= 0x2F;
 }
 
-static inline auto is_string_terminator(c32 code_point) -> bool {
+static inline auto is_string_terminator(c32 code_point, c32 prev) -> bool {
     // NOTE: this is xterm specific.
-    return code_point == '\a';
+    return code_point == '\a' || (prev == '\x1b' && code_point == '\\');
 }
 
 static inline auto is_dcs_terminator(c32 code_point) -> bool {
@@ -404,7 +404,8 @@ STATE(dcs_passthrough) {
         hook();
     }
 
-    if (is_string_terminator(code_point)) {
+    if (is_string_terminator(code_point, m_prev)) {
+        m_saw_legacy_string_terminator = code_point == '\a';
         transition(State::Ground);
         return;
     }
@@ -420,7 +421,8 @@ STATE(dcs_passthrough) {
 STATE(dcs_ignore) {
     ON_ENTRY_NOOP(DcsIgnore);
 
-    if (is_string_terminator(code_point)) {
+    if (is_string_terminator(code_point, m_prev)) {
+        m_saw_legacy_string_terminator = code_point == '\a';
         transition(State::Ground);
         return;
     }
@@ -433,8 +435,8 @@ STATE(osc_string) {
         osc_start();
     }
 
-    if (is_string_terminator(code_point)) {
-        m_saw_legacy_string_terminator = true;
+    if (is_string_terminator(code_point, m_prev)) {
+        m_saw_legacy_string_terminator = code_point == '\a';
         transition(State::Ground);
         return;
     }
@@ -455,26 +457,20 @@ STATE(apc_string) {
         apc_start();
     }
 
-    if (is_string_terminator(code_point)) {
+    if (is_string_terminator(code_point, m_prev)) {
+        m_saw_legacy_string_terminator = code_point == '\a';
         transition(State::Ground);
         return;
     }
 
-    if (is_executable(code_point)) {
-        ignore(code_point);
-        return;
-    }
-
-    if (is_printable(code_point)) {
-        apc_put(code_point);
-        return;
-    }
+    apc_put(code_point);
 }
 
 STATE(sos_pm_string) {
     ON_ENTRY_NOOP(SosPmString);
 
-    if (is_string_terminator(code_point)) {
+    if (is_string_terminator(code_point, m_prev)) {
+        m_saw_legacy_string_terminator = code_point == '\a';
         transition(State::Ground);
         return;
     }
@@ -503,6 +499,7 @@ void EscapeSequenceParser::execute(c32 code_point) {
 }
 
 void EscapeSequenceParser::clear() {
+    m_saw_legacy_string_terminator = false;
     m_current_param.clear();
     m_params = {};
     m_last_separator_was_colon = false;
@@ -557,6 +554,9 @@ void EscapeSequenceParser::put(c32 code_point) {
 }
 
 void EscapeSequenceParser::unhook() {
+    if (!m_saw_legacy_string_terminator) {
+        m_data.pop_back(); // Remove trailing ESC from (ESC \)
+    }
     m_result.push_back(DCS(di::move(m_intermediate), di::move(m_params), di::move(m_data)));
 }
 
@@ -577,6 +577,7 @@ void EscapeSequenceParser::osc_end() {
 }
 
 void EscapeSequenceParser::apc_start() {
+    m_saw_legacy_string_terminator = false;
     m_on_state_exit = [this] {
         apc_end();
     };
@@ -587,6 +588,9 @@ void EscapeSequenceParser::apc_put(c32 code_point) {
 }
 
 void EscapeSequenceParser::apc_end() {
+    if (!m_saw_legacy_string_terminator) {
+        m_data.pop_back(); // Remove trailing ESC from (ESC \)
+    }
     m_result.push_back(APC(di::move(m_data)));
 }
 
@@ -622,13 +626,20 @@ void EscapeSequenceParser::transition(State state) {
 }
 
 void EscapeSequenceParser::on_input(c32 code_point) {
+    auto _ = di::ScopeExit([&] {
+        m_prev = code_point;
+    });
+
     if (code_point == 0x18 || code_point == 0x1A) {
         execute(code_point);
         transition(State::Ground);
         return;
     }
 
-    if (code_point == 0x1B) {
+    // Because a string terminator can start with an ESC (ESC \), we do not
+    // transition on escape sequence while in a state terminating in a string
+    // terminator (APC, DCS, OSC, SOS, PM, etc).
+    if (code_point == 0x1B && m_next_state < State::DcsEntry) {
         // When parsing input, recnogize ESC ESC as a key press.
         if (m_mode == Mode::Input && m_next_state == State::Escape) {
             execute(code_point);
