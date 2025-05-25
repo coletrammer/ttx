@@ -86,7 +86,7 @@ static void apc() {
 static void input() {
     using namespace ttx;
 
-    constexpr auto input = "\033A\033OA\033\x00\033\033\033[AA\033]\x18\x1a\033\x1a\033"_sv;
+    constexpr auto input = "\033A\033OA\033\x00\033\033\033[AA\x18\x1a\033\x1a\033]"_sv;
 
     auto expected = di::Array {
         ParserResult { ControlCharacter(U'A', true) },
@@ -95,11 +95,10 @@ static void input() {
         ParserResult { ControlCharacter(U'\033', true) },
         ParserResult { CSI(""_s, {}, U'A') },
         ParserResult { PrintableCharacter(U'A') },
-        ParserResult { ControlCharacter(U']', true) },
         ParserResult { ControlCharacter(U'\x18', false) },
         ParserResult { ControlCharacter(U'\x1a', false) },
         ParserResult { ControlCharacter(U'\x1a', true) },
-        ParserResult { ControlCharacter(U'\033', false) },
+        ParserResult { ControlCharacter(U']', true) },
     };
 
     auto parser = EscapeSequenceParser {};

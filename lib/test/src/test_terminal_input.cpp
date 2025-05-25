@@ -1,4 +1,5 @@
 #include "di/test/prelude.h"
+#include "ttx/features.h"
 #include "ttx/focus_event.h"
 #include "ttx/key_event.h"
 #include "ttx/modifiers.h"
@@ -27,7 +28,7 @@ static void keyboard() {
     };
 
     auto parser = TerminalInputParser {};
-    auto actual = parser.parse(input);
+    auto actual = parser.parse(input, Feature::None);
 
     for (auto const& [ex, ac] : di::zip(expected, actual)) {
         ASSERT_EQ(ex, ac);
@@ -45,7 +46,7 @@ static void mouse() {
     };
 
     auto parser = TerminalInputParser {};
-    auto actual = parser.parse(input);
+    auto actual = parser.parse(input, Feature::None);
 
     for (auto const& [ex, ac] : di::zip(expected, actual)) {
         ASSERT_EQ(ex, ac);
@@ -64,7 +65,7 @@ static void focus() {
     };
 
     auto parser = TerminalInputParser {};
-    auto actual = parser.parse(input);
+    auto actual = parser.parse(input, Feature::None);
 
     for (auto const& [ex, ac] : di::zip(expected, actual)) {
         ASSERT_EQ(ex, ac);
@@ -86,7 +87,7 @@ static void paste() {
     };
 
     auto parser = TerminalInputParser {};
-    auto actual = parser.parse(input);
+    auto actual = parser.parse(input, Feature::None);
 
     for (auto const& [ex, ac] : di::zip(expected, actual)) {
         ASSERT_EQ(ex, ac);

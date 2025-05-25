@@ -15,6 +15,7 @@
 #include "ttx/paste_event.h"
 #include "ttx/renderer.h"
 #include "ttx/terminal.h"
+#include "ttx/terminal/escapes/osc_52.h"
 #include "ttx/terminal/multi_cell_info.h"
 #include "ttx/terminal/screen.h"
 #include "ttx/utf8_stream_decoder.h"
@@ -96,9 +97,9 @@ auto Pane::create_from_replay(u64 id, di::Optional<di::Path> cwd, di::PathView r
 
         for (auto&& event : events) {
             di::visit(di::overload(
-                          [&](SetClipboard&& ev) {
+                          [&](terminal::OSC52&& osc52) {
                               if (pane->m_hooks.did_selection) {
-                                  pane->m_hooks.did_selection(ev.data.span(), false);
+                                  pane->m_hooks.did_selection(di::move(osc52), false);
                               }
                           },
                           [&](APC&& apc) {
@@ -215,9 +216,9 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
 
                 for (auto&& event : events) {
                     di::visit(di::overload(
-                                  [&](SetClipboard&& ev) {
+                                  [&](terminal::OSC52&& osc52) {
                                       if (pane.m_hooks.did_selection) {
-                                          pane.m_hooks.did_selection(ev.data.span(), false);
+                                          pane.m_hooks.did_selection(di::move(osc52), false);
                                       }
                                   },
                                   [&](APC&& apc) {
@@ -477,7 +478,11 @@ auto Pane::event(MouseEvent const& event) -> bool {
             return result;
         });
         if (!text.empty() && m_hooks.did_selection) {
-            m_hooks.did_selection(di::as_bytes(text.span()), true);
+            // Simulate a selection as an OSC 52 request.
+            auto osc52 = terminal::OSC52 {};
+            (void) osc52.selections.push_back(terminal::SelectionType::Clipboard);
+            osc52.data = di::Base64<>(di::as_bytes(text.span()) | di::to<di::Vector>());
+            m_hooks.did_selection(di::move(osc52), true);
         }
         return true;
     }
@@ -599,6 +604,15 @@ auto Pane::save_state(di::PathView path) -> di::Result<> {
         return terminal.state_as_escape_sequences();
     });
     return file.write_exactly(di::as_bytes(contents.span()));
+}
+
+void Pane::send_clipboard(terminal::SelectionType selection_type, di::Vector<byte> data) {
+    auto osc52 = terminal::OSC52 {};
+    (void) osc52.selections.push_back(selection_type);
+    osc52.data = di::Base64<>(di::move(data));
+
+    auto string = osc52.serialize();
+    (void) m_pty_controller.write_exactly(di::as_bytes(string.span()));
 }
 
 void Pane::stop_capture() {

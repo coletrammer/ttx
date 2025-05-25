@@ -4,6 +4,7 @@
 #include "di/serialization/base64.h"
 #include "dius/print.h"
 #include "render.h"
+#include "ttx/clipboard.h"
 #include "ttx/direction.h"
 #include "ttx/focus_event.h"
 #include "ttx/layout.h"
@@ -147,6 +148,14 @@ auto Tab::replace_pane(Pane& pane, CreatePaneArgs args, RenderThread& render_thr
     return {};
 }
 
+auto Tab::pane_by_id(u64 pane_id) -> di::Optional<Pane&> {
+    auto pane = di::find(m_panes_ordered_by_recency, pane_id, &Pane::id);
+    if (pane == m_panes_ordered_by_recency.end()) {
+        return {};
+    }
+    return **pane;
+}
+
 void Tab::navigate(NavigateDirection direction) {
     auto layout_entry = m_layout_tree->find_pane(m_active);
     if (!layout_entry) {
@@ -276,14 +285,20 @@ auto Tab::make_pane(u64 pane_id, CreatePaneArgs args, Size const& size, RenderTh
         };
     }
     if (!args.hooks.did_selection) {
-        args.hooks.did_selection = [&render_thread](di::Span<byte const> data, bool manual) {
-            auto base64 = di::Base64View(data);
-            auto string = *di::present("\033]52;;{}\033\\"_sv, base64);
-            render_thread.push_event(WriteString(di::move(string)));
-            if (manual) {
-                render_thread.status_message("Copied text"_s);
-            }
-        };
+        args.hooks.did_selection = di::make_function<void(terminal::OSC52, bool)>(
+            [this, pane_id, &render_thread](terminal::OSC52 osc52, bool manual) {
+                render_thread.push_event(ClipboardRequest {
+                    .osc52 = di::move(osc52),
+                    .identifier =
+                        Clipboard::Identifier {
+                            .session_id = m_session->id(),
+                            .tab_id = id(),
+                            .pane_id = pane_id,
+                        },
+                    .manual = manual,
+                    .reply = false,
+                });
+            });
     }
     if (!args.hooks.apc_passthrough) {
         args.hooks.apc_passthrough = [&render_thread](di::StringView apc_data) {

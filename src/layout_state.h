@@ -17,6 +17,7 @@ public:
     auto set_active_tab(Session& session, Tab* tab) -> bool;
     void remove_tab(Session& session, Tab& tab);
     auto remove_pane(Session& session, Tab& tab, Pane* pane) -> di::Box<Pane>;
+    auto pane_by_id(u64 session_id, u64 tab_id, u64 pane_id) -> di::Optional<Pane&>;
 
     auto add_pane(Session& session, Tab& tab, CreatePaneArgs args, Direction direction, RenderThread& render_thread)
         -> di::Result<>;

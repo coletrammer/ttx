@@ -15,6 +15,7 @@
 #include "ttx/params.h"
 #include "ttx/size.h"
 #include "ttx/terminal/cursor.h"
+#include "ttx/terminal/escapes/osc_52.h"
 #include "ttx/terminal/escapes/osc_66.h"
 #include "ttx/terminal/escapes/osc_8.h"
 #include "ttx/terminal/multi_cell_info.h"
@@ -36,8 +37,10 @@ auto Renderer::setup(dius::SyncFile& output, Feature features) -> di::Result<> {
     m_cleanup.push_back("\033[?7h"_s);
 
     // Setup - kitty key mode.
-    di::writer_print<di::String::Encoding>(buffer, "\033[>31u"_sv);
-    m_cleanup.push_back("\033[<u"_s);
+    if (!!(features & Feature::KittyKeyProtocol)) {
+        di::writer_print<di::String::Encoding>(buffer, "\033[>31u"_sv);
+        m_cleanup.push_back("\033[<u"_s);
+    }
 
     // Setup - capture mouse events with shift held
     // Unfortunately, capturing shift mouse events prevents us from being able
@@ -59,8 +62,21 @@ auto Renderer::setup(dius::SyncFile& output, Feature features) -> di::Result<> {
     m_cleanup.push_back("\033[?2004l"_s);
 
     // Setup - grapheme cluster mode
-    di::writer_print<di::String::Encoding>(buffer, "\033[?2027h"_sv);
-    m_cleanup.push_back("\033[?2027l"_s);
+    if (!!(features & Feature::GraphemeClusteringMode)) {
+        di::writer_print<di::String::Encoding>(buffer, "\033[?2027h"_sv);
+        m_cleanup.push_back("\033[?2027l"_s);
+    }
+
+    // Setup - requests clipboard to initialize state and determine if the host terminal
+    // supports OSC 52. This is gated by the feature flag.
+    if (!!(features & Feature::Clipboard)) {
+        auto osc52 = terminal::OSC52 {};
+        osc52.query = true;
+        (void) osc52.selections.push_back(terminal::SelectionType::Clipboard);
+        di::writer_print<di::String::Encoding>(buffer, "{}"_sv, osc52.serialize());
+        osc52.selections[0] = terminal::SelectionType::Selection;
+        di::writer_print<di::String::Encoding>(buffer, "{}"_sv, osc52.serialize());
+    }
 
     // Setup - ensure the current and desired screens are fully cleared.
     m_current_screen.clear();

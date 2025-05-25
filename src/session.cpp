@@ -75,6 +75,14 @@ auto Session::remove_pane(Tab& tab, Pane* pane) -> di::Box<Pane> {
     return result;
 }
 
+auto Session::pane_by_id(u64 tab_id, u64 pane_id) -> di::Optional<Pane&> {
+    auto* tab = di::find(m_tabs, tab_id, &Tab::id);
+    if (tab == m_tabs.end()) {
+        return {};
+    }
+    return (*tab)->pane_by_id(pane_id);
+}
+
 auto Session::add_pane(Tab& tab, u64 pane_id, CreatePaneArgs args, Direction direction, RenderThread& render_thread)
     -> di::Result<> {
     return tab.add_pane(pane_id, m_size, di::move(args), direction, render_thread);

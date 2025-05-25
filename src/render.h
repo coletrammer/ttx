@@ -5,9 +5,11 @@
 #include "input_mode.h"
 #include "layout_state.h"
 #include "tab.h"
+#include "ttx/clipboard.h"
 #include "ttx/features.h"
 #include "ttx/pane.h"
 #include "ttx/renderer.h"
+#include "ttx/terminal/escapes/osc_52.h"
 
 namespace ttx {
 struct PaneExited {
@@ -33,7 +35,15 @@ struct StatusMessage {
     dius::SteadyClock::Duration duration {};
 };
 
-using RenderEvent = di::Variant<Size, PaneExited, InputStatus, WriteString, StatusMessage, DoRender, MouseEvent, Exit>;
+struct ClipboardRequest {
+    terminal::OSC52 osc52;
+    di::Optional<Clipboard::Identifier> identifier;
+    bool manual { false };
+    bool reply { false };
+};
+
+using RenderEvent = di::Variant<Size, PaneExited, InputStatus, WriteString, StatusMessage, DoRender, MouseEvent,
+                                ClipboardRequest, Exit>;
 
 class RenderThread {
 public:
@@ -73,6 +83,7 @@ private:
     dius::ConditionVariable m_condition;
     di::Synchronized<LayoutState>& m_layout_state;
     di::Function<void()> m_did_exit;
+    Clipboard m_clipboard;
     Feature m_features { Feature::None };
     dius::Thread m_thread;
 };

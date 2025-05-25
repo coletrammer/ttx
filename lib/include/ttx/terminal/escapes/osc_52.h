@@ -16,6 +16,8 @@ enum class SelectionType : u8 {
     _5,
     _6,
     _7,
+
+    Max,
 };
 
 constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<SelectionType>) {
@@ -47,7 +49,7 @@ constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<SelectionType>) 
 /// OSC 52 is specified
 /// [here](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h4-Operating-System-Commands:OSC-Ps;Pt-ST:Ps-=-5-2.101B).
 struct OSC52 {
-    di::StaticVector<SelectionType, di::Constexpr<10zu>> selections {};
+    di::StaticVector<SelectionType, di::Constexpr<usize(SelectionType::Max)>> selections {};
     di::Base64<> data;
     bool query { false };
 

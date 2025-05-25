@@ -19,6 +19,7 @@
 #include "ttx/renderer.h"
 #include "ttx/size.h"
 #include "ttx/terminal.h"
+#include "ttx/terminal/escapes/osc_52.h"
 #include "ttx/terminal/escapes/osc_7.h"
 
 namespace ttx {
@@ -31,8 +32,8 @@ struct PaneHooks {
     /// @brief controlled callback when the terminal buffer has updated.
     di::Function<void(Pane&)> did_update;
 
-    /// @brief Application controlled callback when text is selected.
-    di::Function<void(di::Span<byte const>, bool)> did_selection;
+    /// @brief Application controlled callback when a clipboard set/request is invoked.
+    di::Function<void(terminal::OSC52, bool)> did_selection;
 
     /// @brief Application controlled callback when APC command is set.
     di::Function<void(di::StringView)> apc_passthrough;
@@ -111,6 +112,7 @@ public:
     void resize(Size const& size);
     void scroll(Direction direction, i32 amount_in_cells);
     auto save_state(di::PathView path) -> di::Result<>;
+    void send_clipboard(terminal::SelectionType selection_type, di::Vector<byte> data);
     void stop_capture();
     void soft_reset();
     void exit();

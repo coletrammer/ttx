@@ -18,6 +18,7 @@
 #include "ttx/terminal/escapes/device_attributes.h"
 #include "ttx/terminal/escapes/device_status.h"
 #include "ttx/terminal/escapes/mode.h"
+#include "ttx/terminal/escapes/osc_52.h"
 #include "ttx/terminal/escapes/osc_66.h"
 #include "ttx/terminal/escapes/osc_8.h"
 #include "ttx/terminal/screen.h"
@@ -533,25 +534,12 @@ void Terminal::osc_8(di::StringView data) {
 
 // OSC 52 - https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Operating-System-Commands
 void Terminal::osc_52(di::StringView data) {
-    // Data is of the form: Pc ; Pd
-    auto pc_end = data.find(';');
-    if (!pc_end) {
+    auto osc52 = terminal::OSC52::parse(data);
+    if (!osc52) {
         return;
     }
 
-    // For now, just ignore which selection is asked for (the Pc field).
-    auto pd = data.substr(pc_end.end());
-    if (pd == "?"_sv) {
-        // TODO: respond with the actual clipboard contents.
-        return;
-    }
-
-    auto clipboard_data = di::parse<di::Base64<>>(pd);
-    if (!clipboard_data) {
-        return;
-    }
-
-    m_outgoing_events.emplace_back(SetClipboard(di::move(clipboard_data).value().container()));
+    m_outgoing_events.emplace_back(di::move(osc52).value());
 }
 
 // OSC 66 - https://github.com/kovidgoyal/kitty/blob/master/docs/text-sizing-protocol.rst

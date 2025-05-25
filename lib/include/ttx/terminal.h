@@ -11,6 +11,7 @@
 #include "ttx/params.h"
 #include "ttx/paste_event_io.h"
 #include "ttx/size.h"
+#include "ttx/terminal/escapes/osc_52.h"
 #include "ttx/terminal/escapes/osc_7.h"
 #include "ttx/terminal/screen.h"
 
@@ -19,7 +20,7 @@ struct SetClipboard {
     di::Vector<byte> data;
 };
 
-using TerminalEvent = di::Variant<SetClipboard, APC, terminal::OSC7>;
+using TerminalEvent = di::Variant<APC, terminal::OSC7, terminal::OSC52>;
 
 class Terminal {
     struct ScreenState {

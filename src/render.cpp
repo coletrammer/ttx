@@ -1,5 +1,6 @@
 #include "render.h"
 
+#include "dius/print.h"
 #include "dius/system/process.h"
 #include "input_mode.h"
 #include "layout_state.h"
@@ -24,7 +25,7 @@ auto RenderThread::create_mock(di::Synchronized<LayoutState>& layout_state) -> R
 }
 
 RenderThread::RenderThread(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit, Feature features)
-    : m_layout_state(layout_state), m_did_exit(di::move(did_exit)), m_features(features) {}
+    : m_layout_state(layout_state), m_did_exit(di::move(did_exit)), m_clipboard(features), m_features(features) {}
 
 RenderThread::~RenderThread() {
     (void) m_thread.join();
@@ -37,6 +38,7 @@ void RenderThread::push_event(RenderEvent event) {
     });
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void RenderThread::render_thread() {
     auto _ = di::ScopeExit([&] {
         if (m_did_exit) {
@@ -120,12 +122,57 @@ void RenderThread::render_thread() {
                         });
                     }
                 }
+            } else if (auto ev = di::get_if<ClipboardRequest>(event)) {
+                // We only need to check the first selection, because the parser ensures there is
+                // at least 1 selection and maps selections into ones we support.
+                ASSERT(!ev->osc52.selections.empty());
+                auto selection_type = ev->osc52.selections[0];
+
+                if (ev->reply) {
+                    if (!ev->osc52.query) {
+                        m_clipboard.got_clipboard_response(selection_type, di::move(ev->osc52.data).container());
+                    }
+                } else {
+                    ASSERT(ev->identifier.has_value());
+                    if (ev->osc52.query) {
+                        auto string = ev->osc52.serialize();
+                        if (m_clipboard.request_clipboard(selection_type, ev->identifier.value())) {
+                            // Forward the query.
+                            (void) dius::stdin.write_exactly(di::as_bytes(string.span()));
+                        }
+                    } else {
+                        auto string = ev->osc52.serialize();
+                        if (m_clipboard.set_clipboard(selection_type, di::move(ev->osc52.data).container())) {
+                            // Forward setting the clipboard.
+                            (void) dius::stdin.write_exactly(di::as_bytes(string.span()));
+                        }
+                        if (ev->manual) {
+                            m_pending_status_message = {
+                                "Copied text"_s,
+                                dius::SteadyClock::now() + di::chrono::Seconds(1),
+                            };
+                        }
+                    }
+                }
             } else if (auto ev = di::get_if<DoRender>(event)) {
                 // Do nothing. This was just to wake us up.
             } else if (auto ev = di::get_if<Exit>(event)) {
                 // Exit.
                 return;
             }
+        }
+
+        // Handle any filled clipboard requests.
+        auto clipboard_respones = m_clipboard.get_replies();
+        if (!clipboard_respones.empty()) {
+            m_layout_state.with_lock([&](LayoutState& state) {
+                for (auto& response : clipboard_respones) {
+                    if (auto pane = state.pane_by_id(response.identifier.session_id, response.identifier.tab_id,
+                                                     response.identifier.pane_id)) {
+                        pane.value().send_clipboard(response.type, di::move(response.data));
+                    }
+                }
+            });
         }
 
         // Do terminal setup if requested.

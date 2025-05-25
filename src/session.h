@@ -21,6 +21,7 @@ public:
     auto set_active_tab(Tab* tab) -> bool;
     void remove_tab(Tab& tab);
     auto remove_pane(Tab& tab, Pane* pane) -> di::Box<Pane>;
+    auto pane_by_id(u64 tab_id, u64 pane_id) -> di::Optional<Pane&>;
 
     auto max_tab_id() const -> u64;
     auto max_pane_id() const -> u64;

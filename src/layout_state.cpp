@@ -133,6 +133,14 @@ auto LayoutState::add_session(CreatePaneArgs args, RenderThread& render_thread) 
     return add_tab(*session, di::move(args), render_thread);
 }
 
+auto LayoutState::pane_by_id(u64 session_id, u64 tab_id, u64 pane_id) -> di::Optional<Pane&> {
+    auto* session = di::find(m_sessions, session_id, &Session::id);
+    if (session == m_sessions.end()) {
+        return {};
+    }
+    return (*session)->pane_by_id(tab_id, pane_id);
+}
+
 auto LayoutState::active_session() const -> di::Optional<Session&> {
     if (!m_active_session) {
         return {};

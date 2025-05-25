@@ -5,6 +5,7 @@
 #include "di/function/container/function.h"
 #include "di/reflect/prelude.h"
 #include "di/vocab/variant/prelude.h"
+#include "ttx/features.h"
 #include "ttx/params.h"
 
 namespace ttx {
@@ -99,7 +100,8 @@ public:
     };
 
     auto parse_application_escape_sequences(di::StringView data) -> di::Span<ParserResult>;
-    auto parse_input_escape_sequences(di::StringView data, bool flush = true) -> di::Span<ParserResult>;
+    auto parse_input_escape_sequences(di::StringView data, Feature features = Feature::None, bool flush = true)
+        -> di::Span<ParserResult>;
 
 private:
 // VT500-Series parser states from https://vt100.net/emu/dec_ansi_parser

@@ -8,6 +8,7 @@
 #include "ttx/terminal/escapes/device_attributes.h"
 #include "ttx/terminal/escapes/device_status.h"
 #include "ttx/terminal/escapes/mode.h"
+#include "ttx/terminal/escapes/osc_52.h"
 #include "ttx/terminal/escapes/osc_66.h"
 #include "ttx/terminal/escapes/terminfo_string.h"
 #include "ttx/terminal_input.h"
@@ -118,6 +119,8 @@ public:
             }
         }
     }
+
+    void handle_event(terminal::OSC52 const&) {}
 
 private:
     Feature m_result = Feature::None;
@@ -232,7 +235,7 @@ auto detect_features(dius::SyncFile& terminal) -> di::Result<Feature> {
         auto nread = TRY(terminal.read_some(buffer.span()));
 
         auto utf8_string = utf8_decoder.decode(buffer | di::take(nread));
-        auto events = parser.parse(utf8_string);
+        auto events = parser.parse(utf8_string, Feature::None);
         for (auto const& event : events) {
             di::visit(
                 [&](auto const& ev) {

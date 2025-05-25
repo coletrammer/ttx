@@ -2,6 +2,7 @@
 
 #include "di/parser/prelude.h"
 #include "di/util/scope_exit.h"
+#include "ttx/features.h"
 
 #define STATE(state) void EscapeSequenceParser::state##_state([[maybe_unused]] c32 code_point)
 
@@ -91,6 +92,11 @@ STATE(escape) {
         return;
     }
 
+    if (code_point == 0x5D) {
+        transition(State::OscString);
+        return;
+    }
+
     // For the purposes of parsing input, any other code point should be treated
     // as if we were in the ground state. This allows us to recognize alt+key when
     // using the legacy mode.
@@ -118,11 +124,6 @@ STATE(escape) {
 
     if (code_point == 0x58 || code_point == 0x5E) {
         transition(State::SosPmString);
-        return;
-    }
-
-    if (code_point == 0x5D) {
-        transition(State::OscString);
         return;
     }
 
@@ -658,7 +659,8 @@ auto EscapeSequenceParser::parse_application_escape_sequences(di::StringView dat
     return m_result.span();
 }
 
-auto EscapeSequenceParser::parse_input_escape_sequences(di::StringView data, bool flush) -> di::Span<ParserResult> {
+auto EscapeSequenceParser::parse_input_escape_sequences(di::StringView data, Feature features, bool flush)
+    -> di::Span<ParserResult> {
     m_result.clear();
 
     m_mode = Mode::Input;
@@ -666,25 +668,37 @@ auto EscapeSequenceParser::parse_input_escape_sequences(di::StringView data, boo
         on_input(code_point);
     }
 
-    // Special case: if we get a lone "escape" byte followed by no text,
-    // we assume the user hit the escape key, and not that the terminal
-    // partially transmitted an escape sequence. This really should be
-    // using a timeout mechanism, and be completely disabled if the terminal
-    // supports the kitty key protocol.
-    if (flush && m_next_state == State::Escape) {
-        transition(State::Ground);
-        m_result.push_back(ControlCharacter('\x1b'));
-    }
+    // In kitty key mode, we don't need to worry about many special cases.
+    if (!(features & Feature::KittyKeyProtocol)) {
+        // Special case: if we get a lone "escape" byte followed by no text,
+        // we assume the user hit the escape key, and not that the terminal
+        // partially transmitted an escape sequence. This really should be
+        // using a timeout mechanism, and be completely disabled if the terminal
+        // supports the kitty key protocol.
+        if (flush && m_next_state == State::Escape) {
+            transition(State::Ground);
+            m_result.push_back(ControlCharacter('\x1b'));
+        }
 
-    // Special case: if we get the start of a DCS string (ESC P), and
-    // we don't finish parsing the DCS query, treat the input as alt+p.
-    // This is needed so that the user doesn't break the input parser
-    // by pressint alt+shift+p.
-    if (flush && (m_next_state == State::DcsEntry || m_next_state == State::DcsIgnore ||
-                  m_next_state == State::DcsIntermediate || m_next_state == State::DcsPassthrough ||
-                  m_next_state == State::DcsParam)) {
-        transition(State::Ground);
-        m_result.push_back(ControlCharacter('P', true));
+        // Special case: if we get the start of a DCS string (ESC P), and
+        // we don't finish parsing the DCS query, treat the input as alt+P.
+        // This is needed so that the user doesn't break the input parser
+        // by pressint alt+shift+p.
+        if (flush && (m_next_state == State::DcsEntry || m_next_state == State::DcsIgnore ||
+                      m_next_state == State::DcsIntermediate || m_next_state == State::DcsPassthrough ||
+                      m_next_state == State::DcsParam)) {
+            transition(State::Ground);
+            m_result.push_back(ControlCharacter('P', true));
+        }
+
+        // Special case: if we get the start of a OSC string (ESC ]), and
+        // we don't finish parsing the OSC, treat the input as alt+].
+        // This is needed so that the user doesn't break the input parser
+        // by pressint alt+].
+        if (flush && (m_next_state == State::OscString)) {
+            transition(State::Ground);
+            m_result.push_back(ControlCharacter(']', true));
+        }
     }
 
     return m_result.span();

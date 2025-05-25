@@ -7,6 +7,7 @@
 #include "render.h"
 #include "save_layout.h"
 #include "tab.h"
+#include "ttx/features.h"
 #include "ttx/focus_event.h"
 #include "ttx/key_event.h"
 #include "ttx/layout.h"
@@ -15,14 +16,15 @@
 #include "ttx/mouse_event.h"
 #include "ttx/pane.h"
 #include "ttx/paste_event.h"
+#include "ttx/terminal/escapes/osc_52.h"
 #include "ttx/terminal_input.h"
 #include "ttx/utf8_stream_decoder.h"
 
 namespace ttx {
 auto InputThread::create(CreatePaneArgs create_pane_args, di::Vector<KeyBind> key_binds,
-                         di::Synchronized<LayoutState>& layout_state, RenderThread& render_thread,
+                         di::Synchronized<LayoutState>& layout_state, Feature features, RenderThread& render_thread,
                          SaveLayoutThread& save_layout_thread) -> di::Result<di::Box<InputThread>> {
-    auto result = di::make_box<InputThread>(di::move(create_pane_args), di::move(key_binds), layout_state,
+    auto result = di::make_box<InputThread>(di::move(create_pane_args), di::move(key_binds), layout_state, features,
                                             render_thread, save_layout_thread);
     result->m_thread = TRY(dius::Thread::create([&self = *result.get()] {
         self.input_thread();
@@ -31,13 +33,14 @@ auto InputThread::create(CreatePaneArgs create_pane_args, di::Vector<KeyBind> ke
 }
 
 InputThread::InputThread(CreatePaneArgs create_pane_args, di::Vector<KeyBind> key_binds,
-                         di::Synchronized<LayoutState>& layout_state, RenderThread& render_thread,
+                         di::Synchronized<LayoutState>& layout_state, Feature features, RenderThread& render_thread,
                          SaveLayoutThread& save_layout_thread)
     : m_key_binds(di::move(key_binds))
     , m_create_pane_args(di::move(create_pane_args))
     , m_layout_state(layout_state)
     , m_render_thread(render_thread)
-    , m_save_layout_thread(save_layout_thread) {}
+    , m_save_layout_thread(save_layout_thread)
+    , m_features(features) {}
 
 InputThread::~InputThread() {
     request_exit();
@@ -79,22 +82,22 @@ void InputThread::input_thread() {
         }
 
         auto utf8_string = utf8_decoder.decode(buffer | di::take(*nread));
-        auto events = parser.parse(utf8_string);
-        for (auto const& event : events) {
+        auto events = parser.parse(utf8_string, m_features);
+        for (auto& event : events) {
             if (m_done.load(di::MemoryOrder::Acquire)) {
                 return;
             }
 
             di::visit(
-                [&](auto const& ev) {
-                    this->handle_event(ev);
+                [&](auto& ev) {
+                    this->handle_event(di::move(ev));
                 },
                 event);
         }
     }
 }
 
-void InputThread::handle_event(KeyEvent const& event) {
+void InputThread::handle_event(KeyEvent&& event) {
     for (auto const& bind : m_key_binds) {
         // Ignore key up events and modifier keys when not in insert mode.
         if (m_mode != InputMode::Insert && (event.type() == KeyEventType::Release ||
@@ -120,7 +123,7 @@ void InputThread::handle_event(KeyEvent const& event) {
     }
 }
 
-void InputThread::handle_event(MouseEvent const& event) {
+void InputThread::handle_event(MouseEvent&& event) {
     m_layout_state.with_lock([&](LayoutState& state) {
         // Check if the event intersects with the status bar.
         if (!state.hide_status_bar() && event.position().in_cells().y() == 0) {
@@ -217,7 +220,7 @@ void InputThread::handle_event(MouseEvent const& event) {
     });
 }
 
-void InputThread::handle_event(FocusEvent const& event) {
+void InputThread::handle_event(FocusEvent&& event) {
     m_layout_state.with_lock([&](LayoutState& state) {
         if (auto pane = state.active_pane()) {
             pane->event(event);
@@ -225,11 +228,20 @@ void InputThread::handle_event(FocusEvent const& event) {
     });
 }
 
-void InputThread::handle_event(PasteEvent const& event) {
+void InputThread::handle_event(PasteEvent&& event) {
     m_layout_state.with_lock([&](LayoutState& state) {
         if (auto pane = state.active_pane()) {
             pane->event(event);
         }
+    });
+}
+
+void InputThread::handle_event(terminal::OSC52&& event) {
+    m_render_thread.push_event(ClipboardRequest {
+        .osc52 = di::move(event),
+        .identifier = {},
+        .manual = false,
+        .reply = true,
     });
 }
 

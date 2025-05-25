@@ -294,8 +294,8 @@ static auto main(Args& args) -> di::Result<void> {
         if (args.headless) {
             return nullptr;
         }
-        return InputThread::create(base_create_pane_args.clone(), di::move(key_binds), layout_state, *render_thread,
-                                   *layout_save_thread);
+        return InputThread::create(base_create_pane_args.clone(), di::move(key_binds), layout_state, features,
+                                   *render_thread, *layout_save_thread);
     }());
     auto _ = di::ScopeExit([&] {
         if (input_thread) {

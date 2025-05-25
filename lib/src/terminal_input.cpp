@@ -3,6 +3,7 @@
 #include "di/container/algorithm/for_each.h"
 #include "di/container/iterator/distance.h"
 #include "di/container/view/slide.h"
+#include "ttx/features.h"
 #include "ttx/focus_event_io.h"
 #include "ttx/key_event.h"
 #include "ttx/key_event_io.h"
@@ -13,10 +14,11 @@
 #include "ttx/terminal/escapes/device_attributes.h"
 #include "ttx/terminal/escapes/device_status.h"
 #include "ttx/terminal/escapes/mode.h"
+#include "ttx/terminal/escapes/osc_52.h"
 #include "ttx/terminal/escapes/terminfo_string.h"
 
 namespace ttx {
-auto TerminalInputParser::parse(di::StringView input) -> di::Vector<Event> {
+auto TerminalInputParser::parse(di::StringView input, Feature features) -> di::Vector<Event> {
     // Go 1 character at a time, to ensure we can react to bracketed paste mode.
     for (auto ch : input | di::slide(1)) {
         if (m_in_bracketed_paste) {
@@ -32,7 +34,7 @@ auto TerminalInputParser::parse(di::StringView input) -> di::Vector<Event> {
         }
 
         auto flush = ch.end() == input.end();
-        auto event = m_parser.parse_input_escape_sequences(ch, flush);
+        auto event = m_parser.parse_input_escape_sequences(ch, features, flush);
         di::for_each(event, [&](auto const& ev) {
             di::visit(
                 [&](auto const& e) {
@@ -57,7 +59,11 @@ void TerminalInputParser::handle(DCS const& dcs) {
     }
 }
 
-void TerminalInputParser::handle(OSC const&) {}
+void TerminalInputParser::handle(OSC const& osc) {
+    if (auto osc52 = terminal::OSC52::parse(osc.data)) {
+        m_events.emplace_back(di::move(osc52).value());
+    }
+}
 
 void TerminalInputParser::handle(APC const&) {}
 
