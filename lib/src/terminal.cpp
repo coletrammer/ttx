@@ -1247,8 +1247,12 @@ void Terminal::set_use_alternate_screen_buffer(bool b) {
     if (b) {
         m_alternate_screen = di::make_box<ScreenState>(size(), terminal::Screen::ScrollBackEnabled::No);
     } else {
+        auto new_size = size();
+
         ASSERT(m_alternate_screen);
         m_alternate_screen = {};
+
+        active_screen().screen.resize(new_size);
     }
     invalidate_all();
 }
