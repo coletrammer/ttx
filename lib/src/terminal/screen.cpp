@@ -1354,10 +1354,11 @@ void Screen::begin_selection(SelectionPoint const& point, BeginSelectionMode mod
             // as part of a word. This algorithm should work well enough
             // while still being simple to implement.
             auto text_per_cell = di::Vector<di::Tuple<di::StringView, bool>> {};
-            for (auto row : iterate_row(adjusted_point.row)) {
+            for (auto row : row_group.iterate_row(row_index)) {
                 auto [_, cell, text, _, _, _] = row;
                 text_per_cell.push_back({ text, cell.is_nonprimary_in_multi_cell() });
             }
+            ASSERT_EQ(text_per_cell.size(), row.cells.size());
             auto start = adjusted_point.col;
             auto end = adjusted_point.col;
             while (start > 0) {
@@ -1369,7 +1370,7 @@ void Screen::begin_selection(SelectionPoint const& point, BeginSelectionMode mod
                 }
                 start--;
             }
-            while (end < max_col_inclusive()) {
+            while (end < row.cells.size() - 1) {
                 auto [text, is_nonprimary_in_multi_cell] = text_per_cell[end + 1];
                 if (!is_nonprimary_in_multi_cell &&
                     (text.empty() || dius::unicode::general_category(*text.front()) ==
