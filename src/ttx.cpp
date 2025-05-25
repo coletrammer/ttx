@@ -25,6 +25,7 @@ struct Args {
     di::Optional<di::TransparentStringView> layout_restore_name;
     di::Optional<di::TransparentStringView> print_terminfo_mode;
     di::Optional<di::TransparentStringView> term;
+    ClipboardMode clipboard_mode { ClipboardMode::System };
     bool replay { false };
     bool headless { false };
     bool print_features { false };
@@ -45,6 +46,7 @@ struct Args {
             .option<&Args::replay>('r', "replay-path"_tsv,
                                    "Replay capture output (file paths are passed via positional args)"_sv)
             .option<&Args::term>('t', "term"_tsv, "Set TERM environment variable (default xterm-ttx)"_sv)
+            .option<&Args::clipboard_mode>({}, "clipboard"_tsv, "Set the clipboard mode"_sv)
             .option<&Args::print_terminfo_mode>({}, "terminfo"_tsv,
                                                 "Print terminfo (mode can be one of: [terminfo, verbose])"_sv)
             .option<&Args::force_local_terminfo>(
@@ -284,7 +286,7 @@ static auto main(Args& args) -> di::Result<void> {
     }
 
     // Setup - render thread.
-    auto render_thread = TRY(RenderThread::create(layout_state, set_done, features));
+    auto render_thread = TRY(RenderThread::create(layout_state, set_done, args.clipboard_mode, features));
     auto _ = di::ScopeExit([&] {
         render_thread->request_exit();
     });

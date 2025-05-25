@@ -4,6 +4,7 @@
 #include "dius/system/process.h"
 #include "input_mode.h"
 #include "layout_state.h"
+#include "ttx/clipboard.h"
 #include "ttx/graphics_rendition.h"
 #include "ttx/layout.h"
 #include "ttx/mouse.h"
@@ -11,9 +12,9 @@
 #include "ttx/renderer.h"
 
 namespace ttx {
-auto RenderThread::create(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit, Feature features)
-    -> di::Result<di::Box<RenderThread>> {
-    auto result = di::make_box<RenderThread>(layout_state, di::move(did_exit), features);
+auto RenderThread::create(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit,
+                          ClipboardMode clipboard_mode, Feature features) -> di::Result<di::Box<RenderThread>> {
+    auto result = di::make_box<RenderThread>(layout_state, di::move(did_exit), clipboard_mode, features);
     result->m_thread = TRY(dius::Thread::create([&self = *result.get()] {
         self.render_thread();
     }));
@@ -21,11 +22,15 @@ auto RenderThread::create(di::Synchronized<LayoutState>& layout_state, di::Funct
 }
 
 auto RenderThread::create_mock(di::Synchronized<LayoutState>& layout_state) -> RenderThread {
-    return RenderThread(layout_state, nullptr, Feature::All);
+    return RenderThread(layout_state, nullptr, ClipboardMode::Local, Feature::All);
 }
 
-RenderThread::RenderThread(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit, Feature features)
-    : m_layout_state(layout_state), m_did_exit(di::move(did_exit)), m_clipboard(features), m_features(features) {}
+RenderThread::RenderThread(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit,
+                           ClipboardMode clipboard_mode, Feature features)
+    : m_layout_state(layout_state)
+    , m_did_exit(di::move(did_exit))
+    , m_clipboard(clipboard_mode, features)
+    , m_features(features) {}
 
 RenderThread::~RenderThread() {
     (void) m_thread.join();

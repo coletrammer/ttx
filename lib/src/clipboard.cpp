@@ -4,7 +4,7 @@
 #include "ttx/features.h"
 
 namespace ttx {
-Clipboard::Clipboard(Feature features) : m_features(features) {}
+Clipboard::Clipboard(ClipboardMode mode, Feature features) : m_mode(mode), m_features(features) {}
 
 auto Clipboard::set_clipboard(terminal::SelectionType type, di::Vector<byte> data,
                               dius::SteadyClock::TimePoint reception) -> bool {

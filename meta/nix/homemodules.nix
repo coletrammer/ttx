@@ -45,6 +45,21 @@
               default = null;
               description = ''Set TERM enviornment variable'';
             };
+
+            clipboard = lib.mkOption {
+              type =
+                with lib.types;
+                nullOr (enum [
+                  "System"
+                  "SystemWriteLocalRead"
+                  "SystemWriteNoRead"
+                  "Local"
+                  "LocalWriteNoRead"
+                  "Disabled"
+                ]);
+              default = null;
+              description = ''Set clipboard mode'';
+            };
           };
         };
       };
@@ -61,13 +76,18 @@
               " --term ${config.programs.ttx.settings.term}"
             else
               "";
+          clipboard =
+            if config.programs.ttx.settings.clipboard != null then
+              " --clipboard ${config.programs.ttx.settings.clipboard}"
+            else
+              "";
         in
         lib.mkIf config.programs.ttx.enable {
           home.packages =
             if config.programs.ttx.package == null then [ ] else [ config.programs.ttx.package ];
 
           home.shellAliases = {
-            ttx = "ttx --prefix ${config.programs.ttx.settings.prefix}${autolayout}${term} ${config.programs.ttx.settings.shell}";
+            ttx = "ttx --prefix ${config.programs.ttx.settings.prefix}${autolayout}${term}${clipboard} ${config.programs.ttx.settings.shell}";
           };
         };
     };

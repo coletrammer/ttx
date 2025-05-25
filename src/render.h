@@ -47,11 +47,12 @@ using RenderEvent = di::Variant<Size, PaneExited, InputStatus, WriteString, Stat
 
 class RenderThread {
 public:
-    explicit RenderThread(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit, Feature features);
+    explicit RenderThread(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit,
+                          ClipboardMode clipboard_mode, Feature features);
     ~RenderThread();
 
-    static auto create(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit, Feature features)
-        -> di::Result<di::Box<RenderThread>>;
+    static auto create(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit,
+                       ClipboardMode clipboard_mode, Feature features) -> di::Result<di::Box<RenderThread>>;
     static auto create_mock(di::Synchronized<LayoutState>& layout_state) -> RenderThread;
 
     void push_event(RenderEvent event);
