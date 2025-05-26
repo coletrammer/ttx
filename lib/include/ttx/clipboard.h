@@ -1,5 +1,7 @@
 #pragma once
 
+#include "di/container/queue/priority_queue.h"
+#include "di/function/compare_backwards.h"
 #include "di/reflect/prelude.h"
 #include "dius/steady_clock.h"
 #include "ttx/features.h"
@@ -29,11 +31,6 @@ constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<ClipboardMode>) 
 /// This class supports a number of different simulataneous
 /// selections, each of which can be queried or set.
 class Clipboard {
-    // Each selection type operates independently.
-    struct SelectionState {
-        di::Vector<byte> data;
-    };
-
 public:
     constexpr static auto request_timeout = di::chrono::Seconds(1);
 
@@ -41,6 +38,9 @@ public:
         u64 session_id { 0 };
         u64 tab_id { 0 };
         u64 pane_id { 0 };
+
+        auto operator==(Identifier const&) const -> bool = default;
+        auto operator<=>(Identifier const&) const = default;
     };
 
     struct Reply {
@@ -51,16 +51,47 @@ public:
 
     explicit Clipboard(ClipboardMode mode, Feature features);
 
-    auto set_clipboard(terminal::SelectionType type, di::Vector<byte> data,
-                       dius::SteadyClock::TimePoint reception = dius::SteadyClock::now()) -> bool;
-    auto request_clipboard(terminal::SelectionType type, Identifier const& identifier,
-                           dius::SteadyClock::TimePoint reception = dius::SteadyClock::now()) -> bool;
+    [[nodiscard]] auto set_clipboard(terminal::SelectionType type, di::Vector<byte> data,
+                                     dius::SteadyClock::TimePoint reception = dius::SteadyClock::now()) -> bool;
+    [[nodiscard]] auto request_clipboard(terminal::SelectionType type, Identifier const& identifier,
+                                         dius::SteadyClock::TimePoint reception = dius::SteadyClock::now()) -> bool;
     void got_clipboard_response(terminal::SelectionType type, di::Vector<byte> data,
                                 dius::SteadyClock::TimePoint reception = dius::SteadyClock::now());
-    auto get_replies(dius::SteadyClock::TimePoint reception = dius::SteadyClock::now()) -> di::Vector<Reply>;
+    [[nodiscard]] auto get_replies(dius::SteadyClock::TimePoint reception = dius::SteadyClock::now())
+        -> di::Vector<Reply>;
 
 private:
     void expire(dius::SteadyClock::TimePoint reception);
+
+    enum class ClipboardReadAction {
+        Ignore,
+        ReadLocal,
+        ReadSystem,
+        RequestSystemReadLocal,
+    };
+
+    enum class ClipboardWriteAction {
+        Ignore,
+        WriteLocal,
+        WriteSystem,
+    };
+
+    auto action_for_clipboard_read(terminal::SelectionType type) -> ClipboardReadAction;
+    auto action_for_clipboard_write(terminal::SelectionType type) -> ClipboardWriteAction;
+
+    struct Request {
+        dius::SteadyClock::TimePoint reception;
+        Identifier identifier;
+
+        auto operator==(Request const&) const -> bool = default;
+        auto operator<=>(Request const&) const = default;
+    };
+
+    struct SelectionState {
+        di::Vector<byte> data;
+        di::PriorityQueue<Request, di::Vector<Request>, di::CompareBackwards> requests;
+        bool system_working { false };
+    };
 
     ClipboardMode m_mode { ClipboardMode::System };
     Feature m_features { Feature::None };

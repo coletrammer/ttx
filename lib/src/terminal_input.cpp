@@ -60,8 +60,10 @@ void TerminalInputParser::handle(DCS const& dcs) {
 }
 
 void TerminalInputParser::handle(OSC const& osc) {
-    if (auto osc52 = terminal::OSC52::parse(osc.data)) {
-        m_events.emplace_back(di::move(osc52).value());
+    if (osc.data.starts_with("52;"_sv)) {
+        if (auto osc52 = terminal::OSC52::parse(osc.data.substr(di::next(osc.data.begin(), 3)))) {
+            m_events.emplace_back(di::move(osc52).value());
+        }
     }
 }
 
