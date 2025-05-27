@@ -7,7 +7,7 @@
 namespace ttx::terminal {
 /// @brief Represents text annotated using the text sizing protocol
 ///
-/// This is a protocol invented kitty, specified
+/// This is a protocol invented by kitty, specified
 /// [here](https://github.com/kovidgoyal/kitty/blob/master/docs/text-sizing-protocol.rst).
 struct OSC66 {
     constexpr static auto max_text_size = usize(4096);
