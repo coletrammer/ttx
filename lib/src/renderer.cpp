@@ -155,10 +155,10 @@ static void move_cursor(di::VectorWriter<>& buffer, u32 current_row, di::Optiona
                         u32 desired_col) {
     // Optmizations: we want to move the cursor using the fewest number of bytes.
     // We have the following escapes available to us:
-    //   \n  (C0) : row += 1
+    //   \n  (C0) : row += 1, scroll screen if last row
     //   \r  (C0) : col = 0
     //   CS  (C0) : col -= 1
-    //   RI  (C1) : row -= 1
+    //   RI  (C1) : row -= 1, scroll screen if first row
     //   CUU (CSI): row -= N
     //   CUD (CSI): row += N
     //   CUF (CSI): col += N
@@ -200,9 +200,10 @@ static void move_cursor(di::VectorWriter<>& buffer, u32 current_row, di::Optiona
     if (current_col == desired_col) {
         // Row only: Use \n or RI if possible, otherwise relative movement.
         if (desired_row == current_row + 1) {
-            di::writer_print<di::String::Encoding>(buffer, "\n"_sv);
+            di::writer_print<di::String::Encoding>(buffer, "\033[B"_sv);
         } else if (desired_row + 1 == current_row) {
-            di::writer_print<di::String::Encoding>(buffer, "\033M"_sv);
+            // CUU (no RI, which would )
+            di::writer_print<di::String::Encoding>(buffer, "\033[A"_sv);
         } else if (desired_row < current_row) {
             // CUU
             di::writer_print<di::String::Encoding>(buffer, "\033[{}A"_sv, current_row - desired_row);
@@ -218,9 +219,9 @@ static void move_cursor(di::VectorWriter<>& buffer, u32 current_row, di::Optiona
         if (desired_row == 0) {
             di::writer_print<di::String::Encoding>(buffer, "\033[H"_sv);
         } else if (desired_row == current_row + 1) {
-            di::writer_print<di::String::Encoding>(buffer, "\r\n"_sv);
+            di::writer_print<di::String::Encoding>(buffer, "\r\033[B"_sv);
         } else if (desired_row + 1 == current_row) {
-            di::writer_print<di::String::Encoding>(buffer, "\r\033M"_sv);
+            di::writer_print<di::String::Encoding>(buffer, "\r\033[A"_sv);
         } else if (desired_row < current_row) {
             // CPL
             di::writer_print<di::String::Encoding>(buffer, "\033[{}F"_sv, current_row - desired_row);
@@ -234,12 +235,12 @@ static void move_cursor(di::VectorWriter<>& buffer, u32 current_row, di::Optiona
     // Row movement by 1: adjust the row and then adjust the column
     if (desired_row == current_row + 1) {
         move_cursor(buffer, desired_row, current_col, desired_row, desired_col);
-        di::writer_print<di::String::Encoding>(buffer, "\n"_sv);
+        di::writer_print<di::String::Encoding>(buffer, "\033[B"_sv);
         return;
     }
     if (desired_row + 1 == current_row) {
         move_cursor(buffer, desired_row, current_col, desired_row, desired_col);
-        di::writer_print<di::String::Encoding>(buffer, "\033M"_sv);
+        di::writer_print<di::String::Encoding>(buffer, "\033[A"_sv);
         return;
     }
 
@@ -336,7 +337,7 @@ static auto render_graphics_rendition(GraphicsRendition const& desired, Feature 
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor) -> di::Result<> {
+auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor_in) -> di::Result<> {
     // List of changes which are used to determine what updates to the screen are needed. We
     // render changes in 2 phases to account for specific edge cases around cell sizing. Imagine
     // we have a terminal cell with text "🐈‍⬛". We will think this emoji has width 2, but its
@@ -395,6 +396,18 @@ auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor) -> d
                 }
             }
         }
+    }
+
+    // If the rendered cursor is out of bounds, force hide it. An additionally clamp the coordinates
+    // to be within bounds.
+    auto cursor = cursor_in;
+    if (cursor.cursor_col >= size().cols) {
+        cursor.cursor_col = size().cols - 1;
+        cursor.hidden = true;
+    }
+    if (cursor.cursor_row >= size().rows) {
+        cursor.cursor_row = size().rows - 1;
+        cursor.hidden = true;
     }
 
     // Start sequence: hide the cursor, begin synchronized updaes, and reset graphics/hyperlink state.

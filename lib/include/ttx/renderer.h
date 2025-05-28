@@ -30,7 +30,7 @@ public:
     auto cleanup(dius::SyncFile& output) -> di::Result<>;
 
     void start(Size const& size);
-    auto finish(dius::SyncFile& output, RenderedCursor const& cursor) -> di::Result<>;
+    auto finish(dius::SyncFile& output, RenderedCursor const& cursor_in) -> di::Result<>;
 
     void put_text(di::StringView text, u32 row, u32 col, GraphicsRendition const& rendition = {},
                   di::Optional<terminal::Hyperlink const&> hyperlink = {});
