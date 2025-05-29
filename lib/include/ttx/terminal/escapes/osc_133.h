@@ -41,7 +41,7 @@ constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<PromptKind>) {
 
 /// @brief Represents the marker beginning a shell prompt
 struct BeginPrompt {
-    di::String application_id;                            ///< Application id, used to detect sub-shells
+    di::String application_id {};                         ///< Application id, used to detect sub-shells
     PromptClickMode click_mode { PromptClickMode::None }; ///< Application support for prompt click mode
     PromptKind kind { PromptKind::Initial };              ///< Prompt kind
     bool redraw { true }; ///< Shell redraws the prompt, allows clearing prompt on resize
@@ -81,9 +81,9 @@ struct EndInput {
 ///
 /// The start of a command is either marked by the end of the user input.
 struct EndCommand {
-    di::String application_id; ///< Application id, used to detect sub-shells
-    u32 exit_code { 0 };       ///< Command exit code
-    di::String error;          ///< Command error string (empty means success)
+    di::String application_id {}; ///< Application id, used to detect sub-shells
+    u32 exit_code { 0 };          ///< Command exit code
+    di::String error {};          ///< Command error string (empty means success)
 
     auto operator==(EndCommand const&) const -> bool = default;
 
