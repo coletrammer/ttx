@@ -115,7 +115,7 @@ enum class DecMode {
     AlternateScreenBuffer = 1049,
 
     /// @brief Denote paste events with CSI 200 ~ and CSI 201 ~
-    BrackedPaste = 2004,
+    BracketedPaste = 2004,
 
     /// @brief Synchronize screen render with application
     ///
@@ -175,7 +175,7 @@ constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<DecMode>) {
         di::enumerator<"UTF8Mouse", UTF8Mouse>, di::enumerator<"SGRMouse", SGRMouse>,
         di::enumerator<"AlternateScroll", AlternateScroll>, di::enumerator<"URXVTMouse", URXVTMouse>,
         di::enumerator<"SGRPixelMouse", SGRPixelMouse>, di::enumerator<"AlternateScreenBuffer", AlternateScreenBuffer>,
-        di::enumerator<"BrackedPaste", BrackedPaste>, di::enumerator<"SynchronizedOutput", SynchronizedOutput>,
+        di::enumerator<"BracketedPaste", BracketedPaste>, di::enumerator<"SynchronizedOutput", SynchronizedOutput>,
         di::enumerator<"GraphemeClustering", GraphemeClustering>, di::enumerator<"ThemeDetection", ThemeDetection>,
         di::enumerator<"InBandSizeReports", InBandSizeReports>);
 }
