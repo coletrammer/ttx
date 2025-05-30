@@ -943,6 +943,46 @@ void Terminal::csi_xtwinops(Params const& params) {
             csi_decstbm({});
             break;
         }
+        case 14: {
+            // Send text area pixels.
+            if (params.size() != 1) {
+                break;
+            }
+
+            auto size = this->size();
+            auto size_report = terminal::TextAreaPixelSizeReport { .xpixels = size.xpixels, .ypixels = size.ypixels };
+            auto reply_string = size_report.serialize();
+            (void) m_psuedo_terminal.write_exactly(di::as_bytes(reply_string.span()));
+            break;
+        }
+        case 16: {
+            // Send cell pixels.
+            if (params.size() != 1) {
+                break;
+            }
+
+            auto size = this->size();
+            auto size_report = terminal::CellPixelSizeReport { .xpixels = size.xpixels / size.cols,
+                                                               .ypixels = size.ypixels / size.rows };
+            auto reply_string = size_report.serialize();
+            (void) m_psuedo_terminal.write_exactly(di::as_bytes(reply_string.span()));
+            break;
+        }
+        case 18: {
+            // Send text area size.
+            if (params.size() != 1) {
+                break;
+            }
+
+            auto size = this->size();
+            auto size_report = terminal::TextAreaSizeReport {
+                .cols = size.cols,
+                .rows = size.rows,
+            };
+            auto reply_string = size_report.serialize();
+            (void) m_psuedo_terminal.write_exactly(di::as_bytes(reply_string.span()));
+            break;
+        }
         default:
             break;
     }
