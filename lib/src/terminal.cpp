@@ -21,6 +21,7 @@
 #include "ttx/terminal/escapes/osc_52.h"
 #include "ttx/terminal/escapes/osc_66.h"
 #include "ttx/terminal/escapes/osc_8.h"
+#include "ttx/terminal/escapes/size_report.h"
 #include "ttx/terminal/screen.h"
 
 namespace ttx {
@@ -1024,9 +1025,15 @@ void Terminal::resize(Size const& size) {
     }
     active_screen().screen.resize(size);
 
-    // Send size update to client.
-    // TODO: support in-band resize notifications: https://gist.github.com/rockorager/e695fb2924d36b2bcf1fff4a3704bd83
+    // Send size update to client, via pty and implicit SIGWINCH.
     (void) m_psuedo_terminal.set_tty_window_size(size.as_window_size());
+
+    if (m_in_band_size_reports) {
+        // Send an in-band size report.
+        auto size_report = terminal::InBandSizeReport(size);
+        auto reply_string = size_report.serialize();
+        (void) m_psuedo_terminal.write_exactly(di::as_bytes(reply_string.span()));
+    }
 }
 
 void Terminal::invalidate_all() {
@@ -1241,6 +1248,11 @@ auto Terminal::state_as_escape_sequences() const -> di::String {
         // Shift escape options
         if (m_shift_escape_options != ShiftEscapeOptions::OverrideApplication) {
             di::writer_print<di::String::Encoding>(writer, "\033[>{}s"_sv, i32(m_shift_escape_options));
+        }
+
+        // In band size notifications
+        if (m_in_band_size_reports) {
+            di::writer_print<di::String::Encoding>(writer, "\033[?2048h"_sv);
         }
 
         // Current working directory (OSC 7)
