@@ -8,6 +8,7 @@
 #include "ttx/params.h"
 #include "ttx/paste_event_io.h"
 #include "ttx/terminal.h"
+#include "ttx/terminal/escapes/size_report.h"
 #include "ttx/terminal/screen.h"
 
 namespace ttx {
@@ -395,7 +396,23 @@ template<>
 auto make_mode_handler<DecMode::ThemeDetection>() -> ModeHandler = delete;
 
 template<>
-auto make_mode_handler<DecMode::InBandSizeReports>() -> ModeHandler = delete;
+consteval auto make_mode_handler<DecMode::InBandSizeReports>() -> ModeHandler {
+    return {
+        .query_mode = [](Terminal& terminal) -> ModeSupport {
+            return terminal.m_in_band_size_reports ? ModeSupport::Set : ModeSupport::Unset;
+        },
+        .set_mode =
+            [](Terminal& terminal, bool is_set) {
+                terminal.m_in_band_size_reports = is_set;
+                if (is_set) {
+                    // Send an in-band size report.
+                    auto size_report = InBandSizeReport(terminal.size());
+                    auto reply_string = size_report.serialize();
+                    (void) terminal.m_psuedo_terminal.write_exactly(di::as_bytes(reply_string.span()));
+                }
+            },
+    };
+}
 
 constexpr static auto all_modes_dynamic() -> di::Vector<ModeHandler> {
     constexpr auto possible_dec_modes = di::reflect(di::in_place_type<DecMode>);

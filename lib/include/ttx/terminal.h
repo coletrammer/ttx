@@ -229,6 +229,7 @@ private:
 
     BracketedPasteMode m_bracketed_paste_mode { false };
     di::Optional<terminal::OSC7> m_cwd;
+    bool m_in_band_size_reports { false };
 
     di::Vector<TerminalEvent> m_outgoing_events;
 
