@@ -25,11 +25,8 @@
 #include "ttx/terminal/screen.h"
 
 namespace ttx {
-Terminal::Terminal(u64 id, dius::SyncFile& psuedo_terminal, Size const& size)
-    : m_id(id)
-    , m_primary_screen(size, terminal::Screen::ScrollBackEnabled::Yes)
-    , m_available_size(size)
-    , m_psuedo_terminal(psuedo_terminal) {}
+Terminal::Terminal(u64 id, Size const& size)
+    : m_id(id), m_primary_screen(size, terminal::Screen::ScrollBackEnabled::Yes), m_available_size(size) {}
 
 void Terminal::on_parser_results(di::Span<ParserResult> results) {
     for (auto& result : results) {
@@ -487,8 +484,7 @@ void Terminal::dcs_decrqss(Params const&, di::StringView data) {
         response.response = *di::present("{}m"_sv, sgr_string);
     }
 
-    auto response_string = response.serialize();
-    (void) m_psuedo_terminal.write_exactly(di::as_bytes(response_string.span()));
+    m_outgoing_events.push_back(WritePtyString(response.serialize()));
 }
 
 // Request Terminfo String -
@@ -499,8 +495,7 @@ void Terminal::dcs_xtgettcap(Params const& params, di::StringView data) {
     }
 
     auto result = terminal::lookup_terminfo_string(data);
-    auto response_string = result.serialize();
-    (void) m_psuedo_terminal.write_exactly(di::as_bytes(response_string.span()));
+    m_outgoing_events.push_back(WritePtyString(result.serialize()));
 }
 
 // OSC 7 - Current working directory report
@@ -760,8 +755,8 @@ void Terminal::csi_da1(Params const& params) {
     if (params.get(0, 0) != 0) {
         return;
     }
-    auto response = terminal::PrimaryDeviceAttributes { .attributes = { 1, 0 } }.serialize();
-    (void) m_psuedo_terminal.write_exactly(di::as_bytes(response.span()));
+    auto response = terminal::PrimaryDeviceAttributes { .attributes = { 1, 0 } };
+    m_outgoing_events.push_back(WritePtyString(response.serialize()));
 }
 
 // Secondary Device Attributes - https://vt100.net/docs/vt510-rm/DA2.html
@@ -769,7 +764,7 @@ void Terminal::csi_da2(Params const& params) {
     if (params.get(0, 0) != 0) {
         return;
     }
-    (void) m_psuedo_terminal.write_exactly(di::as_bytes("\033[>0;10;0c"_sv.span()));
+    m_outgoing_events.push_back(WritePtyString("\033[>0;10;0c"_s));
 }
 
 // Tertiary Device Attributes - https://vt100.net/docs/vt510-rm/DA3.html
@@ -777,7 +772,7 @@ void Terminal::csi_da3(Params const& params) {
     if (params.get(0, 0) != 0) {
         return;
     }
-    (void) m_psuedo_terminal.write_exactly(di::as_bytes("\033P!|00000000\033\\"_sv.span()));
+    m_outgoing_events.push_back(WritePtyString("\033P!|00000000\033\\"_s));
 }
 
 // Vertical Line Position Absolute - https://vt100.net/docs/vt510-rm/VPA.html
@@ -833,14 +828,14 @@ void Terminal::csi_dsr(Params const& params) {
     switch (params.get(0, 0)) {
         case 5: {
             // Operating Status - https://vt100.net/docs/vt510-rm/DSR-OS.html
-            auto response = terminal::OperatingStatusReport().serialize();
-            (void) m_psuedo_terminal.write_exactly(di::as_bytes(response.span()));
+            auto response = terminal::OperatingStatusReport();
+            m_outgoing_events.push_back(WritePtyString(response.serialize()));
             break;
         }
         case 6: {
             // Cursor Position Report - https://vt100.net/docs/vt510-rm/DSR-CPR.html
-            auto response = terminal::CursorPositionReport(cursor_row(), cursor_col()).serialize();
-            (void) m_psuedo_terminal.write_exactly(di::as_bytes(response.span()));
+            auto response = terminal::CursorPositionReport(cursor_row(), cursor_col());
+            m_outgoing_events.push_back(WritePtyString(response.serialize()));
             break;
         }
         default:
@@ -951,8 +946,7 @@ void Terminal::csi_xtwinops(Params const& params) {
 
             auto size = this->size();
             auto size_report = terminal::TextAreaPixelSizeReport { .xpixels = size.xpixels, .ypixels = size.ypixels };
-            auto reply_string = size_report.serialize();
-            (void) m_psuedo_terminal.write_exactly(di::as_bytes(reply_string.span()));
+            m_outgoing_events.push_back(WritePtyString(size_report.serialize()));
             break;
         }
         case 16: {
@@ -964,8 +958,7 @@ void Terminal::csi_xtwinops(Params const& params) {
             auto size = this->size();
             auto size_report = terminal::CellPixelSizeReport { .xpixels = size.xpixels / size.cols,
                                                                .ypixels = size.ypixels / size.rows };
-            auto reply_string = size_report.serialize();
-            (void) m_psuedo_terminal.write_exactly(di::as_bytes(reply_string.span()));
+            m_outgoing_events.push_back(WritePtyString(size_report.serialize()));
             break;
         }
         case 18: {
@@ -979,8 +972,7 @@ void Terminal::csi_xtwinops(Params const& params) {
                 .cols = size.cols,
                 .rows = size.rows,
             };
-            auto reply_string = size_report.serialize();
-            (void) m_psuedo_terminal.write_exactly(di::as_bytes(reply_string.span()));
+            m_outgoing_events.push_back(WritePtyString(size_report.serialize()));
             break;
         }
         default:
@@ -1012,8 +1004,8 @@ void Terminal::csi_set_key_reporting_flags(Params const& params) {
 
 // https://sw.kovidgoyal.net/kitty/keyboard-protocol/#progressive-enhancement
 void Terminal::csi_get_key_reporting_flags(Params const&) {
-    auto report = terminal::KittyKeyReport(active_screen().m_key_reporting_flags).serialize();
-    (void) m_psuedo_terminal.write_exactly(di::as_bytes(report.span()));
+    auto report = terminal::KittyKeyReport(active_screen().m_key_reporting_flags);
+    m_outgoing_events.push_back(WritePtyString(report.serialize()));
 }
 
 // https://sw.kovidgoyal.net/kitty/keyboard-protocol/#progressive-enhancement
@@ -1066,13 +1058,12 @@ void Terminal::resize(Size const& size) {
     active_screen().screen.resize(size);
 
     // Send size update to client, via pty and implicit SIGWINCH.
-    (void) m_psuedo_terminal.set_tty_window_size(size.as_window_size());
+    m_outgoing_events.push_back(size);
 
     if (m_in_band_size_reports) {
         // Send an in-band size report.
         auto size_report = terminal::InBandSizeReport(size);
-        auto reply_string = size_report.serialize();
-        (void) m_psuedo_terminal.write_exactly(di::as_bytes(reply_string.span()));
+        m_outgoing_events.push_back(WritePtyString(size_report.serialize()));
     }
 }
 

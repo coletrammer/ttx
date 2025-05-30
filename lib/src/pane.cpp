@@ -14,6 +14,7 @@
 #include "ttx/mouse_event.h"
 #include "ttx/paste_event.h"
 #include "ttx/renderer.h"
+#include "ttx/size.h"
 #include "ttx/terminal.h"
 #include "ttx/terminal/escapes/osc_52.h"
 #include "ttx/terminal/multi_cell_info.h"
@@ -96,19 +97,7 @@ auto Pane::create_from_replay(u64 id, di::Optional<di::Path> cwd, di::PathView r
         });
 
         for (auto&& event : events) {
-            di::visit(di::overload(
-                          [&](terminal::OSC52&& osc52) {
-                              if (pane->m_hooks.did_selection) {
-                                  pane->m_hooks.did_selection(di::move(osc52), false);
-                              }
-                          },
-                          [&](APC&& apc) {
-                              if (pane->m_hooks.apc_passthrough) {
-                                  pane->m_hooks.apc_passthrough(apc.data.view());
-                              }
-                          },
-                          [&](terminal::OSC7&&) {}),
-                      di::move(event));
+            pane->handle_terminal_event(di::move(event));
         }
     }
 
@@ -192,7 +181,8 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
             buffer.resize(16384);
 
             while (!pane.m_done.load(di::MemoryOrder::Acquire)) {
-                auto nread = pane.m_pty_controller.read_some(buffer.span());
+                // SAFETY: this thread is the only one which reads the pty.
+                auto nread = pane.m_pty_controller.get_assuming_no_concurrent_accesses().read_some(buffer.span());
                 if (!nread.has_value()) {
                     break;
                 }
@@ -215,21 +205,7 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
                 });
 
                 for (auto&& event : events) {
-                    di::visit(di::overload(
-                                  [&](terminal::OSC52&& osc52) {
-                                      if (pane.m_hooks.did_selection) {
-                                          pane.m_hooks.did_selection(di::move(osc52), false);
-                                      }
-                                  },
-                                  [&](APC&& apc) {
-                                      if (pane.m_hooks.apc_passthrough) {
-                                          pane.m_hooks.apc_passthrough(apc.data.view());
-                                      }
-                                  },
-                                  [&](terminal::OSC7&& osc7) {
-                                      pane.update_cwd(di::move(osc7));
-                                  }),
-                              di::move(event));
+                    pane.handle_terminal_event(di::move(event));
                 }
 
                 if (pane.m_hooks.did_update) {
@@ -389,7 +365,7 @@ auto Pane::event(KeyEvent const& event) -> bool {
             m_pending_selection_start = {};
         });
 
-        (void) m_pty_controller.write_exactly(di::as_bytes(serialized_event.value().span()));
+        write_pty_string(serialized_event.value());
         return true;
     }
     return false;
@@ -420,7 +396,7 @@ auto Pane::event(MouseEvent const& event) -> bool {
                               shift_escape_options, window_size);
     m_last_mouse_position = event.position();
     if (serialized_event.has_value()) {
-        (void) m_pty_controller.write_exactly(di::as_bytes(serialized_event.value().span()));
+        write_pty_string(serialized_event.value());
         return true;
     }
 
@@ -506,7 +482,7 @@ auto Pane::event(FocusEvent const& event) -> bool {
 
     auto serialized_event = serialize_focus_event(event, focus_event_mode);
     if (serialized_event) {
-        (void) m_pty_controller.write_exactly(di::as_bytes(serialized_event.value().span()));
+        write_pty_string(serialized_event.value());
         return true;
     }
     return false;
@@ -520,7 +496,7 @@ auto Pane::event(PasteEvent const& event) -> bool {
     });
 
     auto serialized_event = serialize_paste_event(event, bracketed_paste_mode);
-    (void) m_pty_controller.write_exactly(di::as_bytes(serialized_event.span()));
+    write_pty_string(serialized_event);
     return true;
 }
 
@@ -534,6 +510,10 @@ void Pane::resize(Size const& size) {
     reset_viewport_scroll();
     m_terminal.with_lock([&](Terminal& terminal) {
         terminal.set_visible_size(size);
+
+        for (auto&& event : terminal.outgoing_events()) {
+            handle_terminal_event(di::move(event));
+        }
     });
 }
 
@@ -612,7 +592,7 @@ void Pane::send_clipboard(terminal::SelectionType selection_type, di::Vector<byt
     osc52.data = di::Base64<>(di::move(data));
 
     auto string = osc52.serialize();
-    (void) m_pty_controller.write_exactly(di::as_bytes(string.span()));
+    write_pty_string(string);
 }
 
 void Pane::stop_capture() {
@@ -645,6 +625,44 @@ void Pane::update_cwd(terminal::OSC7&& path_with_hostname) {
     if (m_hooks.did_update_cwd) {
         m_hooks.did_update_cwd();
     }
+}
+
+void Pane::handle_terminal_event(TerminalEvent&& event) {
+    di::visit(di::overload(
+                  [&](terminal::OSC52&& osc52) {
+                      if (m_hooks.did_selection) {
+                          m_hooks.did_selection(di::move(osc52), false);
+                      }
+                  },
+                  [&](APC&& apc) {
+                      if (m_hooks.apc_passthrough) {
+                          m_hooks.apc_passthrough(apc.data.view());
+                      }
+                  },
+                  [&](terminal::OSC7&& osc7) {
+                      update_cwd(di::move(osc7));
+                  },
+                  [&](Size&& size) {
+                      // SAFETY: no on else calls set_tty_window_size(), and the operation is atomic.
+                      (void) m_pty_controller.get_assuming_no_concurrent_accesses().set_tty_window_size(
+                          size.as_window_size());
+                  },
+                  [&](WritePtyString&& write_command) {
+                      write_pty_string(write_command.string);
+                  }),
+              di::move(event));
+}
+
+void Pane::write_pty_string(di::StringView data) {
+    m_pty_controller.with_lock([&](dius::SyncFile& pty) {
+        (void) pty.write_exactly(di::as_bytes(data.span()));
+    });
+}
+
+void Pane::write_pty_string(di::TransparentStringView data) {
+    m_pty_controller.with_lock([&](dius::SyncFile& pty) {
+        (void) pty.write_exactly(di::as_bytes(data.span()));
+    });
 }
 
 void Pane::exit() {
