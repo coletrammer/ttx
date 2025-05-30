@@ -94,7 +94,7 @@ public:
                   dius::system::ProcessHandle process, PaneHooks hooks)
         : m_id(id)
         , m_pty_controller(di::move(pty_controller))
-        , m_terminal(di::in_place, id, m_pty_controller, size)
+        , m_terminal(di::in_place, id, size)
         , m_process(process)
         , m_cwd(di::move(cwd))
         , m_hooks(di::move(hooks)) {}
@@ -125,6 +125,10 @@ public:
     auto current_working_directory() const -> di::Optional<di::PathView> { return m_cwd.transform(&di::Path::view); }
 
 private:
+    void handle_terminal_event(TerminalEvent&& event);
+    void write_pty_string(di::StringView data);
+    void write_pty_string(di::TransparentStringView data);
+
     void update_cwd(terminal::OSC7&& path_with_hostname);
     void reset_viewport_scroll();
 
@@ -134,7 +138,7 @@ private:
     di::Optional<MousePosition> m_last_mouse_position;
     di::Optional<terminal::SelectionPoint> m_pending_selection_start;
     MouseClickTracker m_mouse_click_tracker { 3 };
-    dius::SyncFile m_pty_controller;
+    di::Synchronized<dius::SyncFile> m_pty_controller;
     di::Function<void()> m_restore_termios;
     di::Synchronized<Terminal> m_terminal;
     dius::system::ProcessHandle m_process;

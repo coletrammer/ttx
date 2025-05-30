@@ -23,7 +23,11 @@ struct SetClipboard {
     di::Vector<byte> data;
 };
 
-using TerminalEvent = di::Variant<APC, terminal::OSC7, terminal::OSC52>;
+struct WritePtyString {
+    di::String string;
+};
+
+using TerminalEvent = di::Variant<APC, terminal::OSC7, terminal::OSC52, Size, WritePtyString>;
 
 struct ModeHandler {
     u32 mode { 0 };
@@ -51,7 +55,7 @@ class Terminal {
     };
 
 public:
-    explicit Terminal(u64 id, dius::SyncFile& psuedo_terminal, Size const& size);
+    explicit Terminal(u64 id, Size const& size);
 
     // Return a string which when replayed will result in the terminal
     // having state identical to the current state.
@@ -232,7 +236,5 @@ private:
     bool m_in_band_size_reports { false };
 
     di::Vector<TerminalEvent> m_outgoing_events;
-
-    dius::SyncFile& m_psuedo_terminal;
 };
 }

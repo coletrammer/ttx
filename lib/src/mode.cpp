@@ -407,8 +407,7 @@ consteval auto make_mode_handler<DecMode::InBandSizeReports>() -> ModeHandler {
                 if (is_set) {
                     // Send an in-band size report.
                     auto size_report = InBandSizeReport(terminal.size());
-                    auto reply_string = size_report.serialize();
-                    (void) terminal.m_psuedo_terminal.write_exactly(di::as_bytes(reply_string.span()));
+                    terminal.m_outgoing_events.push_back(WritePtyString(size_report.serialize()));
                 }
             },
     };
@@ -479,8 +478,6 @@ void Terminal::csi_decrqm(Params const& params) {
         .support = lookup_mode(mode).query_mode(*this),
         .dec_mode = terminal::DecMode(mode),
     };
-
-    auto reply_string = reply.serialize();
-    (void) m_psuedo_terminal.write_exactly(di::as_bytes(reply_string.span()));
+    m_outgoing_events.push_back(WritePtyString(reply.serialize()));
 }
 }
