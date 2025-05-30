@@ -11,16 +11,29 @@
 #include "ttx/params.h"
 #include "ttx/paste_event_io.h"
 #include "ttx/size.h"
+#include "ttx/terminal/escapes/mode.h"
 #include "ttx/terminal/escapes/osc_52.h"
 #include "ttx/terminal/escapes/osc_7.h"
 #include "ttx/terminal/screen.h"
 
 namespace ttx {
+class Terminal;
+
 struct SetClipboard {
     di::Vector<byte> data;
 };
 
 using TerminalEvent = di::Variant<APC, terminal::OSC7, terminal::OSC52>;
+
+struct ModeHandler {
+    u32 mode { 0 };
+    bool is_private { true };
+    terminal::ModeSupport (*query_mode)(Terminal&);
+    void (*set_mode)(Terminal&, bool);
+};
+
+template<auto>
+auto make_mode_handler() -> ModeHandler;
 
 class Terminal {
     struct ScreenState {
@@ -93,6 +106,9 @@ public:
     void set_allow_force_terminal_size(bool b = true) { m_allow_force_terminal_size = b; }
 
 private:
+    template<auto>
+    friend auto make_mode_handler() -> ModeHandler;
+
     void on_parser_result(PrintableCharacter&& printable_character);
     void on_parser_result(DCS&& dcs);
     void on_parser_result(OSC&& osc);
