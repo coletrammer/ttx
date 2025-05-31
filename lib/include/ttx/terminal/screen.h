@@ -210,7 +210,6 @@ private:
     ScrollBack m_scroll_back;
     ScrollBackEnabled m_scroll_back_enabled { ScrollBackEnabled::No };
     u64 m_visual_scroll_offset { 0 };
-    bool m_never_got_input { true };
 
     // Visual selection
     di::Optional<Selection> m_selection;
