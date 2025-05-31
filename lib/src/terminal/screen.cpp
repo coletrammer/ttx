@@ -72,19 +72,47 @@ void Screen::resize(Size const& size) {
     }
 
     // Now either add new rows or move existing rows to the scroll back.
+    auto clear_below_cursor = false;
     if (rows().size() > size.rows) {
-        if (m_scroll_back_enabled == ScrollBackEnabled::Yes && !m_never_got_input) {
+        if (m_scroll_back_enabled == ScrollBackEnabled::Yes) {
+            // When deleting rows, only move rows above the cursor into the scroll back.
+            // If there are not enough such rows, delete rows starting from the bottom.
+            // This is to maintain sane when dealing with shell sessions - anything below
+            // the cursor is empty. Meanwhile, any full screen app should the whole screen
+            // (and be using the alternate scroll buffer, which doesn't have scrollback).
+            //
+            // Additionally, when moving the curosr up due to moving rows into scroll back,
+            // the screen below (and including?) the cursor needs to be cleared if the cursor was
+            // in a shell prompt. This is because otherwise a leftover shell prompt would
+            // be on screen. We need to detect whether or not we're at a shell prompt via
+            // OSC 133.
+            //
+            // TODO: detect a shell prompt - for now, always clear below the cursor (which should
+            // be fine). Clearing below and including the cursor is not fine without detecting
+            // a shell prompt.
             auto was_at_bottom = visual_scroll_at_bottom();
-            auto rows_to_delete = rows().size() - size.rows;
-            m_scroll_back.add_rows(m_active_rows, 0, rows_to_delete);
+            auto rows_to_delete = u32(rows().size()) - size.rows;
+
+            auto rows_to_add_to_scroll_back = di::min(m_cursor.row, rows_to_delete);
+            m_scroll_back.add_rows(m_active_rows, 0, rows_to_add_to_scroll_back);
             if (was_at_bottom) {
                 // Automatically scroll to the bottom if the screen isn't already scrolled.
                 m_visual_scroll_offset = absolute_row_screen_start();
             }
 
+            auto rows_to_delete_from_end = rows_to_delete - rows_to_add_to_scroll_back;
+            for (auto& row : m_active_rows.rows() | di::drop(max_height() - rows_to_delete_from_end)) {
+                for (auto& cell : row.cells) {
+                    m_active_rows.drop_cell(cell);
+                }
+            }
+            m_active_rows.rows().erase(m_active_rows.rows().end() - rows_to_delete_from_end,
+                                       m_active_rows.rows().end());
+            clear_below_cursor = true;
+
             // Adjust the cursor to account for scrolled lines.
-            if (m_cursor.row > rows_to_delete) {
-                m_cursor.row -= rows_to_delete;
+            if (m_cursor.row > rows_to_add_to_scroll_back) {
+                m_cursor.row -= rows_to_add_to_scroll_back;
             } else {
                 m_cursor.row = 0;
             }
@@ -101,7 +129,7 @@ void Screen::resize(Size const& size) {
             rows().erase(rows().begin(), rows().end() - size.rows);
         }
     } else if (rows().size() < size.rows) {
-        if (m_scroll_back_enabled == ScrollBackEnabled::Yes && !m_never_got_input) {
+        if (m_scroll_back_enabled == ScrollBackEnabled::Yes) {
             // When taking rows from the scroll back, we also need to move the cursor down to accomdate the new rows.
             auto rows_to_take = di::min(m_scroll_back.total_rows(), size.rows - rows().size());
             m_scroll_back.take_rows(m_active_rows, size.cols, 0, rows_to_take);
@@ -127,6 +155,17 @@ void Screen::resize(Size const& size) {
     m_cursor.text_offset = 0;
     for (auto const& cell : row_object.cells | di::take(m_cursor.col)) {
         m_cursor.text_offset += cell.text_size;
+    }
+
+    // Clear below the cursor if requested.
+    if (clear_below_cursor) {
+        for (auto& row : m_active_rows.rows() | di::drop(m_cursor.row + 1)) {
+            for (auto& cell : row.cells) {
+                m_active_rows.drop_cell(cell);
+            }
+            row.overflow = false;
+            row.text.clear();
+        }
     }
 
     // When resizing, just invalidate everything. Resize happens when
@@ -720,10 +759,6 @@ void Screen::scroll_down() {
 }
 
 void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
-    // 0. Update flag, which is is used when resizing to prevent committing blank lines to the scroll back buffer
-    //    in cases where the terminal's initial size is changed before we get any input.
-    m_never_got_input = false;
-
     // 1. Measure the width of the code point.
     auto width = dius::unicode::code_point_width(code_point).value_or(0);
 
@@ -899,10 +934,6 @@ void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
 }
 
 void Screen::put_osc66(OSC66 const& sized_text, AutoWrapMode auto_wrap_mode) {
-    // 0. Update flag, which is is used when resizing to prevent committing blank lines to the scroll back buffer
-    //    in cases where the terminal's initial size is changed before we get any input.
-    m_never_got_input = false;
-
     // 1. Scale>0 (multi-height cell). For now we don't support this.
     if (sized_text.info.scale > 1) {
         return;
