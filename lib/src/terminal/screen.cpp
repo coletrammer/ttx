@@ -46,6 +46,7 @@ void Screen::resize(Size const& size) {
 
         m_size = size;
         clamp_selection();
+        clamp_semantic_prompts();
     });
 
     // First the column size of the existing rows.
@@ -740,6 +741,7 @@ void Screen::scroll_down() {
             m_visual_scroll_offset = absolute_row_start();
         }
         clamp_selection();
+        clamp_semantic_prompts();
     } else {
         auto& row = *begin_row_iterator();
         for (auto& cell : row.cells) {
@@ -1271,6 +1273,36 @@ void Screen::put_wide_cell(di::StringView text, MultiCellInfo const& multi_cell_
         new_cursor.overflow_pending = true;
     }
     m_cursor = new_cursor;
+}
+
+void Screen::put_semantic_prompt(OSC133&& osc133) {
+    di::visit(
+        [this](auto& v) {
+            put_semantic_prompt(di::move(v));
+        },
+        osc133.command);
+}
+
+void Screen::put_semantic_prompt(BeginPrompt&& begin_prompt) {
+    m_commands.begin_prompt(di::move(begin_prompt.application_id), begin_prompt.click_mode, begin_prompt.kind,
+                            begin_prompt.redraw, m_cursor);
+}
+
+void Screen::put_semantic_prompt(EndPrompt&&) {
+    m_commands.end_prompt(m_cursor);
+}
+
+void Screen::put_semantic_prompt(EndInput&&) {
+    m_commands.end_input(m_cursor);
+}
+
+void Screen::put_semantic_prompt(EndCommand&& end_command) {
+    auto failed = end_command.exit_code > 0 || !end_command.error.empty();
+    m_commands.end_command(di::move(end_command.application_id), failed, m_cursor);
+}
+
+void Screen::clamp_semantic_prompts() {
+    m_commands.clamp_commands(absolute_row_start(), absolute_row_end());
 }
 
 auto Screen::translate_row(u32 row) const -> u32 {

@@ -3,41 +3,9 @@
 #include "di/container/string/prelude.h"
 #include "di/reflect/prelude.h"
 #include "ttx/terminal/multi_cell_info.h"
+#include "ttx/terminal/semantic_prompt.h"
 
 namespace ttx::terminal {
-/// @brief Controls how mouse events on the shell prompt are translated to the application
-///
-/// This allows clicking in the shell input region to actual work as the user was intending.
-enum class PromptClickMode {
-    None,                       ///< Doesn't support prompt click mode
-    Line,                       ///< Can only navigative a single line via mouse movement, using left-right presses
-    MultipleLeftRight,          ///< Can simulate up-down movement via lots of left-right presses
-    MultipleUpDown,             ///< Can use up-down and left-right
-    MultipleUpDownConservative, ///< Only allowed to use up down at col 0
-};
-
-constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<PromptClickMode>) {
-    using enum PromptClickMode;
-    return di::make_enumerators<"PromptClickMode">(
-        di::enumerator<"None", None>, di::enumerator<"Line", Line>,
-        di::enumerator<"MultipleLeftRight", MultipleLeftRight>, di::enumerator<"MultipleUpDown", MultipleUpDown>,
-        di::enumerator<"MultipleUpDownConservative", MultipleUpDownConservative>);
-}
-
-/// @brief Kind of prompt
-enum class PromptKind {
-    Initial,      ///< Initial prompt (default)
-    Continuation, ///< Continuation prompt (user can edit previous lines)
-    Secondary,    ///< Secondary prompt (user cannot edit previous lines)
-    Right,        ///< Right-aligned prompt (can reflow to the right on resize)
-};
-
-constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<PromptKind>) {
-    using enum PromptKind;
-    return di::make_enumerators<"PromptKind">(di::enumerator<"Initial", Initial>,
-                                              di::enumerator<"Continuation", Continuation>,
-                                              di::enumerator<"Secondary", Secondary>, di::enumerator<"Right", Right>);
-}
 
 /// @brief Represents the marker beginning a shell prompt
 struct BeginPrompt {
