@@ -79,6 +79,10 @@ void Terminal::on_parser_result(OSC&& osc) {
         osc_66(osc.data.substr(ps_end.end()));
         return;
     }
+    if (ps == "133"_sv) {
+        osc_133(osc.data.substr(ps_end.end()));
+        return;
+    }
 }
 
 void Terminal::on_parser_result(APC&& apc) {
@@ -548,6 +552,19 @@ void Terminal::osc_66(di::StringView data) {
     active_screen().screen.put_osc66(osc66.value(), m_auto_wrap_mode);
 }
 
+// OSC 133 - https://gitlab.freedesktop.org/Per_Bothner/specifications/blob/master/proposals/semantic-prompts.md
+void Terminal::osc_133(di::StringView data) {
+    auto osc133 = terminal::OSC133::parse(data);
+    if (!osc133) {
+        return;
+    }
+
+    // Ignore semantic prompts for alternate screen
+    if (!m_alternate_screen) {
+        active_screen().screen.put_semantic_prompt(di::move(osc133).value());
+    }
+}
+
 // DEC Screen Alignment Pattern - https://vt100.net/docs/vt510-rm/DECALN.html
 void Terminal::esc_decaln() {
     auto& screen = active_screen().screen;
@@ -918,9 +935,9 @@ void Terminal::csi_xtwinops(Params const& params) {
                 break;
             }
 
-            // This logic is similar to DECSET 3 - 80/132 column mode, in that we don't actually resize the terminal's
-            // visible area. This only resizes the terminal's internal size, which is useful for facilitating testing
-            // or if the application requires the terminal to be a certain size.
+            // This logic is similar to DECSET 3 - 80/132 column mode, in that we don't actually resize the
+            // terminal's visible area. This only resizes the terminal's internal size, which is useful for
+            // facilitating testing or if the application requires the terminal to be a certain size.
             auto rows = di::min(params.get(1, row_count()), 1000u);
             auto cols = di::min(params.get(2, col_count()), 1000u);
             m_force_terminal_size = rows != 0 || cols != 0;

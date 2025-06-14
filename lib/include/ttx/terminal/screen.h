@@ -7,6 +7,7 @@
 #include "ttx/graphics_rendition.h"
 #include "ttx/size.h"
 #include "ttx/terminal/cursor.h"
+#include "ttx/terminal/escapes/osc_133.h"
 #include "ttx/terminal/escapes/osc_66.h"
 #include "ttx/terminal/hyperlink.h"
 #include "ttx/terminal/multi_cell_info.h"
@@ -117,6 +118,13 @@ public:
     void put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode);
     void put_osc66(OSC66 const& sized_text, AutoWrapMode auto_wrap_mode);
 
+    void put_semantic_prompt(OSC133&& osc133);
+    void put_semantic_prompt(BeginPrompt&& begin_prompt);
+    void put_semantic_prompt(EndPrompt&& end_prompt);
+    void put_semantic_prompt(EndInput&& end_input);
+    void put_semantic_prompt(EndCommand&& end_command);
+    void clamp_semantic_prompts();
+
     void invalidate_all() { m_whole_screen_dirty = true; }
     auto whole_screen_dirty() const -> bool { return m_whole_screen_dirty; }
     void clear_whole_screen_dirty_flag() { m_whole_screen_dirty = false; }
@@ -210,6 +218,7 @@ private:
     ScrollBack m_scroll_back;
     ScrollBackEnabled m_scroll_back_enabled { ScrollBackEnabled::No };
     u64 m_visual_scroll_offset { 0 };
+    Commands m_commands;
 
     // Visual selection
     di::Optional<Selection> m_selection;
