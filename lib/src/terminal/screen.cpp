@@ -1285,20 +1285,21 @@ void Screen::put_semantic_prompt(OSC133&& osc133) {
 
 void Screen::put_semantic_prompt(BeginPrompt&& begin_prompt) {
     m_commands.begin_prompt(di::move(begin_prompt.application_id), begin_prompt.click_mode, begin_prompt.kind,
-                            begin_prompt.redraw, m_cursor);
+                            begin_prompt.redraw, m_cursor.row + absolute_row_screen_start(), m_cursor.col);
 }
 
 void Screen::put_semantic_prompt(EndPrompt&&) {
-    m_commands.end_prompt(m_cursor);
+    m_commands.end_prompt(m_cursor.row + absolute_row_screen_start(), m_cursor.col);
 }
 
 void Screen::put_semantic_prompt(EndInput&&) {
-    m_commands.end_input(m_cursor);
+    m_commands.end_input(m_cursor.row + absolute_row_screen_start(), m_cursor.col);
 }
 
 void Screen::put_semantic_prompt(EndCommand&& end_command) {
     auto failed = end_command.exit_code > 0 || !end_command.error.empty();
-    m_commands.end_command(di::move(end_command.application_id), failed, m_cursor);
+    m_commands.end_command(di::move(end_command.application_id), failed, m_cursor.row + absolute_row_screen_start(),
+                           m_cursor.col);
 }
 
 void Screen::clamp_semantic_prompts() {
