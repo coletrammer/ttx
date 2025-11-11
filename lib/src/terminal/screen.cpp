@@ -1369,6 +1369,28 @@ void Screen::visual_scroll_to_bottom() {
     }
 }
 
+void Screen::visual_scroll_prev_command() {
+    auto const boundary = visual_scroll_offset();
+    auto command = m_commands.first_command_before(boundary);
+    if (command) {
+        dius::eprintln("b={} c={}"_sv, boundary, command.value());
+        auto to_scroll = boundary - command.value().prompt_start;
+        m_visual_scroll_offset -= to_scroll;
+        invalidate_all();
+    }
+}
+
+void Screen::visual_scroll_next_command() {
+    auto const boundary = visual_scroll_offset();
+    auto command = m_commands.first_command_after(boundary);
+    if (command) {
+        auto to_scroll = command.value().prompt_start - boundary;
+        m_visual_scroll_offset += to_scroll;
+        m_visual_scroll_offset = di::min(m_visual_scroll_offset, absolute_row_screen_start());
+        invalidate_all();
+    }
+}
+
 void Screen::clear_damage_tracking() {
     for (auto const& row : m_active_rows.rows()) {
         for (auto const& cell : row.cells) {

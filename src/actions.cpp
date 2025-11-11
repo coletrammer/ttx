@@ -586,6 +586,34 @@ auto scroll(Direction direction, i32 amount_in_cells) -> Action {
     };
 }
 
+auto scroll_prev_command() -> Action {
+    return {
+        .description = "Scroll up to the start of the previous shell command"_s,
+        .apply =
+            [](ActionContext const& context) {
+                context.layout_state.with_lock([&](LayoutState& state) {
+                    if (auto pane = state.active_pane()) {
+                        pane->scroll_prev_command();
+                    }
+                });
+            },
+    };
+}
+
+auto scroll_next_command() -> Action {
+    return {
+        .description = "Scroll down to the start of the next shell command"_s,
+        .apply =
+            [](ActionContext const& context) {
+                context.layout_state.with_lock([&](LayoutState& state) {
+                    if (auto pane = state.active_pane()) {
+                        pane->scroll_next_command();
+                    }
+                });
+            },
+    };
+}
+
 auto send_to_pane() -> Action {
     // NOTE: we need to hold the layout state lock the entire time
     // to prevent the Pane object from being prematurely destroyed.

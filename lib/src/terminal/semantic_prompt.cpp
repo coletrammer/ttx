@@ -1,10 +1,13 @@
 #include "ttx/terminal/semantic_prompt.h"
 
 #include "di/container/algorithm/find_last.h"
+#include "di/container/algorithm/lower_bound.h"
 #include "di/container/algorithm/remove_if.h"
+#include "di/container/algorithm/upper_bound.h"
 #include "di/function/equal_or_greater.h"
 #include "di/function/greater.h"
 #include "di/function/less.h"
+#include "dius/print.h"
 
 namespace ttx::terminal {
 void Commands::clamp_commands(u64 absolute_row_start, u64 absolute_row_end) {
@@ -111,5 +114,21 @@ void Commands::end_command(di::String application_id, bool failed, u64 absolute_
                                               &Command::output_start)
                          .begin(),
                      m_commands.end());
+}
+
+auto Commands::first_command_before(u64 absolute_row) -> di::Optional<Command const&> {
+    auto maybe_command = di::lower_bound(m_commands, absolute_row, di::compare, &Command::prompt_start);
+    if (maybe_command == m_commands.begin() || maybe_command == m_commands.end()) {
+        return {};
+    }
+    return *di::prev(maybe_command);
+}
+
+auto Commands::first_command_after(u64 absolute_row) -> di::Optional<Command const&> {
+    auto maybe_command = di::upper_bound(m_commands, absolute_row, di::compare, &Command::prompt_start);
+    if (maybe_command == m_commands.end()) {
+        return {};
+    }
+    return *maybe_command;
 }
 }

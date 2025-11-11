@@ -578,6 +578,22 @@ void Pane::scroll(Direction direction, i32 amount_in_cells) {
     }
 }
 
+void Pane::scroll_prev_command() {
+    reset_viewport_scroll();
+
+    m_terminal.with_lock([&](Terminal& terminal) {
+        terminal.active_screen().screen.visual_scroll_prev_command();
+    });
+}
+
+void Pane::scroll_next_command() {
+    reset_viewport_scroll();
+
+    m_terminal.with_lock([&](Terminal& terminal) {
+        terminal.active_screen().screen.visual_scroll_next_command();
+    });
+}
+
 auto Pane::save_state(di::PathView path) -> di::Result<> {
     auto file = TRY(dius::open_sync(path, dius::OpenMode::WriteNew));
     auto contents = m_terminal.with_lock([&](Terminal& terminal) {
@@ -670,6 +686,10 @@ void Pane::exit() {
 }
 
 void Pane::reset_viewport_scroll() {
+    auto needs_invalidation = m_vertical_scroll_offset > 0 || m_horizontal_scroll_offset > 0;
     m_vertical_scroll_offset = m_horizontal_scroll_offset = 0;
+    if (needs_invalidation) {
+        m_terminal.with_lock(&Terminal::invalidate_all);
+    }
 }
 }
