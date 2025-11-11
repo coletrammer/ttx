@@ -89,6 +89,9 @@ public:
     void end_input(u64 absolute_row, u32 col);
     void end_command(di::String application_id, bool failed, u64 absolute_row, u32 col);
 
+    auto first_command_before(u64 absolute_row) -> di::Optional<Command const&>;
+    auto first_command_after(u64 absolute_row) -> di::Optional<Command const&>;
+
 private:
     di::Ring<Command> m_commands;
     u32 m_current_depth { 0 };
