@@ -54,9 +54,10 @@ struct Command {
     u64 prompt_end { 0 };                           ///< Absolute row marking the prompt end (inclusive)
     u32 prompt_end_col { 0 }; ///< Column marking the end of the prompt (thus marking the start of the input area)
     u64 output_start { 0 };   ///< Absolute row marking the command output start
-    u64 output_end { 0 };     ///< Absolute row marking the command output end (inclusive)
+    u64 output_end { 0 };     ///< Absolute row marking the command output end (exclusive)
     u32 depth { 0 };          ///< Level of nesting within other commands
     bool failed { false };    ///< Did the command exit successfully?
+    bool ended { false };     ///< Has the command been completed?
 
     auto operator==(Command const&) const -> bool = default;
 
@@ -89,8 +90,10 @@ public:
     void end_input(u64 absolute_row, u32 col);
     void end_command(di::String application_id, bool failed, u64 absolute_row, u32 col);
 
-    auto first_command_before(u64 absolute_row) -> di::Optional<Command const&>;
-    auto first_command_after(u64 absolute_row) -> di::Optional<Command const&>;
+    auto last_command() const -> di::Optional<Command const&>;
+    auto will_redraw_prompt(u64 absolute_row, u32 col) const -> bool;
+    auto first_command_before(u64 absolute_row) const -> di::Optional<Command const&>;
+    auto first_command_after(u64 absolute_row) const -> di::Optional<Command const&>;
 
 private:
     di::Ring<Command> m_commands;

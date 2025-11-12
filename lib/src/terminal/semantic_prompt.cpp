@@ -74,7 +74,7 @@ void Commands::end_input(u64 absolute_row, u32) {
         return;
     }
 
-    // If the input end row is above the prompt start, digard this command.
+    // If the input end row is above the prompt start, disgard this command.
     auto& command = m_commands.back().value();
     if (absolute_row < command.prompt_start) {
         m_commands.pop_back();
@@ -106,6 +106,7 @@ void Commands::end_command(di::String application_id, bool failed, u64 absolute_
             m_current_depth = command.depth;
         }
         command.output_end = absolute_row;
+        command.ended = true;
     }
 
     // Delete any commands which are invalid - due to having output end values which are before the
@@ -116,7 +117,29 @@ void Commands::end_command(di::String application_id, bool failed, u64 absolute_
                      m_commands.end());
 }
 
-auto Commands::first_command_before(u64 absolute_row) -> di::Optional<Command const&> {
+auto Commands::last_command() const -> di::Optional<Command const&> {
+    auto [it, _] = di::find_last_if(m_commands, [](Command const& command) {
+        return command.ended;
+    });
+    if (it == m_commands.end()) {
+        return {};
+    }
+    return *it;
+}
+
+auto Commands::will_redraw_prompt(u64 absolute_row, u32) const -> bool {
+    // We are assuming that the shell will redraw the prompt if the latest command's prompt
+    // intersects the passed in row, and said command will redraw the prompt. We don't check
+    // the column since that should never be relevant in practice.
+    for (auto const& command : m_commands.back()) {
+        if (absolute_row >= command.prompt_start && absolute_row <= command.prompt_end) {
+            return command.prompt_redraw;
+        }
+    }
+    return false;
+}
+
+auto Commands::first_command_before(u64 absolute_row) const -> di::Optional<Command const&> {
     auto maybe_command = di::lower_bound(m_commands, absolute_row, di::compare, &Command::prompt_start);
     if (maybe_command == m_commands.begin() || maybe_command == m_commands.end()) {
         return {};
@@ -124,7 +147,7 @@ auto Commands::first_command_before(u64 absolute_row) -> di::Optional<Command co
     return *di::prev(maybe_command);
 }
 
-auto Commands::first_command_after(u64 absolute_row) -> di::Optional<Command const&> {
+auto Commands::first_command_after(u64 absolute_row) const -> di::Optional<Command const&> {
     auto maybe_command = di::upper_bound(m_commands, absolute_row, di::compare, &Command::prompt_start);
     if (maybe_command == m_commands.end()) {
         return {};

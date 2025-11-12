@@ -73,13 +73,13 @@ void Screen::resize(Size const& size) {
     }
 
     // Now either add new rows or move existing rows to the scroll back.
-    auto clear_below_cursor = false;
+    auto clear_below_and_at_cursor = false;
     if (rows().size() > size.rows) {
         if (m_scroll_back_enabled == ScrollBackEnabled::Yes) {
             // When deleting rows, only move rows above the cursor into the scroll back.
             // If there are not enough such rows, delete rows starting from the bottom.
             // This is to maintain sane when dealing with shell sessions - anything below
-            // the cursor is empty. Meanwhile, any full screen app should the whole screen
+            // the cursor is empty. Meanwhile, any full screen app should redraw the whole screen
             // (and be using the alternate scroll buffer, which doesn't have scrollback).
             //
             // Additionally, when moving the curosr up due to moving rows into scroll back,
@@ -87,10 +87,6 @@ void Screen::resize(Size const& size) {
             // in a shell prompt. This is because otherwise a leftover shell prompt would
             // be on screen. We need to detect whether or not we're at a shell prompt via
             // OSC 133.
-            //
-            // TODO: detect a shell prompt - for now, always clear below the cursor (which should
-            // be fine). Clearing below and including the cursor is not fine without detecting
-            // a shell prompt.
             auto was_at_bottom = visual_scroll_at_bottom();
             auto rows_to_delete = u32(rows().size()) - size.rows;
 
@@ -109,7 +105,8 @@ void Screen::resize(Size const& size) {
             }
             m_active_rows.rows().erase(m_active_rows.rows().end() - rows_to_delete_from_end,
                                        m_active_rows.rows().end());
-            clear_below_cursor = true;
+            clear_below_and_at_cursor =
+                m_commands.will_redraw_prompt(absolute_row_screen_start() + m_cursor.row, m_cursor.col);
 
             // Adjust the cursor to account for scrolled lines.
             if (m_cursor.row > rows_to_add_to_scroll_back) {
@@ -151,21 +148,24 @@ void Screen::resize(Size const& size) {
     m_cursor.row = di::min(m_cursor.row, size.rows - 1);
     m_cursor.col = di::min(m_cursor.col, size.cols - 1);
 
-    // Recompute the cursor text offset.
-    auto& row_object = rows()[m_cursor.row];
-    m_cursor.text_offset = 0;
-    for (auto const& cell : row_object.cells | di::take(m_cursor.col)) {
-        m_cursor.text_offset += cell.text_size;
-    }
-
     // Clear below the cursor if requested.
-    if (clear_below_cursor) {
-        for (auto& row : m_active_rows.rows() | di::drop(m_cursor.row + 1)) {
+    if (clear_below_and_at_cursor) {
+        for (auto& row : m_active_rows.rows() | di::drop(m_cursor.row)) {
             for (auto& cell : row.cells) {
                 m_active_rows.drop_cell(cell);
+                cell.text_size = 0;
             }
             row.overflow = false;
             row.text.clear();
+        }
+        m_cursor.text_offset = 0;
+        m_cursor.overflow_pending = false;
+    } else {
+        // Recompute the cursor text offset.
+        auto& row_object = rows()[m_cursor.row];
+        m_cursor.text_offset = 0;
+        for (auto const& cell : row_object.cells | di::take(m_cursor.col)) {
+            m_cursor.text_offset += cell.text_size;
         }
     }
 
@@ -1502,6 +1502,25 @@ auto Screen::in_selection(SelectionPoint const& point) const -> bool {
     return point >= start && point <= end;
 }
 
+auto Screen::text_in_last_command(bool include_command) const -> di::String {
+    for (auto const& command : m_commands.last_command()) {
+        auto const selection = [&] -> Selection {
+            auto row_start = include_command ? command.prompt_end : command.output_start;
+            auto col_start = include_command ? command.prompt_end_col : 0;
+            auto row_end_exclusive = command.output_end;
+            if (row_start == row_end_exclusive) {
+                row_end_exclusive++;
+            }
+            return Selection {
+                .start = { .row = row_start, .col = col_start, },
+                .end = { .row = row_end_exclusive - 1, .col=max_col_inclusive(), },
+            };
+        }();
+        return selected_text(selection);
+    }
+    return {};
+}
+
 void Screen::invalidate_region(Selection const& region) {
     auto [start, end] = region.normalize();
     ASSERT_GT_EQ(start.row, absolute_row_start());
@@ -1509,8 +1528,8 @@ void Screen::invalidate_region(Selection const& region) {
     ASSERT_GT_EQ(end.row, absolute_row_start());
     ASSERT_LT_EQ(end.row, absolute_row_end());
 
-    // If we're invalidating a region larger than the screen, there's
-    // point if having detailed damage tracking.
+    // If we're invalidating a region larger than the screen, there's no
+    // point in having detailed damage tracking.
     if (end.row - start.row >= max_height()) {
         invalidate_all();
         return;
@@ -1535,11 +1554,15 @@ void Screen::invalidate_region(Selection const& region) {
 }
 
 auto Screen::selected_text() const -> di::String {
-    if (!m_selection) {
-        return {};
-    }
+    return m_selection
+        .transform([&](auto selection) {
+            return selected_text(selection);
+        })
+        .value_or({});
+}
 
-    auto [start, end] = m_selection.value().normalize();
+auto Screen::selected_text(Selection selection) const -> di::String {
+    auto [start, end] = selection.normalize();
     ASSERT_GT_EQ(start.row, absolute_row_start());
     ASSERT_LT_EQ(start.row, absolute_row_end());
     ASSERT_GT_EQ(end.row, absolute_row_start());

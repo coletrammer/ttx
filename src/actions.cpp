@@ -614,6 +614,20 @@ auto scroll_next_command() -> Action {
     };
 }
 
+auto copy_last_command(bool include_command) -> Action {
+    return {
+        .description = *di::present("Copy text from latest command (include command text = {})"_sv, include_command),
+        .apply =
+            [include_command](ActionContext const& context) {
+                context.layout_state.with_lock([&](LayoutState& state) {
+                    if (auto pane = state.active_pane()) {
+                        pane->copy_last_command(include_command);
+                    }
+                });
+            },
+    };
+}
+
 auto send_to_pane() -> Action {
     // NOTE: we need to hold the layout state lock the entire time
     // to prevent the Pane object from being prematurely destroyed.

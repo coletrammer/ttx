@@ -161,6 +161,9 @@ public:
     void update_selection(SelectionPoint const& point);
     auto in_selection(SelectionPoint const& point) const -> bool;
     auto selected_text() const -> di::String;
+    auto selected_text(Selection selection) const -> di::String;
+
+    auto text_in_last_command(bool include_command) const -> di::String;
 
     auto find_row(u64 row) const -> di::Tuple<u32, RowGroup const&>;
     auto iterate_row(u64 row) const {
