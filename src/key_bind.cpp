@@ -233,6 +233,17 @@ auto make_key_binds(Key prefix, di::Path save_state_path, bool replay_mode) -> d
             .action = switch_prev_session(),
         });
         result.push_back({
+            .key = Key::Y,
+            .mode = InputMode::Normal,
+            .action = copy_last_command(false),
+        });
+        result.push_back({
+            .key = Key::Y,
+            .modifiers = Modifiers::Shift,
+            .mode = InputMode::Normal,
+            .action = copy_last_command(true),
+        });
+        result.push_back({
             .key = Key::_0,
             .modifiers = Modifiers::Shift,
             .mode = InputMode::Normal,

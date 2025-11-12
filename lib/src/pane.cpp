@@ -594,6 +594,21 @@ void Pane::scroll_next_command() {
     });
 }
 
+void Pane::copy_last_command(bool include_command) {
+    m_terminal.with_lock([&](Terminal& terminal) {
+        auto text = terminal.active_screen().screen.text_in_last_command(include_command);
+        if (text.empty()) {
+            return;
+        }
+
+        // Simulate copy as an OSC 52 request.
+        auto osc52 = terminal::OSC52 {};
+        (void) osc52.selections.push_back(terminal::SelectionType::Clipboard);
+        osc52.data = di::Base64<>(di::as_bytes(text.span()) | di::to<di::Vector>());
+        m_hooks.did_selection(di::move(osc52), true);
+    });
+}
+
 auto Pane::save_state(di::PathView path) -> di::Result<> {
     auto file = TRY(dius::open_sync(path, dius::OpenMode::WriteNew));
     auto contents = m_terminal.with_lock([&](Terminal& terminal) {

@@ -113,6 +113,7 @@ public:
     void scroll(Direction direction, i32 amount_in_cells);
     void scroll_prev_command();
     void scroll_next_command();
+    void copy_last_command(bool include_command);
     auto save_state(di::PathView path) -> di::Result<>;
     void send_clipboard(terminal::SelectionType selection_type, di::Vector<byte> data);
     void stop_capture();

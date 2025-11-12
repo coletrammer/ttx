@@ -32,5 +32,6 @@ auto add_pane(Direction direction) -> Action;
 auto scroll(Direction direction, i32 amount_in_cells) -> Action;
 auto scroll_prev_command() -> Action;
 auto scroll_next_command() -> Action;
+auto copy_last_command(bool include_command) -> Action;
 auto send_to_pane() -> Action;
 }
