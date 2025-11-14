@@ -7,7 +7,17 @@
 namespace ttx::terminal {
 void ReflowResult::add_offset(AbsolutePosition position, i64 dr, i32 dc) {
     if (!m_ranges.empty()) {
-        ASSERT_LT(m_ranges.back().value().position, position);
+        ASSERT_LT_EQ(m_ranges.back().value().position, position);
+    }
+
+    // As an optimization, we ignore redundant offsets.
+    auto [pdr, pdc] = m_ranges.back()
+                          .transform([](ReflowRange const& range) -> di::Tuple<i64, i32> {
+                              return { range.dr, range.dc };
+                          })
+                          .value_or({ 0, 0 });
+    if (dr == pdr && dc == pdc) {
+        return;
     }
     m_ranges.push_back({ position, dr, dc });
 }

@@ -1,9 +1,94 @@
 #include "ttx/terminal/row_group.h"
 
+#include "di/container/algorithm/find_last_if_not.h"
 #include "ttx/terminal/cell.h"
 #include "ttx/terminal/multi_cell_info.h"
+#include "ttx/terminal/reflow_result.h"
 
 namespace ttx::terminal {
+auto RowGroup::reflow(u64 absolute_row_start, u32 target_width) -> ReflowResult {
+    DI_ASSERT_GT(target_width, 0);
+
+    auto result = ReflowResult {};
+    auto new_rows = di::Ring<Row> {};
+
+    auto original_row_index = 0_u64;
+
+    auto compute_dr = [&] {
+        // The dr component is computed by determining the offset between the row after reflow
+        // and the row before reflow. Since we use a count for the new rows and an index for the
+        // overflow, we must adjust the delta by 1.
+        return i64(new_rows.size()) - i64(original_row_index) - 1;
+    };
+
+    // First, we chunk each physical row into logical rows. Logical rows are a continuous
+    // sequence of rows where all but the last has Row::overflow set to true.
+    for (auto chunk : m_rows | di::chunk_by([](Row const& a, Row const&) {
+                          return a.overflow;
+                      })) {
+        // Now we just take text from each row in the group greedily to fill new rows satisfying the
+        // new target width. We get to keep the same metadata IDs as the original cells, but the text
+        // offset does change. Each chunk will have at least 1 row.
+        new_rows.emplace_back();
+        result.add_offset({ absolute_row_start + original_row_index, 0 }, compute_dr(), 0);
+        auto current_width = 0_u32;
+        for (auto& row : chunk) {
+            auto text_offset = 0_usize;
+            auto [end, _] = di::find_last_if_not(row.cells, &Cell::is_empty);
+            auto effective_width = row.cells.end() == end ? 0_usize : usize(end - row.cells.begin() + 1);
+
+            for (auto col = 0_u32; col < effective_width;) {
+                auto& cell = row.cells[col];
+                auto width = multi_cell_info(cell.multi_cell_id).compute_width();
+
+                auto _ = di::ScopeExit([&] {
+                    col += width;
+                    text_offset += cell.text_size;
+                });
+
+                // If the target width is smaller than the cell width we actually have to drop this cell.
+                if (width > target_width) {
+                    for (auto i = 0_u8; i < width; i++) {
+                        drop_cell(row.cells[col + i]);
+                    }
+                    continue;
+                }
+
+                // We must make a new row if we overflow the width of the current row we're building.
+                if (current_width + width > target_width) {
+                    current_width = 0;
+                    new_rows.back().value().overflow = true;
+                    new_rows.emplace_back();
+
+                    result.add_offset({ absolute_row_start + original_row_index, col }, compute_dr(), -i32(col));
+                } else if (col == 0 && !new_rows.back().value().cells.empty()) {
+                    // Since we're adding to an existing row but we're the start of an original row,
+                    // we need an updated displacement.
+                    result.add_offset({ absolute_row_start + original_row_index, 0 }, compute_dr(),
+                                      i32(new_rows.back().value().cells.size()));
+                }
+
+                // Now we just need to append the current group of cells to the row we're building.
+                auto& new_row = new_rows.back().value();
+                new_row.cells.append_container(row.cells.subspan(col, width).value());
+                current_width += width;
+
+                // Append the relevant text.
+                auto text_start = row.text.iterator_at_offset(text_offset);
+                auto text_end = row.text.iterator_at_offset(text_offset + cell.text_size);
+                ASSERT(text_start);
+                ASSERT(text_end);
+                auto text = row.text.substr(text_start.value(), text_end.value());
+                new_row.text.append(text);
+            }
+
+            original_row_index++;
+        }
+    }
+    m_rows = di::move(new_rows);
+    return result;
+}
+
 auto RowGroup::maybe_allocate_graphics_id(GraphicsRendition const& rendition) -> di::Optional<u16> {
     auto existing_id = graphics_id(rendition);
     if (!existing_id) {

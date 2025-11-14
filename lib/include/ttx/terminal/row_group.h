@@ -6,6 +6,7 @@
 #include "ttx/terminal/hyperlink.h"
 #include "ttx/terminal/id_map.h"
 #include "ttx/terminal/multi_cell_info.h"
+#include "ttx/terminal/reflow_result.h"
 #include "ttx/terminal/row.h"
 
 namespace ttx::terminal {
@@ -33,6 +34,13 @@ public:
 
     auto empty() const -> bool { return m_rows.empty(); }
     auto total_rows() const { return m_rows.size(); }
+
+    /// @brief Adjust each row in the group according to the new target width
+    ///
+    /// This function is likely to change the number of rows in the group. The return
+    /// value should be used to adjust any coordinates referenced by the screen, as
+    /// they are invalidated by this operation.
+    auto reflow(u64 absolute_row_start, u32 target_width) -> ReflowResult;
 
     void drop_graphics_id(u16& id);
     void drop_hyperlink_id(u16& id);

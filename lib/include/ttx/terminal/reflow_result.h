@@ -1,6 +1,7 @@
 #pragma once
 
 #include "di/container/vector/prelude.h"
+#include "di/reflect/prelude.h"
 #include "di/types/integers.h"
 #include "ttx/terminal/absolute_position.h"
 
@@ -26,6 +27,11 @@ private:
         i32 dc = 0;
 
         auto operator==(ReflowRange const&) const -> bool = default;
+
+        constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<ReflowRange>) {
+            return di::make_fields<"ReflowRange">(di::field<"position", &ReflowRange::position>,
+                                                  di::field<"dr", &ReflowRange::dr>, di::field<"dc", &ReflowRange::dc>);
+        }
     };
 
 public:
@@ -45,6 +51,10 @@ public:
     auto map_position(AbsolutePosition position) const -> AbsolutePosition;
 
     auto operator==(ReflowResult const&) const -> bool = default;
+
+    constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<ReflowResult>) {
+        return di::make_fields<"ReflowResult">(di::field<"ranges", &ReflowResult::m_ranges>);
+    }
 
 private:
     di::Vector<ReflowRange> m_ranges;

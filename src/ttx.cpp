@@ -137,7 +137,7 @@ static auto maybe_get_terminfo_dir(di::Optional<di::TransparentStringView> term,
     auto terminfo_dir = TRY(get_local_terminfo_dir());
     TRY(dius::filesystem::create_directories(terminfo_dir));
 
-    // To avoid recessive recompilations, hash our serialized terminfo and see if we're already written
+    // To avoid redundant recompilations, hash our serialized terminfo and see if we're already written
     // it out.
     auto const& terminfo = terminal::get_ttx_terminfo();
     auto serialized_terminfo = terminfo.serialize();
