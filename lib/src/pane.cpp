@@ -273,13 +273,17 @@ Pane::~Pane() {
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 auto Pane::draw(Renderer& renderer) -> RenderedCursor {
-    return m_terminal.with_lock([&](Terminal& terminal) {
+    auto rendered_cursor = m_terminal.with_lock([&](Terminal& terminal) {
+        auto visible_size = m_desired_visible_size.value_or(terminal.visible_size());
         auto& screen = terminal.active_screen().screen;
         if (terminal.allowed_to_draw()) {
+            // Reflow any rows in the scrollback if needed. Don't use the new visible size for consistency,
+            // because the actual resize operation takes place after this render.
+            screen.visual_reflow_rows_if_needed(terminal.visible_size().rows);
+
             auto whole_screen_dirty = screen.whole_screen_dirty();
             auto end_row = 0_u32;
-            for (auto r :
-                 di::range(m_vertical_scroll_offset, m_vertical_scroll_offset + terminal.visible_size().rows)) {
+            for (auto r : di::range(m_vertical_scroll_offset, m_vertical_scroll_offset + visible_size.rows)) {
                 if (r + screen.visual_scroll_offset() >= screen.absolute_row_end()) {
                     break;
                 }
@@ -311,11 +315,11 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
                                           cell.complex_grapheme_cluster);
                         cell.stale = true;
                     }
-                    end_col = c - m_horizontal_scroll_offset + 1;
+                    end_col = c - m_horizontal_scroll_offset + multi_cell_info.compute_width();
                 }
                 // Clear any blank cols after the terminal.
-                if (end_col < terminal.visible_size().cols) {
-                    for (auto c : di::range(end_col, terminal.visible_size().cols)) {
+                if (end_col < visible_size.cols) {
+                    for (auto c : di::range(end_col, visible_size.cols)) {
                         renderer.put_cell(""_sv, r - m_vertical_scroll_offset, c,
                                           { .inverted = terminal.reverse_video() }, {},
                                           terminal::narrow_multi_cell_info, false, false);
@@ -325,8 +329,8 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
             }
 
             // Clear any blank rows after the terminal.
-            if (end_row < terminal.visible_size().rows) {
-                for (auto r : di::range(end_row, terminal.visible_size().rows)) {
+            if (end_row < visible_size.rows) {
+                for (auto r : di::range(end_row, visible_size.rows)) {
                     renderer.clear_row(r, { .inverted = terminal.reverse_video() });
                 }
             }
@@ -341,14 +345,39 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
             .style = terminal.cursor_style(),
             .hidden = terminal.cursor_hidden() || !terminal.allowed_to_draw() ||
                       terminal.cursor_row() < m_vertical_scroll_offset ||
-                      terminal.cursor_row() - m_vertical_scroll_offset >= terminal.visible_size().rows ||
+                      terminal.cursor_row() - m_vertical_scroll_offset >= visible_size.rows ||
                       absolute_cursor_position < screen.visual_scroll_offset() ||
-                      absolute_cursor_position >= screen.visual_scroll_offset() + terminal.visible_size().rows ||
+                      absolute_cursor_position >= screen.visual_scroll_offset() + visible_size.rows ||
                       terminal.cursor_col() < m_horizontal_scroll_offset ||
-                      terminal.cursor_col() - m_horizontal_scroll_offset >= terminal.visible_size().cols,
+                      terminal.cursor_col() - m_horizontal_scroll_offset >= visible_size.cols,
 
         };
     });
+
+    // End by possibly resizing. We're only updating the size in the render() function
+    // as a simple but hacky way to debounce size updates. Sending many size updates to
+    // applications in a short duration is inefficient and casues rendering issues. We want
+    // to resize() after rendering because resizing may clear parts of the screen. This does
+    // however require a second render for things to fully look correct at the new size.
+    auto need_another_render = m_terminal.with_lock([&](Terminal& terminal) {
+        if (auto visible_size = di::exchange(m_desired_visible_size, {})) {
+            if (terminal.visible_size() == visible_size.value()) {
+                return false;
+            }
+            terminal.set_visible_size(visible_size.value());
+
+            for (auto&& event : terminal.outgoing_events()) {
+                handle_terminal_event(di::move(event));
+            }
+            return true;
+        }
+        return false;
+    });
+    if (need_another_render && m_hooks.did_update) {
+        m_hooks.did_update(*this);
+    }
+
+    return rendered_cursor;
 }
 
 auto Pane::event(KeyEvent const& event) -> bool {
@@ -412,7 +441,7 @@ auto Pane::event(MouseEvent const& event) -> bool {
 
     // Selection logic.
     auto scroll_adjusted_position =
-        terminal::SelectionPoint { event.position().in_cells().y(), event.position().in_cells().x() };
+        terminal::AbsolutePosition { event.position().in_cells().y(), event.position().in_cells().x() };
     scroll_adjusted_position = {
         scroll_adjusted_position.row + m_vertical_scroll_offset + row_offset,
         scroll_adjusted_position.col + m_horizontal_scroll_offset,
@@ -508,13 +537,15 @@ void Pane::invalidate_all() {
 
 void Pane::resize(Size const& size) {
     reset_viewport_scroll();
-    m_terminal.with_lock([&](Terminal& terminal) {
-        terminal.set_visible_size(size);
-
-        for (auto&& event : terminal.outgoing_events()) {
-            handle_terminal_event(di::move(event));
-        }
+    m_terminal.with_lock([&](Terminal&) {
+        m_desired_visible_size = size;
     });
+
+    // We need to request a re-render as we're using the render thread
+    // to actualize the size update.
+    if (m_hooks.did_update) {
+        m_hooks.did_update(*this);
+    }
 }
 
 void Pane::scroll(Direction direction, i32 amount_in_cells) {
