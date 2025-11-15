@@ -120,7 +120,7 @@ void Renderer::start(Size const& size) {
 }
 
 // The pending changes are stored in the difference between the current and desired screens. We must translate only
-// the relevant changes into terminal escape sequences and write ot the output. We first need to collect all
+// the relevant changes into terminal escape sequences and write to the output. We first need to collect all
 // modified cells and store them in grouped list. The grouping is chosen to minimize the amount of bytes written (so
 // the order is hyperlink > graphics > cursor position).
 struct Change {
@@ -169,7 +169,7 @@ static void move_cursor(di::VectorWriter<>& buffer, u32 current_row, di::Optiona
     //   CHA (CSI): col = N+1
     //   VPA (CSI): row = N+1
 
-    // Instead of brute forcing the best sequence, which is possible but overly complex, we can some basic rules.
+    // Instead of brute forcing the best sequence, which is possible but overly complex, we have some basic rules.
     // In particular, use \n and RI only when the row if off by 1. And use relative whenever possible, but falling
     // back on CUP.
 
@@ -285,7 +285,7 @@ static auto compute_text_upper_bound(di::StringView text) -> usize {
     // In kitty and our behavior, this has width 1, because <U+0600> has width and so combines
     // with a even though there is no grapheme boundary.
     // In a hypothetical terminal, this would have width 3, by placing each character in a different
-    // cell. In practice, this terminals appear to differ in width here because of diagreement over
+    // cell. In practice, terminals appear to differ in width here because of diagreement over
     // the width of <U+0600>, but this issue can affect more characters.
     //
     // For that reason, we compute a width using clustering and a width going code point by code

@@ -56,7 +56,9 @@ auto ReflowResult::map_position(AbsolutePosition position) const -> AbsolutePosi
         return position;
     }
     auto const* it = di::lower_bound(m_ranges, position, di::compare, &ReflowRange::position);
-    if (it->position > position) {
+    if (it == m_ranges.end()) {
+        --it;
+    } else if (it->position > position) {
         if (it == m_ranges.begin()) {
             return position;
         }

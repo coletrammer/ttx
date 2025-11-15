@@ -29,6 +29,7 @@ void ScrollBack::add_rows(RowGroup& from, usize row_index, usize row_count) {
         row_count -= rows_to_take;
         m_total_rows += rows_to_take;
         to.cell_count += cells_taken;
+        to.last_reflowed_to = {};
     }
 }
 
@@ -55,18 +56,76 @@ void ScrollBack::take_rows(RowGroup& to, u32 desired_cols, usize row_index, usiz
     }
 }
 
+auto ScrollBack::take_rows_for_reflow(RowGroup& to) -> u64 {
+    auto rows_to_take = 0_u64;
+
+    // Only look in the last row group to prevent excessive computation.
+    for (auto& group : m_groups.back()) {
+        for (auto& row : group.group.rows() | di::reverse) {
+            if (row.overflow) {
+                rows_to_take++;
+                continue;
+            }
+            break;
+        }
+
+        auto cells_taken = to.transfer_from(group.group, group.group.total_rows() - rows_to_take, 0, rows_to_take);
+        m_total_rows -= rows_to_take;
+        group.cell_count -= cells_taken;
+    }
+
+    return rows_to_take;
+}
+
+auto ScrollBack::reflow_visual_rows(u64 absolute_row_start, usize row_count, u32 desired_cols)
+    -> di::Optional<ReflowResult> {
+    auto result = di::Optional<ReflowResult> {};
+    auto visible_rows = 0_usize;
+    while (absolute_row_start < absolute_row_end() && visible_rows < row_count) {
+        auto [row_offset, row_group_start, group] = find_row_group(absolute_row_start);
+        if (group.last_reflowed_to != desired_cols) {
+            group.last_reflowed_to = desired_cols;
+
+            m_total_rows -= group.group.total_rows();
+            auto reflow_result = group.group.reflow(row_group_start, desired_cols);
+            m_total_rows += group.group.total_rows();
+
+            absolute_row_start = reflow_result.map_position({ absolute_row_start, 0 }).row;
+            row_offset = reflow_result.map_position({ row_group_start + row_offset, 0 }).row - row_group_start;
+
+            if (result) {
+                result.value().merge(di::move(reflow_result));
+            } else {
+                result = di::move(reflow_result);
+            }
+        }
+
+        auto visible_rows_in_group = group.group.total_rows() - row_offset;
+        absolute_row_start += visible_rows_in_group;
+        visible_rows += visible_rows_in_group;
+    }
+    return result;
+}
+
 auto ScrollBack::find_row(u64 row) const -> di::Tuple<u32, RowGroup const&> {
+    auto [row_offset, _, group] = const_cast<ScrollBack&>(*this).find_row_group(row);
+    return { row_offset, group.group };
+}
+
+auto ScrollBack::find_row_group(u64 row) -> di::Tuple<u32, u64, Group&> {
     ASSERT_GT_EQ(row, absolute_row_start());
     ASSERT_LT(row, absolute_row_end());
 
+    auto row_group_start = absolute_row_start();
     row -= absolute_row_start();
 
     // TODO: optimize!
-    for (auto const& group : m_groups) {
+    for (auto& group : m_groups) {
         if (row < group.group.total_rows()) {
-            return { u32(row), group.group };
+            return { u32(row), row_group_start, group };
         }
         row -= group.group.total_rows();
+        row_group_start += group.group.total_rows();
     }
     di::unreachable();
 }

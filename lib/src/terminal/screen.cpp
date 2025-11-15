@@ -12,11 +12,13 @@
 #include "dius/unicode/name.h"
 #include "dius/unicode/width.h"
 #include "ttx/graphics_rendition.h"
+#include "ttx/size.h"
 #include "ttx/terminal/cell.h"
 #include "ttx/terminal/cursor.h"
 #include "ttx/terminal/escapes/osc_66.h"
 #include "ttx/terminal/escapes/osc_8.h"
 #include "ttx/terminal/multi_cell_info.h"
+#include "ttx/terminal/reflow_result.h"
 #include "ttx/terminal/selection.h"
 
 namespace ttx::terminal {
@@ -25,14 +27,12 @@ Screen::Screen(Size const& size, ScrollBackEnabled scroll_back_enabled)
     resize(size);
 }
 
-void Screen::resize(Size const& size) {
-    // TODO: rewrap - for now we're truncating
-
+auto Screen::resize(Size const& size) -> ReflowResult {
     ASSERT_GT(size.rows, 0);
     ASSERT_GT(size.cols, 0);
 
     if (size.cols == max_width() && size.rows == max_height()) {
-        return;
+        return {};
     }
 
     // Always update the size and clamp the scroll region in bounds.
@@ -49,31 +49,73 @@ void Screen::resize(Size const& size) {
         clamp_semantic_prompts();
     });
 
-    // First the column size of the existing rows.
-    if (size.cols > max_width()) {
-        // When expanding, just add blank cells.
-        for (auto& row : rows()) {
-            row.cells.resize(size.cols);
-        }
-    } else {
-        // When contracting, we need to free resources used by each cell we're deleting.
-        for (auto& row : rows()) {
-            auto text_bytes_to_delete = 0zu;
-            while (row.cells.size() > size.cols) {
-                auto cell = *row.cells.pop_back();
-                m_active_rows.drop_cell(cell);
-
-                text_bytes_to_delete += cell.text_size;
-            }
-
-            auto text_end = row.text.iterator_at_offset(row.text.size_bytes() - text_bytes_to_delete);
-            ASSERT(text_end);
-            row.text.erase(text_end.value(), row.text.end());
+    // Clear text below the cursor when scroll back is enabled (meaning we're probably in a shell).
+    // If shell integration is present we will actually clear the entire prompt (potentially multiline)
+    // assuming the shell redraws the prompt. We don't move the cursor as seems the shell takes care of that.
+    // This minimizes the chance of redundant prompt text remaining on screen. Clearing text below the
+    // cursor even if shell integration is safe even if we don't know there is a shell prompt. If the app
+    // is full screen then it will re-paint anything. And if we're just running a command no important text
+    // should exist after the cursor.
+    if (m_scroll_back_enabled == ScrollBackEnabled::Yes && !rows().empty()) {
+        auto redraw_prompt_row =
+            m_commands.will_redraw_prompt_at_row(absolute_row_screen_start() + m_cursor.row, m_cursor.col);
+        if (redraw_prompt_row) {
+            auto save = m_cursor;
+            set_cursor(redraw_prompt_row.value() - absolute_row_screen_start(), 0);
+            clear_after_cursor();
+            set_cursor(save.row, save.col);
+        } else {
+            clear_after_cursor();
         }
     }
 
+    // Reflow if not the alternate screen buffer and desired columns changed.
+    auto reflow_result = ReflowResult {};
+    if (m_scroll_back_enabled == ScrollBackEnabled::Yes && size.cols != max_width() && !rows().empty()) {
+        // We need special handling when the most recent row in the scroll back buffer overflowed, as to reflow
+        // correctly we need to consider each logical row in its entirety. To account for this we are simply moving
+        // any needed rows in the active rows array. The tricky part is keeping the cursor position correct after the
+        // addition of these rows.
+        auto extra_rows = m_scroll_back.take_rows_for_reflow(m_active_rows);
+
+        reflow_result = m_active_rows.reflow(absolute_row_screen_start(), size.cols);
+        auto cursor_absolute_position =
+            reflow_result.map_position({ absolute_row_screen_start() + extra_rows + m_cursor.row, m_cursor.col });
+
+        m_cursor.row = cursor_absolute_position.row - absolute_row_screen_start();
+        m_cursor.col = cursor_absolute_position.col;
+        if (m_cursor.row < extra_rows) {
+            m_cursor.row = extra_rows;
+            m_cursor.col = 0;
+        }
+
+        apply_reflow_result(reflow_result);
+    }
+
+    // First the column size of the existing rows. This happens after reflow because
+    // we potentially need to pad out the columns of each row.
+    for (auto& row : rows()) {
+        // When expanding, just add blank cells.
+        if (row.cells.size() <= size.cols) {
+            row.cells.resize(size.cols);
+            continue;
+        }
+
+        // When contracting, we need to free resources used by each cell we're deleting.
+        auto text_bytes_to_delete = 0zu;
+        while (row.cells.size() > size.cols) {
+            auto cell = *row.cells.pop_back();
+            m_active_rows.drop_cell(cell);
+
+            text_bytes_to_delete += cell.text_size;
+        }
+
+        auto text_end = row.text.iterator_at_offset(row.text.size_bytes() - text_bytes_to_delete);
+        ASSERT(text_end);
+        row.text.erase(text_end.value(), row.text.end());
+    }
+
     // Now either add new rows or move existing rows to the scroll back.
-    auto clear_below_and_at_cursor = false;
     if (rows().size() > size.rows) {
         if (m_scroll_back_enabled == ScrollBackEnabled::Yes) {
             // When deleting rows, only move rows above the cursor into the scroll back.
@@ -105,8 +147,6 @@ void Screen::resize(Size const& size) {
             }
             m_active_rows.rows().erase(m_active_rows.rows().end() - rows_to_delete_from_end,
                                        m_active_rows.rows().end());
-            clear_below_and_at_cursor =
-                m_commands.will_redraw_prompt(absolute_row_screen_start() + m_cursor.row, m_cursor.col);
 
             // Adjust the cursor to account for scrolled lines.
             if (m_cursor.row > rows_to_add_to_scroll_back) {
@@ -148,30 +188,17 @@ void Screen::resize(Size const& size) {
     m_cursor.row = di::min(m_cursor.row, size.rows - 1);
     m_cursor.col = di::min(m_cursor.col, size.cols - 1);
 
-    // Clear below the cursor if requested.
-    if (clear_below_and_at_cursor) {
-        for (auto& row : m_active_rows.rows() | di::drop(m_cursor.row)) {
-            for (auto& cell : row.cells) {
-                m_active_rows.drop_cell(cell);
-                cell.text_size = 0;
-            }
-            row.overflow = false;
-            row.text.clear();
-        }
-        m_cursor.text_offset = 0;
-        m_cursor.overflow_pending = false;
-    } else {
-        // Recompute the cursor text offset.
-        auto& row_object = rows()[m_cursor.row];
-        m_cursor.text_offset = 0;
-        for (auto const& cell : row_object.cells | di::take(m_cursor.col)) {
-            m_cursor.text_offset += cell.text_size;
-        }
+    // Recompute the cursor text offset.
+    auto& row_object = rows()[m_cursor.row];
+    m_cursor.text_offset = 0;
+    for (auto const& cell : row_object.cells | di::take(m_cursor.col)) {
+        m_cursor.text_offset += cell.text_size;
     }
 
     // When resizing, just invalidate everything. Resize happens when
     // the layout changes and the caller expects us to redraw everything.
     invalidate_all();
+    return reflow_result;
 }
 
 void Screen::set_scroll_region(ScrollRegion const& region) {
@@ -566,7 +593,7 @@ void Screen::clear() {
 }
 
 void Screen::clear_after_cursor() {
-    // First, clear the current cursor row.
+    // Clear the current cursor row.
     clear_row_after_cursor();
     ASSERT(!m_cursor.overflow_pending);
 
@@ -583,7 +610,7 @@ void Screen::clear_after_cursor() {
 }
 
 void Screen::clear_before_cursor() {
-    // First, clear the current cursor row.
+    // Clear the current cursor row.
     clear_row_before_cursor();
     ASSERT(!m_cursor.overflow_pending);
 
@@ -1373,8 +1400,7 @@ void Screen::visual_scroll_prev_command() {
     auto const boundary = visual_scroll_offset();
     auto command = m_commands.first_command_before(boundary);
     if (command) {
-        dius::eprintln("b={} c={}"_sv, boundary, command.value());
-        auto to_scroll = boundary - command.value().prompt_start;
+        auto to_scroll = boundary - command.value().prompt_start.row;
         m_visual_scroll_offset -= to_scroll;
         invalidate_all();
     }
@@ -1384,9 +1410,16 @@ void Screen::visual_scroll_next_command() {
     auto const boundary = visual_scroll_offset();
     auto command = m_commands.first_command_after(boundary);
     if (command) {
-        auto to_scroll = command.value().prompt_start - boundary;
+        auto to_scroll = command.value().prompt_start.row - boundary;
         m_visual_scroll_offset += to_scroll;
         m_visual_scroll_offset = di::min(m_visual_scroll_offset, absolute_row_screen_start());
+        invalidate_all();
+    }
+}
+
+void Screen::visual_reflow_rows_if_needed(u64 visible_rows) {
+    if (auto reflow_result = m_scroll_back.reflow_visual_rows(m_visual_scroll_offset, visible_rows, max_width())) {
+        apply_reflow_result(reflow_result.value());
         invalidate_all();
     }
 }
@@ -1407,10 +1440,10 @@ void Screen::clear_selection() {
     m_selection = {};
 }
 
-auto Screen::clamp_selection_point(SelectionPoint const& point) const
-    -> di::Tuple<SelectionPoint, RowGroup const&, u32> {
+auto Screen::clamp_selection_point(AbsolutePosition const& point) const
+    -> di::Tuple<AbsolutePosition, RowGroup const&, u32> {
     // Clamp the selection point to ensure its in bounds. Also lookup the backing
-    // row, which also is needed to clamping to the top left of the multi cell.
+    // row, which also is needed for clamping to the top left of the multi cell.
     auto adjusted_point = point;
     adjusted_point.row = di::clamp(point.row, absolute_row_start(), absolute_row_end() - 1);
     auto [row_index, row_group] = find_row(adjusted_point.row);
@@ -1424,7 +1457,7 @@ auto Screen::clamp_selection_point(SelectionPoint const& point) const
     return di::make_tuple(adjusted_point, di::cref(row_group), row_index);
 }
 
-void Screen::begin_selection(SelectionPoint const& point, BeginSelectionMode mode) {
+void Screen::begin_selection(AbsolutePosition const& point, BeginSelectionMode mode) {
     clear_selection();
 
     auto [adjusted_point, row_group, row_index] = clamp_selection_point(point);
@@ -1465,22 +1498,23 @@ void Screen::begin_selection(SelectionPoint const& point, BeginSelectionMode mod
                 }
                 end++;
             }
-            m_selection = { SelectionPoint { adjusted_point.row, start }, SelectionPoint { adjusted_point.row, end } };
+            m_selection = { AbsolutePosition { adjusted_point.row, start },
+                            AbsolutePosition { adjusted_point.row, end } };
             for (auto const& cell : auto(*row.cells.subspan(start, end - start + 1))) {
                 cell.stale = false;
             }
             return;
         }
         case BeginSelectionMode::Line:
-            m_selection = { SelectionPoint { adjusted_point.row, 0 },
-                            SelectionPoint { adjusted_point.row, u32(row.cells.size() - 1) } };
+            m_selection = { AbsolutePosition { adjusted_point.row, 0 },
+                            AbsolutePosition { adjusted_point.row, u32(row.cells.size() - 1) } };
             row.stale = false;
             return;
     }
     di::unreachable();
 }
 
-void Screen::update_selection(SelectionPoint const& point) {
+void Screen::update_selection(AbsolutePosition const& point) {
     auto [adjusted_point, row_group, row_index] = clamp_selection_point(point);
     // auto const& row = row_group.rows()[row_index];
     if (!m_selection) {
@@ -1494,7 +1528,7 @@ void Screen::update_selection(SelectionPoint const& point) {
     }
 }
 
-auto Screen::in_selection(SelectionPoint const& point) const -> bool {
+auto Screen::in_selection(AbsolutePosition const& point) const -> bool {
     if (!m_selection) {
         return false;
     }
@@ -1505,9 +1539,9 @@ auto Screen::in_selection(SelectionPoint const& point) const -> bool {
 auto Screen::text_in_last_command(bool include_command) const -> di::String {
     for (auto const& command : m_commands.last_command()) {
         auto const selection = [&] -> Selection {
-            auto row_start = include_command ? command.prompt_end : command.output_start;
-            auto col_start = include_command ? command.prompt_end_col : 0;
-            auto row_end_exclusive = command.output_end;
+            auto row_start = include_command ? command.prompt_end.row : command.output_start.row;
+            auto col_start = include_command ? command.prompt_end.col : 0;
+            auto row_end_exclusive = command.output_end.row;
             if (row_start == row_end_exclusive) {
                 row_end_exclusive++;
             }
@@ -1605,6 +1639,14 @@ void Screen::clamp_selection() {
         selection.start = start;
         selection.end = end;
     }
+}
+
+void Screen::apply_reflow_result(ReflowResult const& reflow_result) {
+    m_selection.transform(di::bind_back(&Selection::apply_reflow_result, di::ref(reflow_result)));
+    m_commands.apply_reflow_result(reflow_result);
+
+    m_visual_scroll_offset =
+        di::min(reflow_result.map_position({ m_visual_scroll_offset, 0 }).row, absolute_row_screen_start());
 }
 
 auto Screen::find_row(u64 row) const -> di::Tuple<u32, RowGroup const&> {

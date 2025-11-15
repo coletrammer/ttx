@@ -85,6 +85,16 @@ auto RowGroup::reflow(u64 absolute_row_start, u32 target_width) -> ReflowResult 
             original_row_index++;
         }
     }
+
+    // Add a final mapping for everything that comes after this row group.
+    result.add_offset({ absolute_row_start + original_row_index, 0 }, i64(new_rows.size()) - i64(total_rows()), 0);
+
+    // Preserve the pending flag on the last row of the group.
+    auto original_last_row_pending = m_rows.back().transform(&Row::overflow).value_or(false);
+    new_rows.back().transform([&](Row& row) {
+        row.overflow = original_last_row_pending;
+    });
+
     m_rows = di::move(new_rows);
     return result;
 }

@@ -81,16 +81,11 @@ void RenderThread::render_thread() {
         }();
 
         // Process any pending events.
+        auto new_size = di::Optional<Size> {};
         for (auto& event : events) {
             // Pattern matching would be nice here...
             if (auto ev = di::get_if<Size>(event)) {
-                // Do layout.
-                m_layout_state.lock()->layout(ev.value());
-
-                // Force doing a resetting the terminal mode on SIGWINCH.
-                // This is to enable make putting ttx in a "dumb" session
-                // persistence program (like dtach) work correctly.
-                do_setup = true;
+                new_size = ev.value();
             } else if (auto ev = di::get_if<PaneExited>(event)) {
                 // Exit pane.
                 auto [pane, should_exit] = m_layout_state.with_lock([&](LayoutState& state) {
@@ -165,6 +160,16 @@ void RenderThread::render_thread() {
                 // Exit.
                 return;
             }
+        }
+
+        if (new_size) {
+            // Do layout.
+            m_layout_state.lock()->layout(new_size.value());
+
+            // Force doing a resetting the terminal mode on SIGWINCH.
+            // This is to enable make putting ttx in a "dumb" session
+            // persistence program (like dtach) work correctly.
+            do_setup = true;
         }
 
         // Handle any filled clipboard requests.

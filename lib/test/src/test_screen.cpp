@@ -1,6 +1,7 @@
 #include "di/test/prelude.h"
 #include "dius/print.h"
 #include "ttx/graphics_rendition.h"
+#include "ttx/terminal/reflow_result.h"
 #include "ttx/terminal/screen.h"
 #include "ttx/terminal/selection.h"
 
@@ -26,8 +27,10 @@ static void put_text(Screen& screen, di::StringView text) {
     for (auto i : di::range(screen.absolute_row_start(), screen.absolute_row_end())) {
         dius::print("\""_sv);
         for (auto row : screen.iterate_row(i)) {
-            auto [_, _, text, _, _, _] = row;
-            if (text.empty()) {
+            auto [_, cell, text, _, _, _] = row;
+            if (cell.is_nonprimary_in_multi_cell()) {
+                text = "."_sv;
+            } else if (text.empty()) {
                 text = " "_sv;
             }
             dius::print("{}"_sv, text);
@@ -884,6 +887,115 @@ static void save_restore_cursor() {
     ASSERT_EQ(screen.current_graphics_rendition(), ttx::GraphicsRendition {});
 }
 
+static void reflow_basic() {
+    auto screen = Screen({ 5, 5 }, Screen::ScrollBackEnabled::Yes);
+    put_text(screen, "abcd\n"
+                     "fghij"
+                     "klmno"
+                     "pqr\n"
+                     "uvw"_sv);
+
+    auto result = screen.resize({ 11, 2 });
+    auto expected = ReflowResult();
+    expected.add_offset({ 0, 2 }, 1, -2);
+    expected.add_offset({ 0, 4 }, 1, -2);
+    expected.add_offset({ 1, 0 }, 1, 0);
+    expected.add_offset({ 1, 2 }, 2, -2);
+    expected.add_offset({ 1, 4 }, 3, -4);
+    expected.add_offset({ 2, 0 }, 2, 1);
+    expected.add_offset({ 2, 1 }, 3, -1);
+    expected.add_offset({ 2, 3 }, 4, -3);
+    expected.add_offset({ 3, 0 }, 4, 0);
+    expected.add_offset({ 3, 2 }, 5, -2);
+    expected.add_offset({ 4, 0 }, 5, 0);
+    expected.add_offset({ 4, 2 }, 6, -2);
+    expected.add_offset({ 5, 0 }, 6, 0);
+    ASSERT_EQ(result, expected);
+    ASSERT_EQ(screen.cursor().row, 10);
+    ASSERT_EQ(screen.cursor().col, 1);
+
+    validate_text(screen, "ab\n"
+                          "cd\n"
+                          "fg\n"
+                          "hi\n"
+                          "jk\n"
+                          "lm\n"
+                          "no\n"
+                          "pq\n"
+                          "r \n"
+                          "uv\n"
+                          "w "_sv);
+
+    result = screen.resize({ 4, 10 });
+    expected = ReflowResult();
+    expected.add_offset({ 1, 0 }, -1, 2);
+    expected.add_offset({ 2, 0 }, -1, 0);
+    expected.add_offset({ 3, 0 }, -2, 2);
+    expected.add_offset({ 4, 0 }, -3, 4);
+    expected.add_offset({ 5, 0 }, -4, 6);
+    expected.add_offset({ 6, 0 }, -5, 8);
+    expected.add_offset({ 7, 0 }, -5, 0);
+    expected.add_offset({ 8, 0 }, -6, 2);
+    expected.add_offset({ 9, 0 }, -6, 0);
+    expected.add_offset({ 10, 0 }, -7, 2);
+    expected.add_offset({ 11, 0 }, -7, 0);
+    ASSERT_EQ(result, expected);
+    ASSERT_EQ(screen.cursor().row, 3);
+    ASSERT_EQ(screen.cursor().col, 3);
+
+    validate_text(screen, "abcd      \n"
+                          "fghijklmno\n"
+                          "pqr       \n"
+                          "uvw       "_sv);
+}
+
+static void reflow_wide() {
+    auto screen = Screen({ 3, 5 }, Screen::ScrollBackEnabled::Yes);
+    put_text(screen, u8"a猫cb\n"
+                     u8"fgh猫"
+                     u8"猫kl"_sv);
+
+    auto result = screen.resize({ 8, 2 });
+    auto expected = ReflowResult();
+    expected.add_offset({ 0, 1 }, 1, -1);
+    expected.add_offset({ 0, 3 }, 2, -3);
+    expected.add_offset({ 1, 0 }, 2, 0);
+    expected.add_offset({ 1, 2 }, 3, -2);
+    expected.add_offset({ 1, 3 }, 4, -3);
+    expected.add_offset({ 2, 0 }, 4, 0);
+    expected.add_offset({ 2, 2 }, 5, -2);
+    expected.add_offset({ 3, 0 }, 5, 0);
+    ASSERT_EQ(result, expected);
+    ASSERT_EQ(screen.cursor().row, 7);
+    ASSERT_EQ(screen.cursor().col, 1);
+
+    validate_text(screen, u8"a \n"
+                          u8"猫.\n"
+                          u8"cb\n"
+                          u8"fg\n"
+                          u8"h \n"
+                          u8"猫.\n"
+                          u8"猫.\n"
+                          u8"kl"_sv);
+
+    result = screen.resize({ 2, 9 });
+    expected = ReflowResult();
+    expected.add_offset({ 1, 0 }, -1, 1);
+    expected.add_offset({ 2, 0 }, -2, 3);
+    expected.add_offset({ 3, 0 }, -2, 0);
+    expected.add_offset({ 4, 0 }, -3, 2);
+    expected.add_offset({ 5, 0 }, -4, 3);
+    expected.add_offset({ 6, 0 }, -5, 5);
+    expected.add_offset({ 7, 0 }, -6, 7);
+    expected.add_offset({ 8, 0 }, -6, 0);
+    ASSERT_EQ(result, expected);
+    ASSERT_EQ(screen.cursor().row, 1);
+    ASSERT_EQ(screen.cursor().col, 8);
+
+    validate_text(screen, "a猫.cb    \n"
+                          u8"fgh猫.猫.k "_sv);
+}
+
 TEST(screen, put_text_basic)
 TEST(screen, put_text_unicode)
 TEST(screen, put_text_wide)
@@ -904,4 +1016,6 @@ TEST(screen, vertical_scroll_region_delete_lines)
 TEST(screen, autowrap)
 TEST(screen, vertical_scroll_region_autowrap)
 TEST(screen, save_restore_cursor)
+TEST(screen, reflow_basic)
+TEST(screen, reflow_wide)
 }

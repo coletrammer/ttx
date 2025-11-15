@@ -11,6 +11,7 @@
 #include "ttx/terminal/escapes/osc_66.h"
 #include "ttx/terminal/hyperlink.h"
 #include "ttx/terminal/multi_cell_info.h"
+#include "ttx/terminal/reflow_result.h"
 #include "ttx/terminal/row.h"
 #include "ttx/terminal/row_group.h"
 #include "ttx/terminal/scroll_back.h"
@@ -70,7 +71,7 @@ public:
 
     explicit Screen(Size const& size, ScrollBackEnabled scroll_back_enabled);
 
-    void resize(Size const& size);
+    auto resize(Size const& size) -> ReflowResult;
     void set_scroll_region(ScrollRegion const& region);
 
     auto max_height() const -> u32 { return m_size.rows; }
@@ -149,6 +150,8 @@ public:
     void visual_scroll_prev_command();
     void visual_scroll_next_command();
 
+    void visual_reflow_rows_if_needed(u64 visible_rows);
+
     enum class BeginSelectionMode {
         Single,
         Word,
@@ -157,9 +160,9 @@ public:
 
     auto selection() const -> di::Optional<Selection> { return m_selection; }
     void clear_selection();
-    void begin_selection(SelectionPoint const& point, BeginSelectionMode mode);
-    void update_selection(SelectionPoint const& point);
-    auto in_selection(SelectionPoint const& point) const -> bool;
+    void begin_selection(AbsolutePosition const& point, BeginSelectionMode mode);
+    void update_selection(AbsolutePosition const& point);
+    auto in_selection(AbsolutePosition const& point) const -> bool;
     auto selected_text() const -> di::String;
     auto selected_text(Selection selection) const -> di::String;
 
@@ -204,7 +207,11 @@ private:
 
     // Clamp a selection point to only refer to actual cells (and the top-left of any multi cell).
     // Also return the corresponding row information, for efficiency.
-    auto clamp_selection_point(SelectionPoint const& point) const -> di::Tuple<SelectionPoint, RowGroup const&, u32>;
+    auto clamp_selection_point(AbsolutePosition const& point) const
+        -> di::Tuple<AbsolutePosition, RowGroup const&, u32>;
+
+    // Apply reflow result to all stored coordinates (does not affect the cursor).
+    void apply_reflow_result(ReflowResult const& reflow_result);
 
     // Invalidate a region of rows and cells, as specified by the selection region.
     void invalidate_region(Selection const& region);

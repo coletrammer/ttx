@@ -139,11 +139,12 @@ private:
     di::Atomic<bool> m_done { false };
     di::Atomic<bool> m_capture { true };
     di::Optional<MousePosition> m_last_mouse_position;
-    di::Optional<terminal::SelectionPoint> m_pending_selection_start;
+    di::Optional<terminal::AbsolutePosition> m_pending_selection_start;
     MouseClickTracker m_mouse_click_tracker { 3 };
     di::Synchronized<dius::SyncFile> m_pty_controller;
     di::Function<void()> m_restore_termios;
     di::Synchronized<Terminal> m_terminal;
+    di::Optional<Size> m_desired_visible_size;
     dius::system::ProcessHandle m_process;
 
     u32 m_vertical_scroll_offset { 0 };
