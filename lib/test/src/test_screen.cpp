@@ -107,6 +107,32 @@ static void validate_dirty(Screen& screen, di::StringView text) {
     screen.clear_whole_screen_dirty_flag();
 }
 
+static void validate_bg(Screen& screen, di::StringView text) {
+    ASSERT_EQ(screen.absolute_row_start(), 0);
+    auto lines = text | di::split(U'\n');
+    for (auto [i, line] : lines | di::enumerate) {
+        ASSERT_EQ(di::distance(line), screen.max_width());
+
+        auto [row_index, row_group] = screen.find_row(i);
+        for (auto [ch, data] : di::zip(line, row_group.iterate_row(row_index))) {
+            auto [_, cell, _, gfx, _, _] = data;
+
+            auto bg = cell.background_only ? cell.background_color : gfx.bg;
+            auto expected = [&] {
+                switch (ch) {
+                    case 'r':
+                        return ttx::Color(ttx::Color::Palette::Red);
+                    case 'b':
+                        return ttx::Color(ttx::Color::Palette::Blue);
+                    default:
+                        return ttx::Color();
+                }
+            }();
+            ASSERT_EQ(bg, expected);
+        }
+    }
+}
+
 static void put_text_basic() {
     auto screen = Screen({ 5, 5 }, Screen::ScrollBackEnabled::No);
 
@@ -507,6 +533,7 @@ static void clear_row() {
 static void clear_screen() {
     auto screen = Screen({ 5, 5 }, Screen::ScrollBackEnabled::No);
 
+    screen.set_current_graphics_rendition({ .bg = ttx::Color(ttx::Color::Palette::Red) });
     put_text(screen, u8"abcde"
                      u8"fghij"
                      u8"$¢€𐍈x"
@@ -515,6 +542,7 @@ static void clear_screen() {
 
     screen.set_cursor(2, 2, true);
 
+    screen.set_current_graphics_rendition({ .bg = ttx::Color(ttx::Color::Palette::Blue) });
     screen.clear_before_cursor();
     ASSERT_EQ(screen.cursor().text_offset, 0);
     ASSERT_EQ(screen.cursor().overflow_pending, false);
@@ -530,6 +558,11 @@ static void clear_screen() {
                           u8"   𐍈x\n"
                           u8"p    \n"
                           u8"     "_sv);
+    validate_bg(screen, "bbbbb\n"
+                        "bbbbb\n"
+                        "bbbrr\n"
+                        "rbbbb\n"
+                        "bbbbb"_sv);
 }
 
 static void clear_all() {

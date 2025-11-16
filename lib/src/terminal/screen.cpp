@@ -97,7 +97,7 @@ auto Screen::resize(Size const& size) -> ReflowResult {
     for (auto& row : rows()) {
         // When expanding, just add blank cells.
         if (row.cells.size() <= size.cols) {
-            row.cells.resize(size.cols);
+            row.cells.resize(size.cols, blank_cell());
             continue;
         }
 
@@ -178,7 +178,7 @@ auto Screen::resize(Size const& size) -> ReflowResult {
         }
         for (auto _ : di::range(size.rows - rows().size())) {
             auto row = Row {};
-            row.cells.resize(size.cols);
+            row.cells.resize(size.cols, blank_cell());
             rows().push_back(di::move(row));
         }
     }
@@ -216,6 +216,7 @@ auto Screen::current_hyperlink() const -> di::Optional<Hyperlink const&> {
 }
 
 void Screen::set_current_graphics_rendition(GraphicsRendition const& rendition) {
+    m_current_background_color = rendition.bg;
     if (rendition == GraphicsRendition {}) {
         m_active_rows.drop_graphics_id(m_graphics_id);
         m_graphics_id = 0;
@@ -396,7 +397,7 @@ void Screen::insert_blank_characters(u32 count) {
         }
 
         auto& primary_cell = row.cells[erase_position];
-        m_active_rows.drop_cell(primary_cell);
+        clear_cell(primary_cell);
 
         auto erase_text_start = row.text.iterator_at_offset(m_cursor.text_offset - primary_cell.text_size);
         ASSERT(erase_text_start);
@@ -419,7 +420,7 @@ void Screen::insert_blank_characters(u32 count) {
     }
     auto text_start_position = row.text.size_bytes();
     for (auto& cell : auto(*row.cells.subspan(deletion_point))) {
-        m_active_rows.drop_cell(cell);
+        clear_cell(cell);
         text_start_position -= cell.text_size;
         cell.text_size = 0;
     }
@@ -438,7 +439,7 @@ void Screen::insert_blank_characters(u32 count) {
     // Finally, insert the blank cells. Note that to implement bce this would need to
     // preserve the background color. The cursor position is unchanged, as is
     // the cursor byte offset.
-    row.cells.insert_container(row.cells.begin() + m_cursor.col, di::repeat(Cell(), max_to_insert));
+    row.cells.insert_container(row.cells.begin() + m_cursor.col, di::repeat(blank_cell(), max_to_insert));
     row.overflow = false;
 }
 
@@ -449,13 +450,13 @@ void Screen::insert_blank_lines(u32 count) {
     }
 
     // Start by dropping the correct number of rows. We're clearing rows at the end
-    // of the screen. To implement bce we'd need to copy the background color when clearing.
+    // of the screen.
     auto max_to_insert = di::min(count, m_scroll_region.end_row - m_cursor.row);
     auto delete_row_it = end_row_iterator() - max_to_insert;
     for (auto it = delete_row_it; it != end_row_iterator(); ++it) {
         auto& row = *it;
         for (auto& cell : row.cells) {
-            m_active_rows.drop_cell(cell);
+            clear_cell(cell);
             cell.text_size = 0;
         }
         row.text.clear();
@@ -504,7 +505,7 @@ void Screen::delete_characters(u32 count) {
     }
     auto text_end_position = text_start_position;
     for (auto& cell : auto(*row.cells.subspan(deletion_point, deletion_end - deletion_point))) {
-        m_active_rows.drop_cell(cell);
+        clear_cell(cell);
         text_end_position += cell.text_size;
         cell.text_size = 0;
     }
@@ -522,9 +523,8 @@ void Screen::delete_characters(u32 count) {
         cell.stale = false;
     }
 
-    // Insert blank cells at the end of the row. Note that to implement bce this would need to
-    // preserve the background color. The cursor position is unchanged, as is the cursor byte offset.
-    row.cells.resize(max_width());
+    // Insert blank cells at the end of the row. The cursor position is unchanged, as is the cursor byte offset.
+    row.cells.resize(max_width(), blank_cell());
     row.overflow = false;
 
     m_cursor.text_offset = text_start_position;
@@ -537,16 +537,14 @@ void Screen::delete_lines(u32 count) {
     }
 
     // Start by dropping the correct number of rows. We're clearing starting from
-    // the cursor row. If we supported bce we'd need to copy the
-    // background color.
-
+    // the cursor row.
     auto max_to_delete = di::min(count, m_scroll_region.end_row - m_cursor.row);
     auto delete_row_it = rows().begin() + m_cursor.row;
     auto delete_row_end = di::next(delete_row_it, max_to_delete, rows().end());
     for (auto it = delete_row_it; it != delete_row_end; ++it) {
         auto& row = *it;
         for (auto& cell : row.cells) {
-            m_active_rows.drop_cell(cell);
+            clear_cell(cell);
             cell.text_size = 0;
         }
         row.text.clear();
@@ -573,15 +571,9 @@ void Screen::delete_lines(u32 count) {
 void Screen::clear() {
     m_cursor.overflow_pending = false;
 
-    // NOTE: to properly implement "bce", we'd have to actually
-    // apply the current background color to all cells. For now, just
-    // delete everything. We may choose to never support bce properly
-    // like kitty, since it allows us to optimize clearing by fully
-    // deleting all cells.
-
     for (auto& row : rows()) {
         for (auto& cell : row.cells) {
-            m_active_rows.drop_cell(cell);
+            clear_cell(cell);
             cell.text_size = 0;
         }
         row.text.clear();
@@ -597,11 +589,10 @@ void Screen::clear_after_cursor() {
     clear_row_after_cursor();
     ASSERT(!m_cursor.overflow_pending);
 
-    // Now we just need to delete all lines below the cursor. As above, implementing
-    // "bce" would require more work.
+    // Now we just need to delete all lines below the cursor.
     for (auto& row : rows() | di::drop(m_cursor.row + 1)) {
         for (auto& cell : row.cells) {
-            m_active_rows.drop_cell(cell);
+            clear_cell(cell);
             cell.text_size = 0;
         }
         row.text.clear();
@@ -618,13 +609,12 @@ void Screen::clear_before_cursor() {
         return;
     }
 
-    // Now delete all lines before the cursor. As above, implementing
-    // "bce" would require more work. However, we don't actually delete
+    // Now delete all lines before the cursor. However, we don't actually delete
     // the rows here because rows are always assumed to start at the top
     // of the screen.
     for (auto& row : rows() | di::take(m_cursor.row)) {
         for (auto& cell : row.cells) {
-            m_active_rows.drop_cell(cell);
+            clear_cell(cell);
             cell.text_size = 0;
         }
         row.text.clear();
@@ -637,7 +627,7 @@ void Screen::clear_row() {
 
     auto& row = rows()[m_cursor.row];
     for (auto& cell : row.cells) {
-        m_active_rows.drop_cell(cell);
+        clear_cell(cell);
         cell.text_size = 0;
     }
     row.text.clear();
@@ -665,7 +655,7 @@ void Screen::clear_row_after_cursor() {
         }
     }
     for (auto& cell : row.cells | di::drop(deletion_point)) {
-        m_active_rows.drop_cell(cell);
+        clear_cell(cell);
         text_size_to_delete += cell.text_size;
         cell.text_size = 0;
     }
@@ -691,7 +681,7 @@ void Screen::clear_row_before_cursor() {
     }
     auto text_size_to_delete = 0zu;
     for (auto& cell : row.cells | di::take(deletion_end)) {
-        m_active_rows.drop_cell(cell);
+        clear_cell(cell);
         text_size_to_delete += cell.text_size;
         cell.text_size = 0;
     }
@@ -728,7 +718,7 @@ void Screen::erase_characters(u32 n) {
     }
     auto text_end_position = text_start_position;
     for (auto& cell : auto(*row.cells.subspan(deletion_point, deletion_end - deletion_point))) {
-        m_active_rows.drop_cell(cell);
+        clear_cell(cell);
         text_end_position += cell.text_size;
         cell.text_size = 0;
     }
@@ -758,7 +748,7 @@ void Screen::scroll_down() {
 
         // Insert the new row.
         auto row = m_active_rows.rows().emplace(m_active_rows.rows().iterator(m_scroll_region.end_row - 1));
-        row->cells.resize(max_width());
+        row->cells.resize(max_width(), blank_cell());
 
         if (was_at_bottom) {
             // Automatically scroll to the bottom if the screen isn't already scrolled.
@@ -772,7 +762,7 @@ void Screen::scroll_down() {
     } else {
         auto& row = *begin_row_iterator();
         for (auto& cell : row.cells) {
-            m_active_rows.drop_cell(cell);
+            clear_cell(cell);
             cell.text_size = 0;
         }
         row.text.clear();
@@ -1121,7 +1111,7 @@ void Screen::put_single_cell(di::StringView text, MultiCellInfo const& multi_cel
         }
         auto text_end_position = text_start_position;
         for (auto& cell : auto(*row.cells.subspan(deletion_point, deletion_end - deletion_point))) {
-            m_active_rows.drop_cell(cell);
+            clear_cell(cell);
             text_end_position += cell.text_size;
             cell.text_size = 0;
         }
@@ -1264,7 +1254,7 @@ void Screen::put_wide_cell(di::StringView text, MultiCellInfo const& multi_cell_
         }
         auto text_end_position = text_start_position;
         for (auto& cell : auto(*row.cells.subspan(deletion_point, deletion_end - deletion_point))) {
-            m_active_rows.drop_cell(cell);
+            clear_cell(cell);
             text_end_position += cell.text_size;
             cell.text_size = 0;
         }
@@ -1289,6 +1279,8 @@ void Screen::put_wide_cell(di::StringView text, MultiCellInfo const& multi_cell_
 
         // Apply the multi cell id to all components of the multi cell.
         for (auto& cell : auto(*row.cells.subspan(insertion_point + 1, width - 1))) {
+            cell.ids = {};
+            cell.background_only = false;
             cell.multi_cell_id = m_active_rows.use_multi_cell_id(multi_cell_id.value());
         }
 
@@ -1596,6 +1588,24 @@ void Screen::invalidate_region(Selection const& region) {
         for (auto const& cell : auto(*row_object.cells.subspan(iter_start_col, iter_end_col - iter_start_col + 1))) {
             cell.stale = false;
         }
+    }
+}
+
+auto Screen::blank_cell() -> Cell {
+    if (m_current_background_color.type == Color::Type::Default) {
+        return {};
+    }
+    return Cell {
+        .background_color = m_current_background_color,
+        .background_only = true,
+    };
+}
+
+void Screen::clear_cell(Cell& cell) {
+    m_active_rows.drop_cell(cell);
+    if (m_current_background_color.type != Color::Type::Default) {
+        cell.background_color = m_current_background_color;
+        cell.background_only = true;
     }
 }
 

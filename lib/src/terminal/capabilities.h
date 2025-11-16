@@ -27,8 +27,6 @@ constexpr auto ttx_capabilities = di::Array {
         .long_name = "Background character erase"_sv,
         .short_name = "bce"_tsv,
         .description = "Clearing the screens sets the background color, instead of resetting the cell fully"_sv,
-        // TODO: enable if we ever decide to implement bce
-        .enabled = false,
     },
     Capability {
         .long_name = "Modifiable palette"_sv,
@@ -93,8 +91,6 @@ constexpr auto ttx_capabilities = di::Array {
         .long_name = "Xterm extnesions"_sv,
         .short_name = "XT"_tsv,
         .description = "Supports various xterm extensions (tmux uses this to set some default capabilities)"_sv,
-        // TODO: enable if supporting bce
-        .enabled = false,
     },
     Capability {
         .long_name = "Kitty keyboard protocol"_sv,

@@ -6,6 +6,7 @@
 #include "scroll_region.h"
 #include "ttx/graphics_rendition.h"
 #include "ttx/size.h"
+#include "ttx/terminal/cell.h"
 #include "ttx/terminal/cursor.h"
 #include "ttx/terminal/escapes/osc_133.h"
 #include "ttx/terminal/escapes/osc_66.h"
@@ -222,6 +223,14 @@ private:
     auto rows() -> di::Ring<Row>& { return m_active_rows.rows(); }
     auto rows() const -> di::Ring<Row> const& { return m_active_rows.rows(); }
 
+    // Get a blank cell which respects to current background color, to support the
+    // bce (background character erase) capability.
+    auto blank_cell() -> Cell;
+
+    // Clear a cell respecting the correct background color. This is equivalent to
+    // dropping the cell followed by assigning the background color.
+    void clear_cell(Cell& cell);
+
     // Screen state.
     RowGroup m_active_rows;
     bool m_whole_screen_dirty { true };
@@ -239,6 +248,7 @@ private:
     Cursor m_cursor;
     OriginMode m_origin_mode { OriginMode::Disabled };
     u16 m_graphics_id { 0 };
+    Color m_current_background_color;
     u16 m_hyperlink_id { 0 };
 
     // Terminal size information.
