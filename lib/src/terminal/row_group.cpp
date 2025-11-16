@@ -36,6 +36,7 @@ auto RowGroup::reflow(u64 absolute_row_start, u32 target_width) -> ReflowResult 
             auto text_offset = 0_usize;
             auto [end, _] = di::find_last_if_not(row.cells, &Cell::is_empty);
             auto effective_width = row.cells.end() == end ? 0_usize : usize(end - row.cells.begin() + 1);
+            auto need_mapping = false;
 
             for (auto col = 0_u32; col < effective_width;) {
                 auto& cell = row.cells[col];
@@ -46,11 +47,20 @@ auto RowGroup::reflow(u64 absolute_row_start, u32 target_width) -> ReflowResult 
                     text_offset += cell.text_size;
                 });
 
-                // If the target width is smaller than the cell width we actually have to drop this cell.
+                // If the target width is smaller than the cell width we actually have to drop this cell. For this case
+                // we need a special mapping to signify the cells have been deleted.
                 if (width > target_width) {
+                    auto current_output_col = new_rows.back()
+                                                  .transform([](Row const& row) {
+                                                      return i32(row.cells.size());
+                                                  })
+                                                  .value_or(0);
+                    result.add_offset({ absolute_row_start + original_row_index, col }, compute_dr(),
+                                      current_output_col, true);
                     for (auto i = 0_u8; i < width; i++) {
                         drop_cell(row.cells[col + i]);
                     }
+                    need_mapping = true;
                     continue;
                 }
 
@@ -66,7 +76,11 @@ auto RowGroup::reflow(u64 absolute_row_start, u32 target_width) -> ReflowResult 
                     // we need an updated displacement.
                     result.add_offset({ absolute_row_start + original_row_index, 0 }, compute_dr(),
                                       i32(new_rows.back().value().cells.size()));
+                } else if (need_mapping) {
+                    result.add_offset({ absolute_row_start + original_row_index, col }, compute_dr(),
+                                      i32(new_rows.back().value().cells.size()) - i32(col));
                 }
+                need_mapping = false;
 
                 // Now we just need to append the current group of cells to the row we're building.
                 auto& new_row = new_rows.back().value();

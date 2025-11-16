@@ -5,21 +5,21 @@
 #include "ttx/terminal/absolute_position.h"
 
 namespace ttx::terminal {
-void ReflowResult::add_offset(AbsolutePosition position, i64 dr, i32 dc) {
+void ReflowResult::add_offset(AbsolutePosition position, i64 dr, i32 dc, bool absolute_column) {
     if (!m_ranges.empty()) {
         ASSERT_LT_EQ(m_ranges.back().value().position, position);
     }
 
     // As an optimization, we ignore redundant offsets.
-    auto [pdr, pdc] = m_ranges.back()
-                          .transform([](ReflowRange const& range) -> di::Tuple<i64, i32> {
-                              return { range.dr, range.dc };
-                          })
-                          .value_or({ 0, 0 });
-    if (dr == pdr && dc == pdc) {
+    auto [pdr, pdc, prev_absolute_column] = m_ranges.back()
+                                                .transform([](ReflowRange const& range) -> di::Tuple<i64, i32, bool> {
+                                                    return { range.dr, range.dc, range.absolute_column };
+                                                })
+                                                .value_or({ 0, 0, false });
+    if (dr == pdr && dc == pdc && absolute_column == prev_absolute_column) {
         return;
     }
-    m_ranges.push_back({ position, dr, dc });
+    m_ranges.push_back({ position, dr, dc, absolute_column });
 }
 
 void ReflowResult::merge(ReflowResult&& other) {
@@ -66,7 +66,7 @@ auto ReflowResult::map_position(AbsolutePosition position) const -> AbsolutePosi
     }
     return {
         position.row + it->dr,
-        position.col + it->dc,
+        it->absolute_column ? it->dc : position.col + it->dc,
     };
 }
 }

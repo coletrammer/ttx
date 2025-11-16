@@ -1,6 +1,7 @@
 #include "di/test/prelude.h"
 #include "dius/print.h"
 #include "ttx/graphics_rendition.h"
+#include "ttx/terminal/multi_cell_info.h"
 #include "ttx/terminal/reflow_result.h"
 #include "ttx/terminal/screen.h"
 #include "ttx/terminal/selection.h"
@@ -996,6 +997,38 @@ static void reflow_wide() {
                           u8"fgh猫.猫.k "_sv);
 }
 
+static void reflow_truncate() {
+    auto screen = Screen({ 1, 11 }, Screen::ScrollBackEnabled::Yes);
+    screen.put_code_point('x', AutoWrapMode::Enabled);
+    screen.put_code_point('x', AutoWrapMode::Enabled);
+    screen.put_code_point('x', AutoWrapMode::Enabled);
+    screen.put_code_point('a', AutoWrapMode::Enabled);
+    screen.put_code_point('b', AutoWrapMode::Enabled);
+    screen.put_osc66(
+        OSC66 {
+            .info =
+                MultiCellInfo {
+                    .width = 4,
+                },
+            .text = "X"_sv,
+        },
+        AutoWrapMode::Enabled);
+    screen.put_code_point('c', AutoWrapMode::Enabled);
+
+    auto result = screen.resize({ 2, 3 });
+    auto expected = ReflowResult();
+    expected.add_offset({ 0, 3 }, 1, -3);
+    expected.add_offset({ 0, 5 }, 1, 2, true);
+    expected.add_offset({ 0, 9 }, 1, -7);
+    expected.add_offset({ 1, 0 }, 1, 0);
+    ASSERT_EQ(result, expected);
+    ASSERT_EQ(screen.cursor().row, 1);
+    ASSERT_EQ(screen.cursor().col, 2);
+
+    validate_text(screen, "xxx\n"
+                          "abc"_sv);
+}
+
 TEST(screen, put_text_basic)
 TEST(screen, put_text_unicode)
 TEST(screen, put_text_wide)
@@ -1018,4 +1051,5 @@ TEST(screen, vertical_scroll_region_autowrap)
 TEST(screen, save_restore_cursor)
 TEST(screen, reflow_basic)
 TEST(screen, reflow_wide)
+TEST(screen, reflow_truncate)
 }
