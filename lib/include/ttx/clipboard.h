@@ -60,6 +60,8 @@ public:
     [[nodiscard]] auto get_replies(dius::SteadyClock::TimePoint reception = dius::SteadyClock::now())
         -> di::Vector<Reply>;
 
+    [[nodiscard]] auto mode() const { return m_mode; }
+
 private:
     void expire(dius::SteadyClock::TimePoint reception);
 

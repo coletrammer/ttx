@@ -2,6 +2,7 @@
 
 #include "di/container/string/string_view.h"
 #include "dius/sync_file.h"
+#include "ttx/clipboard.h"
 #include "ttx/cursor_style.h"
 #include "ttx/features.h"
 #include "ttx/graphics_rendition.h"
@@ -26,7 +27,7 @@ public:
         : m_current_screen({ 24, 80 }, terminal::Screen::ScrollBackEnabled::No)
         , m_desired_screen({ 24, 80 }, terminal::Screen::ScrollBackEnabled::No) {}
 
-    auto setup(dius::SyncFile& output, Feature features) -> di::Result<>;
+    auto setup(dius::SyncFile& output, Feature features, ClipboardMode clipboard_mode) -> di::Result<>;
     auto cleanup(dius::SyncFile& output) -> di::Result<>;
 
     void start(Size const& size);

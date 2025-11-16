@@ -10,6 +10,7 @@
 #include "dius/unicode/grapheme_cluster.h"
 #include "dius/unicode/name.h"
 #include "dius/unicode/width.h"
+#include "ttx/clipboard.h"
 #include "ttx/features.h"
 #include "ttx/graphics_rendition.h"
 #include "ttx/params.h"
@@ -22,7 +23,7 @@
 #include "ttx/terminal/screen.h"
 
 namespace ttx {
-auto Renderer::setup(dius::SyncFile& output, Feature features) -> di::Result<> {
+auto Renderer::setup(dius::SyncFile& output, Feature features, ClipboardMode clipboard_mode) -> di::Result<> {
     m_cleanup = {};
     m_features = features;
 
@@ -68,8 +69,8 @@ auto Renderer::setup(dius::SyncFile& output, Feature features) -> di::Result<> {
     }
 
     // Setup - requests clipboard to initialize state and determine if the host terminal
-    // supports OSC 52. This is gated by the feature flag.
-    if (!!(features & Feature::Clipboard)) {
+    // supports OSC 52. This is gated by the feature flag and clipboard configuration.
+    if (!!(features & Feature::Clipboard) && clipboard_mode == ClipboardMode::System) {
         auto osc52 = terminal::OSC52 {};
         osc52.query = true;
         (void) osc52.selections.push_back(terminal::SelectionType::Clipboard);

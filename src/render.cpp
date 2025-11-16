@@ -187,7 +187,7 @@ void RenderThread::render_thread() {
 
         // Do terminal setup if requested.
         if (do_setup) {
-            (void) renderer.setup(dius::stdin, m_features);
+            (void) renderer.setup(dius::stdin, m_features, m_clipboard.mode());
             do_setup = false;
         }
 
