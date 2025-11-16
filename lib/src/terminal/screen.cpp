@@ -885,8 +885,9 @@ void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
                     m_active_rows.drop_hyperlink_id(m_hyperlink_id);
                     m_hyperlink_id = hyperlink_save;
                 });
-                m_graphics_id = di::exchange(primary_cell.graphics_rendition_id, 0);
-                m_hyperlink_id = di::exchange(primary_cell.hyperlink_id, 0);
+                ASSERT(primary_cell.has_ids());
+                m_graphics_id = di::exchange(primary_cell.ids.graphics_rendition_id, 0);
+                m_hyperlink_id = di::exchange(primary_cell.ids.hyperlink_id, 0);
 
                 auto info = m_active_rows.multi_cell_info(primary_cell.multi_cell_id);
                 info.width = 2;
@@ -1087,7 +1088,7 @@ void Screen::put_single_cell(di::StringView text, MultiCellInfo const& multi_cel
     auto insertion_point = m_cursor.col;
     auto text_start_position = m_cursor.text_offset;
     auto& cell = row.cells[insertion_point];
-    if (cell.graphics_rendition_id == m_graphics_id && cell.hyperlink_id == m_hyperlink_id &&
+    if (cell.has_ids() && cell.ids.graphics_rendition_id == m_graphics_id && cell.ids.hyperlink_id == m_hyperlink_id &&
         cell.multi_cell_id == multi_cell_id) {
         // Since everything else matches, we only need to update potentially the text.
         auto text_start = row.text.iterator_at_offset(m_cursor.text_offset);
@@ -1127,10 +1128,14 @@ void Screen::put_single_cell(di::StringView text, MultiCellInfo const& multi_cel
 
         // Modify the cell with the new attributes, starting by clearing the old attributes.
         if (m_graphics_id) {
-            cell.graphics_rendition_id = m_active_rows.use_graphics_id(m_graphics_id);
+            cell.ids.graphics_rendition_id = m_active_rows.use_graphics_id(m_graphics_id);
+        } else {
+            cell.ids.graphics_rendition_id = 0;
         }
         if (m_hyperlink_id) {
-            cell.hyperlink_id = m_active_rows.use_hyperlink_id(m_hyperlink_id);
+            cell.ids.hyperlink_id = m_active_rows.use_hyperlink_id(m_hyperlink_id);
+        } else {
+            cell.ids.hyperlink_id = 0;
         }
 
         // No need to bump reference because allocation already gave us a reference.
@@ -1138,6 +1143,7 @@ void Screen::put_single_cell(di::StringView text, MultiCellInfo const& multi_cel
         cell.multi_cell_id = multi_cell_id.value();
         cell.explicitly_sized = explicitly_sized;
         cell.complex_grapheme_cluster = complex_grapheme_cluster;
+        cell.background_only = false;
         cell.stale = false;
 
         // Insert the text. We can safely assert the iterator is valid because we compute the text offset in all cases
@@ -1222,7 +1228,8 @@ void Screen::put_wide_cell(di::StringView text, MultiCellInfo const& multi_cell_
     // Fast path: check for redundant updates. This means we're putting the same text into a cell.
     auto& primary_cell = row.cells[insertion_point];
     if (primary_cell.is_primary_in_multi_cell() && primary_cell.multi_cell_id == multi_cell_id.value() &&
-        primary_cell.graphics_rendition_id == m_graphics_id && primary_cell.hyperlink_id == m_hyperlink_id) {
+        primary_cell.has_ids() && primary_cell.ids.graphics_rendition_id == m_graphics_id &&
+        primary_cell.ids.hyperlink_id == m_hyperlink_id) {
         // Since everything else matches, we only need to update potentially the text.
         auto text_start = row.text.iterator_at_offset(m_cursor.text_offset);
         auto text_end = row.text.iterator_at_offset(m_cursor.text_offset + primary_cell.text_size);
@@ -1267,12 +1274,17 @@ void Screen::put_wide_cell(di::StringView text, MultiCellInfo const& multi_cell_
         primary_cell.multi_cell_id = multi_cell_id.value();
         primary_cell.explicitly_sized = explicitly_sized;
         primary_cell.complex_grapheme_cluster = complex_grapheme_cluster;
+        primary_cell.background_only = false;
         primary_cell.stale = false;
         if (m_graphics_id) {
-            primary_cell.graphics_rendition_id = m_active_rows.use_graphics_id(m_graphics_id);
+            primary_cell.ids.graphics_rendition_id = m_active_rows.use_graphics_id(m_graphics_id);
+        } else {
+            primary_cell.ids.graphics_rendition_id = 0;
         }
         if (m_hyperlink_id) {
-            primary_cell.hyperlink_id = m_active_rows.use_hyperlink_id(m_hyperlink_id);
+            primary_cell.ids.hyperlink_id = m_active_rows.use_hyperlink_id(m_hyperlink_id);
+        } else {
+            primary_cell.ids.hyperlink_id = 0;
         }
 
         // Apply the multi cell id to all components of the multi cell.

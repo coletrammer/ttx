@@ -10,7 +10,7 @@
 
 namespace ttx {
 struct Color {
-    enum class Type {
+    enum class Type : u8 {
         Default, ///< Color is the default (unset SGR)
         Palette, ///< Color is a palette color (256 colors are available)
         Custom,  ///< Color is true color (r, b, g fully specified)

@@ -162,10 +162,15 @@ void RowGroup::drop_multi_cell_id(u16& id) {
 
 void RowGroup::drop_cell(Cell& cell) {
     auto was_empty = cell.is_empty();
-    drop_graphics_id(cell.graphics_rendition_id);
-    drop_hyperlink_id(cell.hyperlink_id);
+    if (cell.has_ids()) {
+        drop_graphics_id(cell.ids.graphics_rendition_id);
+        drop_hyperlink_id(cell.ids.hyperlink_id);
+    } else {
+        cell.ids = {};
+    }
     drop_multi_cell_id(cell.multi_cell_id);
 
+    cell.background_only = false;
     cell.left_boundary_of_multicell = false;
     cell.explicitly_sized = false;
     cell.complex_grapheme_cluster = false;
@@ -244,14 +249,16 @@ auto RowGroup::transfer_from(RowGroup& from, usize from_index, usize to_index, u
             auto& [from_cell, to_cell] = cells;
             if (i < cols_to_take) {
                 to_cell = from_cell;
-                if (from_cell.graphics_rendition_id) {
-                    to_cell.graphics_rendition_id =
-                        to.maybe_allocate_graphics_id(from.graphics_rendition(from_cell.graphics_rendition_id))
-                            .value_or(0);
-                }
-                if (from_cell.hyperlink_id) {
-                    to_cell.hyperlink_id =
-                        to.maybe_allocate_hyperlink_id(from.hyperlink(from_cell.hyperlink_id)).value_or(0);
+                if (from_cell.has_ids()) {
+                    if (from_cell.ids.graphics_rendition_id) {
+                        to_cell.ids.graphics_rendition_id =
+                            to.maybe_allocate_graphics_id(from.graphics_rendition(from_cell.ids.graphics_rendition_id))
+                                .value_or(0);
+                    }
+                    if (from_cell.ids.hyperlink_id) {
+                        to_cell.ids.hyperlink_id =
+                            to.maybe_allocate_hyperlink_id(from.hyperlink(from_cell.ids.hyperlink_id)).value_or(0);
+                    }
                 }
                 if (from_cell.multi_cell_id) {
                     to_cell.multi_cell_id =

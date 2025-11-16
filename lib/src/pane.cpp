@@ -301,6 +301,9 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
                         auto selected = !text.empty() && screen.in_selection({ r + screen.visual_scroll_offset(),
                                                                                c - m_horizontal_scroll_offset });
                         auto gfx = graphics;
+                        if (cell.background_only) {
+                            gfx.bg = cell.background_color;
+                        }
                         if (terminal.reverse_video()) {
                             gfx.inverted = !gfx.inverted;
                         }
