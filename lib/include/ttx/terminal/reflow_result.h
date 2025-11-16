@@ -25,12 +25,14 @@ private:
         AbsolutePosition position;
         i64 dr = 0;
         i32 dc = 0;
+        bool absolute_column { false };
 
         auto operator==(ReflowRange const&) const -> bool = default;
 
         constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<ReflowRange>) {
             return di::make_fields<"ReflowRange">(di::field<"position", &ReflowRange::position>,
-                                                  di::field<"dr", &ReflowRange::dr>, di::field<"dc", &ReflowRange::dc>);
+                                                  di::field<"dr", &ReflowRange::dr>, di::field<"dc", &ReflowRange::dc>,
+                                                  di::field<"absolute_column", &ReflowRange::absolute_column>);
         }
     };
 
@@ -39,7 +41,7 @@ public:
     ///
     /// @warning The offsets must be provided sequentially with respect to the provied
     /// position. This is asserted by the implementation.
-    void add_offset(AbsolutePosition position, i64 dr, i32 dc);
+    void add_offset(AbsolutePosition position, i64 dr, i32 dc, bool absolute_column = false);
 
     /// @brief Merge another reflow result with this one.
     ///
