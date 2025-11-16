@@ -640,8 +640,11 @@ auto key_event_from_csi(CSI const& csi) -> di::Optional<KeyEvent> {
         type = KeyEventType::Press;
     }
 
+    // When parsing text from the event, don't do it for Release events. iTerm2 includes
+    // text on release events but in our system text events shouldn't apply. When we receive
+    // text we forward it to the application which meant doubling every key press.
     auto text = di::String {};
-    if (!params.subparams(2).empty()) {
+    if (!params.subparams(2).empty() && type != KeyEventType::Release) {
         auto subparams = params.subparams(2);
         for (auto i : di::range(subparams.size())) {
             text.push_back(c32(subparams.get(i)));

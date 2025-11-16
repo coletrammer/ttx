@@ -202,6 +202,10 @@ static void parse() {
         Case { CSI({}, { { 97, 65, 99 }, { 2 }, { 65 } }, 'u'),
                KeyEvent::key_down(Key::A, "A"_s, Modifiers::Shift, 65, 99) },
 
+        // Release with text (should be stripped)
+        Case { CSI({}, { { 97, 65, 99 }, { 2, 3 }, { 65 } }, 'u'),
+               KeyEvent(KeyEventType::Release, Key::A, ""_s, Modifiers::Shift, 65, 99) },
+
         // Errors
         Case {},
         Case { CSI({}, {}, 'Y') },
