@@ -21,13 +21,14 @@ namespace ttx::terminal {
 /// buffer is specified by the total number of cells allowed, which
 /// is used to determine the number of chunks.
 class ScrollBack {
-    // TODO: optimize!
-    constexpr static auto cells_per_group = usize(di::NumericLimits<u16>::max / 2);
+    constexpr static auto target_cells_per_group = usize(di::NumericLimits<u16>::max / 2);
+
+    constexpr static auto max_cells_per_group = usize(di::NumericLimits<u16>::max);
 
     // TODO: make this configurable.
-    constexpr static auto max_cells = usize(cells_per_group * 100);
+    constexpr static auto max_cells = usize(target_cells_per_group * 100);
 
-    constexpr static auto max_groups = di::divide_round_up(max_cells, cells_per_group);
+    constexpr static auto max_groups = di::divide_round_up(max_cells, target_cells_per_group);
 
     struct Group {
         RowGroup group;
@@ -99,6 +100,13 @@ public:
     auto find_row(u64 row) const -> di::Tuple<u32, RowGroup const&>;
 
 private:
+    auto get_target_cells_per_group(bool last_row_overflow) const {
+        // We use a larger threshold when the last row in the group has overflow set.
+        // This is done to try and only break row groups on boundaries which preserve
+        // logical rows.
+        return last_row_overflow ? max_cells_per_group : target_cells_per_group;
+    }
+
     auto find_row_group(u64 row) -> di::Tuple<u32, u64, Group&>;
     auto is_last_group_full() const -> bool;
     auto add_group() -> Group&;

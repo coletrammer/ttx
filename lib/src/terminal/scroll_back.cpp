@@ -16,11 +16,15 @@ void ScrollBack::add_rows(RowGroup& from, usize row_index, usize row_count) {
         auto& to = m_groups.back().value();
         auto rows_to_take = 0_usize;
         auto cells_to_take = 0_usize;
-        while (rows_to_take < row_count && to.cell_count + cells_to_take < cells_per_group) {
+        auto prev_row_overflow = m_groups.back().value().group.rows().back().transform(&Row::overflow).value_or(false);
+        while (rows_to_take < row_count &&
+               to.cell_count + cells_to_take < get_target_cells_per_group(prev_row_overflow)) {
             // Strip empty cells from the end of the row.
             auto cells = from.strip_trailing_empty_cells(row_index + rows_to_take);
             cells_to_take += cells;
             rows_to_take++;
+
+            prev_row_overflow = from.rows()[row_index + rows_to_take].overflow;
         }
 
         auto cells_taken = to.group.transfer_from(from, row_index, to.group.total_rows(), rows_to_take);
@@ -142,7 +146,10 @@ auto ScrollBack::is_last_group_full() const -> bool {
     if (m_groups.empty()) {
         return true;
     }
-    return m_groups.back().value().cell_count >= cells_per_group;
+
+    auto const& group = m_groups.back().value();
+    auto row_overflow = group.group.rows().back().transform(&Row::overflow).value_or(false);
+    return group.cell_count >= get_target_cells_per_group(row_overflow);
 }
 
 auto ScrollBack::add_group() -> Group& {
