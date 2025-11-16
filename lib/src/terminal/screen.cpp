@@ -1659,6 +1659,7 @@ auto Screen::find_row(u64 row) const -> di::Tuple<u32, RowGroup const&> {
     return m_scroll_back.find_row(row);
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 auto Screen::state_as_escape_sequences() const -> di::String {
     auto writer = di::VectorWriter<> {};
 
@@ -1688,6 +1689,28 @@ auto Screen::state_as_escape_sequences() const -> di::String {
     // 3. Screen contents
     auto prev_sgr = GraphicsRendition();
     auto prev_hyperlink = di::Optional<Hyperlink const&> {};
+    auto semantic_prompts = di::TreeMap<AbsolutePosition, di::Vector<OSC133>> {};
+    for (auto const& command : m_commands.commands()) {
+        semantic_prompts[command.prompt_start].emplace_back(BeginPrompt {
+            .application_id = command.application_id.clone(),
+            .click_mode = command.prompt_click_mode,
+            .kind = command.prompt_kind,
+            .redraw = command.prompt_redraw,
+        });
+        if (command.prompt_end != AbsolutePosition()) {
+            semantic_prompts[command.prompt_end].emplace_back(EndPrompt {});
+        }
+        if (command.output_start != AbsolutePosition()) {
+            semantic_prompts[command.output_start].emplace_back(EndInput {});
+        }
+        if (command.output_end != AbsolutePosition()) {
+            // NOTE: we don't currently store the string error code or exit code, so leave it off.
+            semantic_prompts[command.output_end].emplace_back(EndCommand {
+                .application_id = command.application_id.clone(),
+                .exit_code = command.failed ? 1_u32 : 0_u32,
+            });
+        }
+    }
     for (auto r : di::range(absolute_row_start(), absolute_row_end())) {
         // Once we get to the screen buffer, force the screen to fully scroll.
         if (r == absolute_row_screen_start()) {
@@ -1697,8 +1720,8 @@ auto Screen::state_as_escape_sequences() const -> di::String {
             di::writer_print<di::String::Encoding>(writer, "\033[H"_sv);
         }
 
-        auto [row, group] = find_row(r);
-        for (auto row : group.iterate_row(row)) {
+        auto [row_index, group] = find_row(r);
+        for (auto row : group.iterate_row(row_index)) {
             auto [c, cell, text, gfx, hyperlink, multi_cell_info] = row;
 
             // If we're at the cursor, and overflow isn't pending, then save the cursor now.
@@ -1706,6 +1729,13 @@ auto Screen::state_as_escape_sequences() const -> di::String {
                              c == m_cursor.col;
             if (at_cursor && (text.empty() || !m_cursor.overflow_pending)) {
                 di::writer_print<di::String::Encoding>(writer, "\0337"_sv);
+            }
+
+            // If we're at a semantic prompt, emit it.
+            if (auto it = semantic_prompts.find({ row_index, c }); it != semantic_prompts.end()) {
+                for (auto const& osc133 : di::get<1>(*it)) {
+                    di::writer_print<di::String::Encoding>(writer, "{}"_sv, osc133.serialize());
+                }
             }
 
             // Ignore rendering non-primary multi cells.
@@ -1751,7 +1781,7 @@ auto Screen::state_as_escape_sequences() const -> di::String {
         }
 
         // If the row hasn't overflowed, go to the next line. This doesn't apply for the last line.
-        auto const& row_object = group.rows()[row];
+        auto const& row_object = group.rows()[row_index];
         if (!row_object.overflow && r != absolute_row_end() - 1) {
             di::writer_print<di::String::Encoding>(writer, "\r\n"_sv);
         }

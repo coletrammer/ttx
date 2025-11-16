@@ -1,6 +1,7 @@
 #pragma once
 
 #include "di/container/ring/prelude.h"
+#include "di/container/tree/tree_map.h"
 #include "di/reflect/prelude.h"
 #include "ttx/terminal/absolute_position.h"
 #include "ttx/terminal/cursor.h"
@@ -99,6 +100,8 @@ public:
     auto first_command_after(u64 absolute_row) const -> di::Optional<Command const&>;
 
     void apply_reflow_result(ReflowResult const& reflow_result);
+
+    auto commands() const -> di::Ring<Command> const& { return m_commands; }
 
     constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<Commands>) {
         return di::make_fields<"Commands">(di::field<"commands", &Commands::m_commands>);
