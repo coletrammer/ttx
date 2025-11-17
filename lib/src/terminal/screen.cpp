@@ -169,6 +169,14 @@ auto Screen::resize(Size const& size) -> ReflowResult {
     } else if (rows().size() < size.rows) {
         if (m_scroll_back_enabled == ScrollBackEnabled::Yes) {
             // When taking rows from the scroll back, we also need to move the cursor down to accomdate the new rows.
+            // We also must reflow the lines in the scrollback buffer.
+            auto visual_rows_available = di::min(m_scroll_back.total_rows(), size.rows - rows().size());
+            auto scroll_back_reflow_result = m_scroll_back.reflow_visual_rows(
+                absolute_row_screen_start() - visual_rows_available, visual_rows_available, size.cols);
+            if (scroll_back_reflow_result) {
+                apply_reflow_result(scroll_back_reflow_result.value());
+                reflow_result.merge(di::move(scroll_back_reflow_result).value());
+            }
             auto rows_to_take = di::min(m_scroll_back.total_rows(), size.rows - rows().size());
             m_scroll_back.take_rows(m_active_rows, size.cols, 0, rows_to_take);
             m_cursor.row += rows_to_take;
