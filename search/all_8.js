@@ -1,0 +1,26 @@
+var searchData=
+[
+  ['h_0',['H',['../namespacettx.html#a7cf06cab699a7eba09888ab790619c43ac1d9f50f86825a1a2302ec2449c17196',1,'ttx']]],
+  ['handle_5fevent_1',['handle_event',['../classttx_1_1FeatureDetector.html#a2291834a0a19a046f5aafab4133197e7',1,'ttx::FeatureDetector::handle_event(KeyEvent const &amp;)'],['../classttx_1_1FeatureDetector.html#ae19382a4ad38a1fdcb85bfd68aacfd64',1,'ttx::FeatureDetector::handle_event(MouseEvent const &amp;)'],['../classttx_1_1FeatureDetector.html#a0b1d3eec92159bbaed70ac2b328e88b9',1,'ttx::FeatureDetector::handle_event(FocusEvent const &amp;)'],['../classttx_1_1FeatureDetector.html#a1b37b8945e74236dac5e3f3f2c69aaa5',1,'ttx::FeatureDetector::handle_event(PasteEvent const &amp;)'],['../classttx_1_1FeatureDetector.html#a93e5a8702a6dd8afe7c511c71a0d3767',1,'ttx::FeatureDetector::handle_event(terminal::PrimaryDeviceAttributes const &amp;)'],['../classttx_1_1FeatureDetector.html#a8adfcb38c504947356f7bdb6ee21500c',1,'ttx::FeatureDetector::handle_event(terminal::ModeQueryReply const &amp;reply)'],['../classttx_1_1FeatureDetector.html#afbe48e07e680c04143edf9a250381534',1,'ttx::FeatureDetector::handle_event(terminal::CursorPositionReport const &amp;report)'],['../classttx_1_1FeatureDetector.html#a1d786f7f7949149cc0649e9d5c6515c9',1,'ttx::FeatureDetector::handle_event(terminal::KittyKeyReport const &amp;)'],['../classttx_1_1FeatureDetector.html#a70a627b68d9bba9ac301ac339c24ce76',1,'ttx::FeatureDetector::handle_event(terminal::StatusStringResponse const &amp;response)'],['../classttx_1_1FeatureDetector.html#a6bfa812596efea213dc6c5a8dfbf2037',1,'ttx::FeatureDetector::handle_event(terminal::TerminfoString const &amp;response)'],['../classttx_1_1FeatureDetector.html#ad7f9236d732a1244ad31a778be7f5bab',1,'ttx::FeatureDetector::handle_event(terminal::OSC52 const &amp;)']]],
+  ['has_5fids_2',['has_ids',['../structttx_1_1terminal_1_1Cell.html#a3c9d7a7a59790e67340e9f2d8ca83c65',1,'ttx::terminal::Cell']]],
+  ['has_5fvalue_3',['has_value',['../classttx_1_1Param.html#a528e912914cc495f821b6b7e1f3dbb56',1,'ttx::Param']]],
+  ['height_4',['height',['../structttx_1_1PopupLayout.html#ac262dcf39bbfae6193e5a29bfa5c76c1',1,'ttx::PopupLayout']]],
+  ['hex_5',['hex',['../structttx_1_1terminal_1_1TerminfoString.html#ae74c2acba46e52e5572f010642cb2720',1,'ttx::terminal::TerminfoString']]],
+  ['hidden_6',['hidden',['../structttx_1_1RenderedCursor.html#a2d12048a7f83dd8049d8da8347692d11',1,'ttx::RenderedCursor']]],
+  ['hit_5ftest_7',['hit_test',['../structttx_1_1LayoutNode.html#a7ccac22130edab69ee72ce80be022f09',1,'ttx::LayoutNode']]],
+  ['hit_5ftest_5fhorizontal_5fline_8',['hit_test_horizontal_line',['../structttx_1_1LayoutNode.html#a07a6ddcf03b52fded692ac5f79b5c746',1,'ttx::LayoutNode']]],
+  ['hit_5ftest_5fvertical_5fline_9',['hit_test_vertical_line',['../structttx_1_1LayoutNode.html#a740b9c85a5e07287f556adeefd751a45',1,'ttx::LayoutNode']]],
+  ['home_10',['Home',['../namespacettx.html#a7cf06cab699a7eba09888ab790619c43a8cf04a9734132302f96da8e113e80ce5',1,'ttx']]],
+  ['home_20manager_20recommended_11',['Install Using Home Manager (recommended)',['../md_docs_2pages_2install.html#autotoc_md42',1,'']]],
+  ['hooks_12',['hooks',['../structttx_1_1CreatePaneArgs.html#a4c4c2f52a7a18c2fe42416afe03c136b',1,'ttx::CreatePaneArgs']]],
+  ['horizontal_13',['Horizontal',['../namespacettx.html#a6dfba231a5b2317c3ebd163a6a48f39dac1b5fa03ecdb95d4a45dd1c40b02527f',1,'ttx']]],
+  ['horizontal_5falignment_14',['horizontal_alignment',['../structttx_1_1terminal_1_1MultiCellInfo.html#a4a6d30c5e647fd878cd7eab479e5c3d9',1,'ttx::terminal::MultiCellInfo']]],
+  ['horizontalmargins_15',['HorizontalMargins',['../namespacettx_1_1terminal.html#a3478ddc5fa1cf8b4cb0e6896168b97fea597bdca5f586051fb6972f9074116da6',1,'ttx::terminal']]],
+  ['horizontalscrollbuttons_16',['HorizontalScrollButtons',['../namespacettx.html#a27aca4a20ffadfe81ad11dbd3cb30ec7a267204752583acb6d00ccb5b18357058',1,'ttx']]],
+  ['hostname_17',['hostname',['../structttx_1_1terminal_1_1OSC7.html#a7bb7eaf1f1cb8f786a9c5c6d1f378133',1,'ttx::terminal::OSC7']]],
+  ['hyper_18',['Hyper',['../namespacettx.html#a42d1fde674a9815cca2c9552ca9bbbb6a2b7074e8ec6efcee895356f6b68c07c3',1,'ttx']]],
+  ['hyperlink_19',['Hyperlink',['../structttx_1_1terminal_1_1Hyperlink.html',1,'ttx::terminal']]],
+  ['hyperlink_20',['hyperlink',['../structttx_1_1Change.html#a140aa9fd32d21e8782ca5407ca84171f',1,'ttx::Change::hyperlink'],['../classttx_1_1terminal_1_1RowGroup.html#a58b8fe433399f5dc5cccbb985b5c415d',1,'ttx::terminal::RowGroup::hyperlink()']]],
+  ['hyperlink_2eh_21',['hyperlink.h',['../hyperlink_8h.html',1,'']]],
+  ['hyperlink_5fid_22',['hyperlink_id',['../structttx_1_1terminal_1_1Cell_1_1Ids.html#a9123de5a791ed49a8acf1397967f8f62',1,'ttx::terminal::Cell::Ids::hyperlink_id'],['../structttx_1_1terminal_1_1Cell.html#ae14d7f202f4aeba379d50b6031eda290',1,'ttx::terminal::Cell::hyperlink_id()'],['../classttx_1_1terminal_1_1RowGroup.html#a188242839b75c9fbd67abde25a0d4b16',1,'ttx::terminal::RowGroup::hyperlink_id()']]]
+];
