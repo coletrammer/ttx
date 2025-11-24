@@ -17,7 +17,7 @@ jobs:
         preset: [ci-coverage, ci-sanitize, ci-ubuntu-clang]
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: Install nix
         uses: cachix/install-nix-action@v31
         with:
@@ -33,7 +33,7 @@ jobs:
           echo "dius_rev=$rev" >> "$GITHUB_ENV"
         if: matrix.preset == 'ci-sanitize' || matrix.preset == 'ci-ubuntu-clang'
       - name: Override the dius checkout to non nix
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: coletrammer/dius
           ref: ${{ env.dius_rev }}
