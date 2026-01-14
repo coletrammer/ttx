@@ -1,0 +1,21 @@
+var searchData=
+[
+  ['g_0',['G',['../namespacettx.html#a7cf06cab699a7eba09888ab790619c43adfcf28d0734569a6a693bc8194de62bf',1,'ttx']]],
+  ['g_1',['g',['../structttx_1_1Color.html#a8c2dc639a0cee1f17e5567bf83a64ac5',1,'ttx::Color']]],
+  ['get_2',['get',['../classttx_1_1Subparams.html#a6b8d30430f8db6b6d907234cefc35a9a',1,'ttx::Subparams::get()'],['../classttx_1_1Params.html#a144e2a7cb25bead5b22308b8d5167a94',1,'ttx::Params::get()']]],
+  ['get_5freplies_3',['get_replies',['../classttx_1_1Clipboard.html#aa7b7a6a5d445d76afb102b3b85ceeccf',1,'ttx::Clipboard']]],
+  ['get_5fsubparam_4',['get_subparam',['../classttx_1_1Params.html#aa26331c45933c9a5a8ba931a892b8deb',1,'ttx::Params']]],
+  ['get_5fttx_5fterminfo_5',['get_ttx_terminfo',['../namespacettx_1_1terminal.html#a0d22d1958e337cd63b3bd179319ecf50',1,'ttx::terminal']]],
+  ['getrelativesize_6',['GetRelativeSize',['../structttx_1_1GetRelativeSize.html',1,'ttx']]],
+  ['got_5fclipboard_5fresponse_7',['got_clipboard_response',['../classttx_1_1Clipboard.html#a9d1cc3f68461b6bc779779b651fb178b',1,'ttx::Clipboard']]],
+  ['graphemeclustering_8',['GraphemeClustering',['../namespacettx_1_1terminal.html#a3478ddc5fa1cf8b4cb0e6896168b97feabcc21e85b9e1f259d76ecc27a10d1cc7',1,'ttx::terminal']]],
+  ['graphemeclusteringmode_9',['GraphemeClusteringMode',['../namespacettx.html#aca19f8b7700f94ca55ae583e46e693bea24811d8a92b7df538056e15de386d8f3',1,'ttx']]],
+  ['graphics_5fid_10',['graphics_id',['../classttx_1_1terminal_1_1RowGroup.html#a9d6bf8694ea9a086823f68c65f93835b',1,'ttx::terminal::RowGroup']]],
+  ['graphics_5frendition_11',['graphics_rendition',['../structttx_1_1terminal_1_1SavedCursor.html#ad86411c16c1b53708bbd46aa829873e7',1,'ttx::terminal::SavedCursor::graphics_rendition'],['../structttx_1_1Change.html#abcb91e184319f90420952e8e19ef0484',1,'ttx::Change::graphics_rendition'],['../classttx_1_1terminal_1_1RowGroup.html#a6528b62992e1486caf3fa4e99cecce30',1,'ttx::terminal::RowGroup::graphics_rendition()']]],
+  ['graphics_5frendition_2ecpp_12',['graphics_rendition.cpp',['../graphics__rendition_8cpp.html',1,'']]],
+  ['graphics_5frendition_2eh_13',['graphics_rendition.h',['../graphics__rendition_8h.html',1,'']]],
+  ['graphics_5frendition_5fid_14',['graphics_rendition_id',['../structttx_1_1terminal_1_1Cell_1_1Ids.html#ab8408574291f2aa6621f298bb486d626',1,'ttx::terminal::Cell::Ids::graphics_rendition_id'],['../structttx_1_1terminal_1_1Cell.html#adfb2bf287f8eec9c247d74e4f3ff910c',1,'ttx::terminal::Cell::graphics_rendition_id()']]],
+  ['graphicsrendition_15',['GraphicsRendition',['../structttx_1_1GraphicsRendition.html',1,'ttx']]],
+  ['green_16',['Green',['../structttx_1_1Color.html#a26637cd1d9acf5fe437bbe54f4a9dd20aed4dfef97466e1b2b979b44d54823104',1,'ttx::Color']]],
+  ['group_17',['group',['../structttx_1_1LayoutNode.html#a117b31e824107d0a347e93ac427bdfa5',1,'ttx::LayoutNode']]]
+];
