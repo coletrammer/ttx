@@ -1460,7 +1460,11 @@ auto Screen::clamp_selection_point(AbsolutePosition const& point) const
     adjusted_point.row = di::clamp(point.row, absolute_row_start(), absolute_row_end() - 1);
     auto [row_index, row_group] = find_row(adjusted_point.row);
     auto const& row = row_group.rows()[row_index];
-    adjusted_point.col = di::clamp(point.col, 0_u32, u32(row.cells.size() - 1));
+    if (row.cells.empty()) {
+        adjusted_point.col = 0;
+    } else {
+        adjusted_point.col = di::clamp(point.col, 0_u32, u32(row.cells.size() - 1));
+    }
 
     // Adjust the selection point to be at the start of any potential multicell.
     while (adjusted_point.col > 0 && row.cells[adjusted_point.col].is_nonprimary_in_multi_cell()) {
@@ -1474,6 +1478,10 @@ void Screen::begin_selection(AbsolutePosition const& point, BeginSelectionMode m
 
     auto [adjusted_point, row_group, row_index] = clamp_selection_point(point);
     auto const& row = row_group.rows()[row_index];
+    if (row.cells.empty()) {
+        m_selection = { adjusted_point, adjusted_point };
+        return;
+    }
     switch (mode) {
         case BeginSelectionMode::Single: {
             m_selection = { adjusted_point, adjusted_point };
@@ -1528,7 +1536,6 @@ void Screen::begin_selection(AbsolutePosition const& point, BeginSelectionMode m
 
 void Screen::update_selection(AbsolutePosition const& point) {
     auto [adjusted_point, row_group, row_index] = clamp_selection_point(point);
-    // auto const& row = row_group.rows()[row_index];
     if (!m_selection) {
         begin_selection(adjusted_point, BeginSelectionMode::Single);
     }
@@ -1585,7 +1592,7 @@ void Screen::invalidate_region(Selection const& region) {
         // Fast path: the entire row is contained the selection.
         auto [row, group] = find_row(r);
         auto const& row_object = group.rows()[row];
-        if (r > start.row && r < end.row) {
+        if ((r > start.row && r < end.row) || row_object.cells.empty()) {
             row_object.stale = false;
             continue;
         }
@@ -1640,6 +1647,12 @@ auto Screen::selected_text(Selection selection) const -> di::String {
         if (r > start.row && r < end.row) {
             text.append(row_object.text);
             if (!row_object.overflow) {
+                text.push_back('\n');
+            }
+            continue;
+        }
+        if (row_object.cells.empty()) {
+            if (r != end.row) {
                 text.push_back('\n');
             }
             continue;

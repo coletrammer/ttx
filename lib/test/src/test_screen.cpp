@@ -381,6 +381,25 @@ static void selection() {
     ASSERT_EQ(screen.selected_text(), u8"ab猫\n猫fghh猫"_sv);
 }
 
+static void selection_empty() {
+    auto screen = Screen({ 2, 5 }, Screen::ScrollBackEnabled::Yes);
+
+    put_text(screen, u8"a\n"_sv
+                     u8"\n"_sv
+                     u8"b\n"_sv
+                     u8"c"_sv);
+
+    screen.begin_selection({ screen.absolute_row_screen_start(), 0 }, Screen::BeginSelectionMode::Word);
+    screen.update_selection({ screen.absolute_row_start() + 1, 4 }); // Out of bounds.
+
+    auto text = screen.selected_text();
+    ASSERT_EQ(text, "\nb"_sv);
+
+    screen.begin_selection({ screen.absolute_row_start() + 1, 4 }, Screen::BeginSelectionMode::Line); // Out of bounds.
+    text = screen.selected_text();
+    ASSERT_EQ(text, ""_sv);
+}
+
 static void put_text_random() {
     auto screen = Screen({ 2, 200 }, Screen::ScrollBackEnabled::Yes);
     auto decoder = ttx::Utf8StreamDecoder {};
@@ -1084,6 +1103,7 @@ TEST(screen, put_text_wide)
 TEST(screen, put_text_damage_tracking)
 TEST(screen, put_text_random)
 TEST(screen, selection)
+TEST(screen, selection_empty)
 TEST(screen, cursor_movement)
 TEST(screen, origin_mode_cursor_movement)
 TEST(screen, clear_row)

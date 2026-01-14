@@ -225,7 +225,7 @@ auto RowGroup::transfer_from(RowGroup& from, usize from_index, usize to_index, u
     auto total_cells = 0_usize;
     for (auto [from_row, to_row] : di::zip(di::View(from_begin, from_end), di::View(to_begin, to_end))) {
         auto cols_to_take = desired_cols.value_or(from_row.cells.size());
-        total_cells += cols_to_take;
+        total_cells += cols_to_take > 0 ? cols_to_take : 1; // Consider empty rows to have 1 cell.
         to_row.cells.resize(cols_to_take);
 
         // Truncate any wide cells if they won't fully fit into the requested column size.
@@ -295,9 +295,6 @@ auto RowGroup::strip_trailing_empty_cells(usize row_index) -> usize {
         return row.cells.size();
     }
 
-    // Ensure all rows have at least size 1, as otherwise our cell based scroll back
-    // limit breaks down (you could have an unbounded number of blank lines). Multi
-    // cells are never empty, so no special handling is needed.
     while (row.cells.size() > 1) {
         if (row.cells.back().value().is_empty()) {
             row.cells.pop_back();
@@ -305,6 +302,9 @@ auto RowGroup::strip_trailing_empty_cells(usize row_index) -> usize {
         }
         break;
     }
-    return row.cells.size();
+
+    // Ensure all rows have are considered at least size 1, as otherwise our cell based scroll back
+    // limit breaks down (you could have an unbounded number of blank lines).
+    return row.cells.empty() ? 1 : row.cells.size();
 }
 }
