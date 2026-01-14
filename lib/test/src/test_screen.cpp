@@ -1,3 +1,4 @@
+#include "di/random/prelude.h"
 #include "di/test/prelude.h"
 #include "dius/print.h"
 #include "ttx/graphics_rendition.h"
@@ -5,6 +6,7 @@
 #include "ttx/terminal/reflow_result.h"
 #include "ttx/terminal/screen.h"
 #include "ttx/terminal/selection.h"
+#include "ttx/utf8_stream_decoder.h"
 
 namespace screen {
 using namespace ttx::terminal;
@@ -377,6 +379,20 @@ static void selection() {
     screen.update_selection({ 2, 2 });
     ASSERT_EQ(screen.selection(), Selection({ 0, 0 }, { 2, 1 }));
     ASSERT_EQ(screen.selected_text(), u8"ab猫\n猫fghh猫"_sv);
+}
+
+static void put_text_random() {
+    auto screen = Screen({ 2, 200 }, Screen::ScrollBackEnabled::Yes);
+    auto decoder = ttx::Utf8StreamDecoder {};
+
+    auto rng = di::MinstdRand(2);
+    for (auto _ : di::range(1000000)) {
+        auto byte = di::byte(di::UniformIntDistribution(0, 255)(rng));
+        auto s = decoder.decode({ &byte, 1 });
+        for (auto c : s) {
+            screen.put_code_point(c, AutoWrapMode::Enabled);
+        }
+    }
 }
 
 static void cursor_movement() {
@@ -1066,6 +1082,7 @@ TEST(screen, put_text_basic)
 TEST(screen, put_text_unicode)
 TEST(screen, put_text_wide)
 TEST(screen, put_text_damage_tracking)
+TEST(screen, put_text_random)
 TEST(screen, selection)
 TEST(screen, cursor_movement)
 TEST(screen, origin_mode_cursor_movement)

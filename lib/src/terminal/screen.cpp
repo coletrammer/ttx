@@ -902,7 +902,7 @@ void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
 
         auto [s, e] = row.text.insert(it.value(), code_point);
         auto byte_size = e.data() - s.data();
-        if (m_cursor.col > 0) {
+        if (m_cursor.col > 0 && c < m_cursor.col) {
             m_cursor.text_offset += byte_size;
         }
         primary_cell.text_size += byte_size;
@@ -922,7 +922,7 @@ void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
     //    This state could also be used to enable the ASCII optimization for 2 subsequent ASCII characters.
     if (prev_cell) {
         auto clusterer = dius::unicode::GraphemeClusterer {};
-        auto [row, primary_cell, text_offset, _, _, _] = prev_cell.value();
+        auto [row, primary_cell, text_offset, _, _, prev_col] = prev_cell.value();
         auto text_start = row.text.iterator_at_offset(text_offset);
         auto text_end = row.text.iterator_at_offset(text_offset + primary_cell.text_size);
         ASSERT(text_start);
@@ -938,7 +938,7 @@ void Screen::put_code_point(c32 code_point, AutoWrapMode auto_wrap_mode) {
             }
             auto [s, e] = row.text.insert(text_end.value(), code_point);
             auto byte_size = e.data() - s.data();
-            if (m_cursor.col > 0) {
+            if (m_cursor.col > 0 && prev_col < m_cursor.col) {
                 m_cursor.text_offset += byte_size;
             }
             primary_cell.text_size += byte_size;
