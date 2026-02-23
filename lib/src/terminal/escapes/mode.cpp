@@ -27,7 +27,7 @@ auto ModeQueryReply::from_csi(const CSI& csi) -> di::Optional<ModeQueryReply> {
 
 auto ModeQueryReply::serialize() const -> di::String {
     auto is_dec = dec_mode != DecMode::None;
-    return *di::present("\033[{}{};{}$y"_sv, is_dec ? "?"_sv : ""_sv, is_dec ? u32(dec_mode) : u32(ansi_mode),
-                        u32(support));
+    return di::format("\033[{}{};{}$y"_sv, is_dec ? "?"_sv : ""_sv, is_dec ? u32(dec_mode) : u32(ansi_mode),
+                      u32(support));
 }
 }

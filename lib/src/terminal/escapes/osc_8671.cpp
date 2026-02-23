@@ -154,7 +154,7 @@ auto OSC8671::serialize() const -> di::String {
         result.append(id.value());
     }
     if (range) {
-        result.append(*di::present(":r={},{}"_sv, di::get<0>(*range), di::get<1>(*range)));
+        result.append(di::format(":r={},{}"_sv, di::get<0>(*range), di::get<1>(*range)));
     }
     if (direction) {
         result.push_back(U';');

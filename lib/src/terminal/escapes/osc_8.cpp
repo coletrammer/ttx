@@ -45,10 +45,10 @@ auto OSC8::from_hyperlink(di::Optional<Hyperlink const&> hyperlink) -> OSC8 {
 auto OSC8::serialize() const -> di::String {
     auto params_string = params | di::transform([](auto const& pair) -> di::String {
                              auto const& [key, value] = pair;
-                             return *di::present("{}={}"_sv, key, value);
+                             return di::format("{}={}"_sv, key, value);
                          }) |
                          di::join_with(U':') | di::to<di::String>();
-    return *di::present("\033]8;{};{}\033\\"_sv, params_string, uri);
+    return di::format("\033]8;{};{}\033\\"_sv, params_string, uri);
 }
 
 auto OSC8::to_hyperlink(di::FunctionRef<di::String(di::Optional<di::StringView>)> make_id) const

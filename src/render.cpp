@@ -53,7 +53,7 @@ void RenderThread::render_thread() {
 
     auto renderer = Renderer();
     auto _ = di::ScopeExit([&] {
-        (void) renderer.cleanup(dius::stdin);
+        (void) renderer.cleanup(dius::std_in);
     });
 
     auto deadline = dius::SteadyClock::now();
@@ -103,7 +103,7 @@ void RenderThread::render_thread() {
             } else if (auto ev = di::get_if<InputStatus>(event)) {
                 m_input_status = *ev;
             } else if (auto ev = di::get_if<WriteString>(event)) {
-                (void) dius::stdin.write_exactly(di::as_bytes(ev->string.span()));
+                (void) dius::std_in.write_exactly(di::as_bytes(ev->string.span()));
             } else if (auto ev = di::get_if<MouseEvent>(event)) {
                 if (ev->type() == MouseEventType::Press && ev->button() == MouseButton::Left) {
                     auto* it = di::find_if(m_status_bar_layout, [&](StatusBarEntry const& entry) {
@@ -138,13 +138,13 @@ void RenderThread::render_thread() {
                         auto string = ev->osc52.serialize();
                         if (m_clipboard.request_clipboard(selection_type, ev->identifier.value())) {
                             // Forward the query.
-                            (void) dius::stdin.write_exactly(di::as_bytes(string.span()));
+                            (void) dius::std_in.write_exactly(di::as_bytes(string.span()));
                         }
                     } else {
                         auto string = ev->osc52.serialize();
                         if (m_clipboard.set_clipboard(selection_type, di::move(ev->osc52.data).container())) {
                             // Forward setting the clipboard.
-                            (void) dius::stdin.write_exactly(di::as_bytes(string.span()));
+                            (void) dius::std_in.write_exactly(di::as_bytes(string.span()));
                         }
                         if (ev->manual) {
                             m_pending_status_message = {
@@ -187,7 +187,7 @@ void RenderThread::render_thread() {
 
         // Do terminal setup if requested.
         if (do_setup) {
-            (void) renderer.setup(dius::stdin, m_features, m_clipboard.mode());
+            (void) renderer.setup(dius::std_in, m_features, m_clipboard.mode());
             do_setup = false;
         }
 
@@ -431,6 +431,6 @@ void RenderThread::do_render(Renderer& renderer) {
         return cursor;
     });
 
-    (void) renderer.finish(dius::stdin, cursor.value_or({ .hidden = true }));
+    (void) renderer.finish(dius::std_in, cursor.value_or({ .hidden = true }));
 }
 }

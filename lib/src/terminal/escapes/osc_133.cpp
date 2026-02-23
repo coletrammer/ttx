@@ -133,12 +133,12 @@ auto OSC133::serialize() const -> di::String {
     return di::visit(
         di::overload(
             [](BeginPrompt const& value) -> di::String {
-                auto aid = value.application_id.empty() ? ""_s : *di::present(";aid={}"_sv, value.application_id);
+                auto aid = value.application_id.empty() ? ""_s : di::format(";aid={}"_sv, value.application_id);
                 auto cl = value.click_mode == PromptClickMode::None
                               ? ""_s
-                              : *di::present(";cl={}"_sv, find_click_mode(value.click_mode));
+                              : di::format(";cl={}"_sv, find_click_mode(value.click_mode));
                 auto redraw = value.redraw ? ""_s : ";redraw=0"_s;
-                return *di::present("\033]133;A;k={}{}{}{}\033\\"_sv, find_prompt_kind(value.kind), aid, cl, redraw);
+                return di::format("\033]133;A;k={}{}{}{}\033\\"_sv, find_prompt_kind(value.kind), aid, cl, redraw);
             },
             [](EndPrompt const&) -> di::String {
                 return "\033]133;B\033\\"_s;
@@ -147,9 +147,9 @@ auto OSC133::serialize() const -> di::String {
                 return "\033]133;C\033\\"_s;
             },
             [](EndCommand const& value) -> di::String {
-                auto err = value.error.empty() ? ""_s : *di::present(";err={}"_sv, value.error);
-                auto aid = value.application_id.empty() ? ""_s : *di::present(";aid={}"_sv, value.application_id);
-                return *di::present("\033]133;D;{}{}{}\033\\"_sv, value.exit_code, err, aid);
+                auto err = value.error.empty() ? ""_s : di::format(";err={}"_sv, value.error);
+                auto aid = value.application_id.empty() ? ""_s : di::format(";aid={}"_sv, value.application_id);
+                return di::format("\033]133;D;{}{}{}\033\\"_sv, value.exit_code, err, aid);
             }),
         command);
 }

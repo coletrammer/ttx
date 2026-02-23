@@ -51,7 +51,7 @@ auto OSC7::serialize() const -> di::String {
     auto encoded_path_parts = path.data() | di::split('/') | di::transform(di::PercentEncodedView::from_raw_data) |
                               di::transform(di::to_string) | di::join_with(U'/') | di::transform(di::construct<c8>) |
                               di::to<di::String>(di::encoding::assume_valid);
-    return *di::present("\033]7;{}{}{}\033\\"_sv, file_scheme, di::PercentEncodedView::from_raw_data(hostname),
-                        encoded_path_parts);
+    return di::format("\033]7;{}{}{}\033\\"_sv, file_scheme, di::PercentEncodedView::from_raw_data(hostname),
+                      encoded_path_parts);
 }
 }

@@ -21,7 +21,7 @@ auto Fzf::popup_args(CreatePaneArgs&& base) && -> di::Tuple<CreatePaneArgs, Popu
         create_pane_args.command.push_back("--prompt"_ts);
 
         // Add '> ' as a prompt indicator
-        auto prompt_string = *di::present("{}> "_sv, m_prompt.value());
+        auto prompt_string = di::format("{}> "_sv, m_prompt.value());
         create_pane_args.command.push_back(prompt_string.span() | di::transform(di::construct<char>) |
                                            di::to<di::TransparentString>());
     }
@@ -29,7 +29,7 @@ auto Fzf::popup_args(CreatePaneArgs&& base) && -> di::Tuple<CreatePaneArgs, Popu
         create_pane_args.command.push_back("--border-label"_ts);
 
         // Add spacing for padding
-        auto label_string = *di::present(" {} "_sv, m_title.value());
+        auto label_string = di::format(" {} "_sv, m_title.value());
         create_pane_args.command.push_back(label_string.span() | di::transform(di::construct<char>) |
                                            di::to<di::TransparentString>());
     }

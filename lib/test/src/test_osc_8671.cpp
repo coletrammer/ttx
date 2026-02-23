@@ -163,7 +163,7 @@ static void test_parse_and_serialize() {
 
         if (result.has_value() && !doesnt_roundtrip) {
             auto serialized = result.value().serialize();
-            ASSERT_EQ(*di::present("\033]8671;{}\033\\"_sv, input), serialized);
+            ASSERT_EQ(di::format("\033]8671;{}\033\\"_sv, input), serialized);
         }
     }
 }

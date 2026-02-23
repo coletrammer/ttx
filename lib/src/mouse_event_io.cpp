@@ -117,7 +117,7 @@ static auto serialize_as_urxvt(MouseEventType type, MouseButton button, MouseCoo
     auto number = mouse_number(type, button, modifiers, true);
 
     // Return CSI Cb;Cx;Cy M
-    return *di::present("\033[{};{};{}M"_sv, number + 32, position.x() + 1, position.y() + 1) |
+    return di::format("\033[{};{};{}M"_sv, number + 32, position.x() + 1, position.y() + 1) |
            di::transform([](c32 value) {
                return char(value);
            }) |
@@ -130,7 +130,7 @@ static auto serialize_as_sgr(MouseEventType type, MouseButton button, MouseCoord
 
     // Return CSI < Cb;Cx;Cy [Mm]
     auto final_char = type == MouseEventType::Release ? U'm' : U'M';
-    return *di::present("\033[<{};{};{}{}"_sv, number, position.x(), position.y(), final_char) |
+    return di::format("\033[<{};{};{}{}"_sv, number, position.x(), position.y(), final_char) |
            di::transform([](c32 value) {
                return char(value);
            }) |

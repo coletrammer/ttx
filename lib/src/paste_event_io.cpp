@@ -12,7 +12,7 @@ auto serialize_paste_event(PasteEvent const& event, BracketedPasteMode mode) -> 
     if (mode == BracketedPasteMode::Disabled) {
         return event.text().to_owned();
     }
-    return *di::present("\033[200~{}\033[201~"_sv, event.text());
+    return di::format("\033[200~{}\033[201~"_sv, event.text());
 }
 
 auto is_bracketed_paste_begin(CSI const& csi) -> bool {

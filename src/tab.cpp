@@ -398,7 +398,7 @@ auto Tab::make_pane(u64 pane_id, CreatePaneArgs args, Size const& size, RenderTh
     if (!args.hooks.apc_passthrough) {
         args.hooks.apc_passthrough = [&render_thread](di::StringView apc_data) {
             // Pass-through APC commands to host terminal. This makes kitty graphics "work".
-            auto string = *di::present("\033_{}\033\\"_sv, apc_data);
+            auto string = di::format("\033_{}\033\\"_sv, apc_data);
             render_thread.push_event(WriteString(di::move(string)));
         };
     }

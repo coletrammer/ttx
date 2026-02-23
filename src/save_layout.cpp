@@ -50,7 +50,7 @@ auto SaveLayoutThread::save_layout(di::TransparentStringView layout_name) -> di:
 void SaveLayoutThread::save_layout_thread() {
     auto renderer = Renderer();
     auto _ = di::ScopeExit([&] {
-        (void) renderer.cleanup(dius::stdin);
+        (void) renderer.cleanup(dius::std_in);
     });
 
     (void) dius::filesystem::create_directories(m_save_dir);

@@ -161,7 +161,8 @@ auto detect_features(dius::SyncFile& terminal) -> di::Result<Feature> {
 
     // OSC 8671 query
     di::writer_print<di::String::Encoding>(
-        request_buffer, terminal::OSC8671 { .type = terminal::SeamlessNavigationRequestType::Supported }.serialize());
+        request_buffer, "{}"_sv,
+        terminal::OSC8671 { .type = terminal::SeamlessNavigationRequestType::Supported }.serialize());
 
     // Grapheme clustering support query
     // Although DEC mode 2027 exists, it isn't all too helpful because as of this writing,

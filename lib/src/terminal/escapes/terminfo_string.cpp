@@ -9,7 +9,7 @@ namespace ttx::terminal {
 auto TerminfoString::hex(di::TransparentStringView bytes) -> di::String {
     auto result = ""_s;
     for (auto byte : bytes) {
-        result += *di::present("{:02X}"_sv, u8(byte));
+        result += di::format("{:02X}"_sv, u8(byte));
     }
     return result;
 }
@@ -127,8 +127,8 @@ auto TerminfoString::serialize() const -> di::String {
     }
     auto lhs = hex(name.value());
     if (!value) {
-        return *di::present("\033P1+r{}\033\\"_sv, lhs);
+        return di::format("\033P1+r{}\033\\"_sv, lhs);
     }
-    return *di::present("\033P1+r{}={}\033\\"_sv, lhs, hex(value.value()));
+    return di::format("\033P1+r{}={}\033\\"_sv, lhs, hex(value.value()));
 }
 }

@@ -22,7 +22,7 @@ auto OperatingStatusReport::from_csi(CSI const& csi) -> di::Optional<OperatingSt
 }
 
 auto OperatingStatusReport::serialize() const -> di::String {
-    return *di::present("\033[{}n"_sv, malfunction ? 3 : 0);
+    return di::format("\033[{}n"_sv, malfunction ? 3 : 0);
 }
 
 auto CursorPositionReport::from_csi(CSI const& csi) -> di::Optional<CursorPositionReport> {
@@ -43,7 +43,7 @@ auto CursorPositionReport::from_csi(CSI const& csi) -> di::Optional<CursorPositi
 }
 
 auto CursorPositionReport::serialize() const -> di::String {
-    return *di::present("\033[{};{}R"_sv, row + 1, col + 1);
+    return di::format("\033[{};{}R"_sv, row + 1, col + 1);
 }
 
 auto KittyKeyReport::from_csi(CSI const& csi) -> di::Optional<KittyKeyReport> {
@@ -62,7 +62,7 @@ auto KittyKeyReport::from_csi(CSI const& csi) -> di::Optional<KittyKeyReport> {
 }
 
 auto KittyKeyReport::serialize() const -> di::String {
-    return *di::present("\033[?{}u"_sv, u32(flags));
+    return di::format("\033[?{}u"_sv, u32(flags));
 }
 
 auto StatusStringResponse::from_dcs(DCS const& dcs) -> di::Optional<StatusStringResponse> {
@@ -85,7 +85,7 @@ auto StatusStringResponse::from_dcs(DCS const& dcs) -> di::Optional<StatusString
 }
 
 auto StatusStringResponse::serialize() const -> di::String {
-    return *di::present("\033P{}$r{}\033\\"_sv, u32(response.has_value()),
-                        response.transform(&di::String::view).value_or(""_sv));
+    return di::format("\033P{}$r{}\033\\"_sv, u32(response.has_value()),
+                      response.transform(&di::String::view).value_or(""_sv));
 }
 }

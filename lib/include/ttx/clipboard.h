@@ -21,9 +21,15 @@ enum class ClipboardMode {
 constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<ClipboardMode>) {
     using enum ClipboardMode;
     return di::make_enumerators<"ClipboardMode">(
-        di::enumerator<"System", System>, di::enumerator<"SystemWriteLocalRead", SystemWriteLocalRead>,
-        di::enumerator<"SystemWriteNoRead", SystemWriteNoRead>, di::enumerator<"Local", Local>,
-        di::enumerator<"LocalWriteNoRead", LocalWriteNoRead>, di::enumerator<"Disabled", Disabled>);
+        di::enumerator<"system", System, "Attempt to read and write the system clipboard">,
+        di::enumerator<"system-write-local-read", SystemWriteLocalRead,
+                       "Write to system clipboard but read from internal clipboard">,
+        di::enumerator<"system-write-no-read", SystemWriteNoRead,
+                       "Write to system clipboard but disallow reading clipboard">,
+        di::enumerator<"local", Local, "Read and write to internal clipboard">,
+        di::enumerator<"local-write-no-read", LocalWriteNoRead,
+                       "Write to internal clipboard but disallow reading clipboard">,
+        di::enumerator<"disabled", Disabled, "Disallow read/writing the clipboard">);
 }
 
 /// @brief Implementation of clipboard handling for ttx

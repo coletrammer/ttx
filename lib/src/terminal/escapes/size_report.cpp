@@ -25,7 +25,7 @@ auto TextAreaPixelSizeReport::from_csi(CSI const& csi) -> di::Optional<TextAreaP
 }
 
 auto TextAreaPixelSizeReport::serialize() const -> di::String {
-    return *di::present("\033[4;{};{}t"_sv, ypixels, xpixels);
+    return di::format("\033[4;{};{}t"_sv, ypixels, xpixels);
 }
 
 auto CellPixelSizeReport::from_csi(CSI const& csi) -> di::Optional<CellPixelSizeReport> {
@@ -48,7 +48,7 @@ auto CellPixelSizeReport::from_csi(CSI const& csi) -> di::Optional<CellPixelSize
 }
 
 auto CellPixelSizeReport::serialize() const -> di::String {
-    return *di::present("\033[6;{};{}t"_sv, ypixels, xpixels);
+    return di::format("\033[6;{};{}t"_sv, ypixels, xpixels);
 }
 
 auto TextAreaSizeReport::from_csi(CSI const& csi) -> di::Optional<TextAreaSizeReport> {
@@ -71,7 +71,7 @@ auto TextAreaSizeReport::from_csi(CSI const& csi) -> di::Optional<TextAreaSizeRe
 }
 
 auto TextAreaSizeReport::serialize() const -> di::String {
-    return *di::present("\033[8;{};{}t"_sv, rows, cols);
+    return di::format("\033[8;{};{}t"_sv, rows, cols);
 }
 
 auto InBandSizeReport::from_csi(CSI const& csi) -> di::Optional<InBandSizeReport> {
@@ -99,6 +99,6 @@ auto InBandSizeReport::from_csi(CSI const& csi) -> di::Optional<InBandSizeReport
 }
 
 auto InBandSizeReport::serialize() const -> di::String {
-    return *di::present("\033[48;{};{};{};{}t"_sv, size.rows, size.cols, size.ypixels, size.xpixels);
+    return di::format("\033[48;{};{};{};{}t"_sv, size.rows, size.cols, size.ypixels, size.xpixels);
 }
 }

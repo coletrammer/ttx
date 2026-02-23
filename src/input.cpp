@@ -59,7 +59,7 @@ void InputThread::request_exit() {
     if (!m_done.exchange(true, di::MemoryOrder::Release)) {
         // Ensure the input thread exits. (By requesting device attributes, thus waking up the input thread).
         // It would be better to use something else to cancel the input thread.
-        (void) dius::stdin.write_exactly(di::as_bytes("\033[c"_sv.span()));
+        (void) dius::std_in.write_exactly(di::as_bytes("\033[c"_sv.span()));
     }
 }
 
@@ -84,7 +84,7 @@ void InputThread::input_thread() {
     auto parser = TerminalInputParser {};
     auto utf8_decoder = Utf8StreamDecoder {};
     while (!m_done.load(di::MemoryOrder::Acquire)) {
-        auto nread = dius::stdin.read_some(buffer.span());
+        auto nread = dius::std_in.read_some(buffer.span());
         if (!nread.has_value() || m_done.load(di::MemoryOrder::Acquire)) {
             return;
         }

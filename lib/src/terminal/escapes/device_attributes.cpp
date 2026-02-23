@@ -16,6 +16,6 @@ auto PrimaryDeviceAttributes::from_csi(const CSI& csi) -> di::Optional<PrimaryDe
 
 auto PrimaryDeviceAttributes::serialize() const -> di::String {
     auto attributes_string = attributes | di::transform(di::to_string) | di::join_with(U';') | di::to<di::String>();
-    return *di::present("\033[?{}c"_sv, attributes_string);
+    return di::format("\033[?{}c"_sv, attributes_string);
 }
 }

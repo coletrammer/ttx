@@ -490,7 +490,7 @@ void Terminal::dcs_decrqss(Params const&, di::StringView data) {
     if (data == "m"_sv) {
         auto sgr_string = active_screen().screen.current_graphics_rendition().as_csi_params(Feature::All) |
                           di::transform(di::to_string) | di::join_with(U';') | di::to<di::String>();
-        response.response = *di::present("{}m"_sv, sgr_string);
+        response.response = di::format("{}m"_sv, sgr_string);
     }
 
     m_outgoing_events.push_back(WritePtyString(response.serialize()));
@@ -530,9 +530,9 @@ void Terminal::osc_8(di::StringView data) {
 
     auto hyperlink = result.value().to_hyperlink([&](di::Optional<di::StringView> id) -> di::String {
         if (id) {
-            return *di::present("{}e-{}"_sv, m_id, id.value());
+            return di::format("{}e-{}"_sv, m_id, id.value());
         }
-        return *di::present("{}i-{}"_sv, m_id, m_next_hyperlink_id++);
+        return di::format("{}i-{}"_sv, m_id, m_next_hyperlink_id++);
     });
     active_screen().screen.set_current_hyperlink(hyperlink.transform(di::cref));
 }

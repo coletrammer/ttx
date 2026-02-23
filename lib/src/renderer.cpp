@@ -336,7 +336,7 @@ static auto compute_text_upper_bound(di::StringView text) -> usize {
 static auto render_graphics_rendition(GraphicsRendition const& desired, Feature features,
                                       GraphicsRendition const& current) -> di::String {
     auto as_sgr = [](Params const& params) -> di::String {
-        return *di::present("\033[{}m"_sv, params);
+        return di::format("\033[{}m"_sv, params);
     };
 
     // For optimization, try both a delta graphics rendition as well as clearing the graphics rendition
@@ -439,7 +439,7 @@ auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor_in) -
         di::writer_print<di::String::Encoding>(buffer, "\033[m"_sv);
         m_current_screen.set_current_graphics_rendition({});
 
-        di::writer_print<di::String::Encoding>(buffer, terminal::OSC8().serialize());
+        di::writer_print<di::String::Encoding>(buffer, "{}"_sv, terminal::OSC8().serialize());
         m_current_screen.set_current_hyperlink({});
 
         di::writer_print<di::String::Encoding>(buffer, "\033[2J"_sv);
@@ -460,7 +460,8 @@ auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor_in) -
          changes) {
         if (current_hyperlink != hyperlink) {
             m_current_screen.set_current_hyperlink(hyperlink);
-            di::writer_print<di::String::Encoding>(buffer, terminal::OSC8::from_hyperlink(hyperlink).serialize());
+            di::writer_print<di::String::Encoding>(buffer, "{}"_sv,
+                                                   terminal::OSC8::from_hyperlink(hyperlink).serialize());
             current_hyperlink = hyperlink;
         }
         if (current_gfx != gfx) {

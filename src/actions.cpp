@@ -26,7 +26,7 @@ auto reset_mode() -> Action {
 
 auto navigate(terminal::NavigateDirection direction) -> Action {
     return {
-        .description = *di::present(
+        .description = di::format(
             "Navigate to the first pane in direction ({}) starting from the current active pane"_sv, direction),
         .apply =
             [direction](ActionContext const& context) {
@@ -37,9 +37,8 @@ auto navigate(terminal::NavigateDirection direction) -> Action {
 
 auto resize(ResizeDirection direction, i32 amount_in_cells) -> Action {
     return {
-        .description =
-            *di::present("{} the current active pane's {} border by {} terminal cells"_sv,
-                         amount_in_cells > 0 ? "Extend"_sv : "Shrink"_sv, direction, di::abs(amount_in_cells)),
+        .description = di::format("{} the current active pane's {} border by {} terminal cells"_sv,
+                                  amount_in_cells > 0 ? "Extend"_sv : "Shrink"_sv, direction, di::abs(amount_in_cells)),
         .apply =
             [direction, amount_in_cells](ActionContext const& context) {
                 context.layout_state.with_lock([&](LayoutState& state) {
@@ -133,7 +132,7 @@ auto rename_tab() -> Action {
 auto switch_tab(usize index) -> Action {
     ASSERT_GT(index, 0);
     return {
-        .description = *di::present("Switch to tab {} (1 indexed)"_sv, index),
+        .description = di::format("Switch to tab {} (1 indexed)"_sv, index),
         .apply =
             [index](ActionContext const& context) {
                 context.layout_state.with_lock([&](LayoutState& state) {
@@ -208,7 +207,7 @@ auto find_tab() -> Action {
                     auto tab_names = di::Vector<di::String>();
                     if (auto session = state.active_session()) {
                         for (auto [i, tab] : session.value().tabs() | di::enumerate) {
-                            tab_names.push_back(*di::present("{} {}"_sv, i + 1, tab->name()));
+                            tab_names.push_back(di::format("{} {}"_sv, i + 1, tab->name()));
                         }
 
                         auto [create_pane_args, popup_layout] = Fzf()
@@ -358,7 +357,7 @@ auto find_session() -> Action {
                 context.layout_state.with_lock([&](LayoutState& state) {
                     auto session_names = di::Vector<di::String>();
                     for (auto [i, session] : state.sessions() | di::enumerate) {
-                        session_names.push_back(*di::present("{} {}"_sv, i + 1, session->name()));
+                        session_names.push_back(di::format("{} {}"_sv, i + 1, session->name()));
                     }
 
                     auto [create_pane_args, popup_layout] = Fzf()
@@ -442,7 +441,7 @@ auto save_layout() -> Action {
 
 auto save_state(di::Path path) -> Action {
     return {
-        .description = *di::present("Save the state of the active pane to a file ({})"_sv, path),
+        .description = di::format("Save the state of the active pane to a file ({})"_sv, path),
         .apply =
             di::make_function<void(ActionContext const&) const&>([path = di::move(path)](ActionContext const& context) {
                 context.layout_state.with_lock([&](LayoutState& state) {
@@ -541,7 +540,7 @@ auto toggle_full_screen_pane() -> Action {
 
 auto add_pane(Direction direction) -> Action {
     return {
-        .description = *di::present("Add a new pane, in a {} position relative to the active pane"_sv, direction),
+        .description = di::format("Add a new pane, in a {} position relative to the active pane"_sv, direction),
         .apply =
             [direction](ActionContext const& context) {
                 context.layout_state.with_lock([&](LayoutState& state) {
@@ -592,7 +591,7 @@ auto scroll(Direction direction, i32 amount_in_cells) -> Action {
         return "nowhere"_sv;
     }();
     return {
-        .description = *di::present("Scroll active pane {} by {} cells"_sv, direction_name, di::abs(amount_in_cells)),
+        .description = di::format("Scroll active pane {} by {} cells"_sv, direction_name, di::abs(amount_in_cells)),
         .apply =
             [direction, amount_in_cells](ActionContext const& context) {
                 scroll_action(context, di::bind_back(&Pane::scroll, direction, amount_in_cells));
@@ -672,7 +671,7 @@ auto scroll_next_command() -> Action {
 
 auto copy_last_command(bool include_command) -> Action {
     return {
-        .description = *di::present("Copy text from latest command (include command text = {})"_sv, include_command),
+        .description = di::format("Copy text from latest command (include command text = {})"_sv, include_command),
         .apply =
             [include_command](ActionContext const& context) {
                 context.layout_state.with_lock([&](LayoutState& state) {

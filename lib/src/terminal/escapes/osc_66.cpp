@@ -75,9 +75,9 @@ auto OSC66::serialize() const -> di::String {
                           if (info.*key.pointer == defaults.*key.pointer) {
                               return {};
                           }
-                          return *di::present("{}={}"_sv, key.key, info.*key.pointer);
+                          return di::format("{}={}"_sv, key.key, info.*key.pointer);
                       }) |
                       di::filter(di::not_fn(di::empty)) | di::join_with(U':') | di::to<di::String>();
-    return *di::present("\033]66;{};{}\033\\"_sv, key_values, text);
+    return di::format("\033]66;{};{}\033\\"_sv, key_values, text);
 }
 }

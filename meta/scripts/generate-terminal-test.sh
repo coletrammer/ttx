@@ -24,7 +24,7 @@ fi
 
 # Produce output
 rm -f "$expected"
-"$TTX_BUILD_DIR/ttx" --headless -S "$expected" -r "$input"
+"$TTX_BUILD_DIR/ttx" replay --headless -S "$expected" "$input"
 
 # Show output via ttx
-"$TTX_BUILD_DIR/ttx" -r "$expected"
+"$TTX_BUILD_DIR/ttx" replay "$expected"

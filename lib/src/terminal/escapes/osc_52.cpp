@@ -66,8 +66,8 @@ auto OSC52::serialize() const -> di::String {
                     di::to<di::String>();
     }
     if (query) {
-        return *di::present("\033]52;{};?\033\\"_sv, selection);
+        return di::format("\033]52;{};?\033\\"_sv, selection);
     }
-    return *di::present("\033]52;{};{}\033\\"_sv, selection, data);
+    return di::format("\033]52;{};{}\033\\"_sv, selection, data);
 }
 }

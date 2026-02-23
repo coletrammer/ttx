@@ -2,6 +2,7 @@
 #include "di/container/string/string_view.h"
 #include "di/io/writer_print.h"
 #include "di/sync/synchronized.h"
+#include "di/vocab/error/string_error.h"
 #include "dius/filesystem/operations.h"
 #include "dius/main.h"
 #include "dius/sync_file.h"
@@ -14,51 +15,136 @@
 #include "ttx/terminal/capability.h"
 
 namespace ttx {
-struct Args {
-    di::Vector<di::TransparentStringView> command;
+struct NewBase {
     Key prefix { Key::B };
     bool hide_status_bar { false };
-    bool print_keybinds { false };
+    bool headless { false };
     di::Optional<di::PathView> save_state_path;
     di::Optional<di::PathView> capture_command_output_path;
+
+    // New
     di::Optional<di::TransparentStringView> layout_save_name;
     di::Optional<di::TransparentStringView> layout_restore_name;
-    di::Optional<di::TransparentStringView> print_terminfo_mode;
-    di::Optional<di::TransparentStringView> term;
+    di::TransparentStringView term { "xterm-ttx"_tsv };
     ClipboardMode clipboard_mode { ClipboardMode::System };
-    bool replay { false };
-    bool headless { false };
-    bool print_features { false };
     bool force_local_terminfo { false };
+    di::Vector<di::TransparentStringView> command;
+
+    // Replay
+    di::Vector<di::PathView> replay_paths;
+};
+
+struct New : NewBase {
     bool help { false };
 
     constexpr static auto get_cli_parser() {
-        return di::cli_parser<Args>("ttx"_sv, "Terminal multiplexer"_sv)
-            .option<&Args::prefix>('p', "prefix"_tsv, "Prefix key for key bindings"_sv)
-            .option<&Args::hide_status_bar>('s', "hide-status-bar"_tsv, "Hide the status bar"_sv)
-            .option<&Args::print_keybinds>('k', "keybinds"_tsv, "Print key bindings"_sv)
-            .option<&Args::capture_command_output_path>('c', "capture-command-output-path"_tsv,
-                                                        "Capture command output to a file"_sv)
-            .option<&Args::print_features>('f', "features"_tsv, "Print out detected terminal features"_sv)
-            .option<&Args::save_state_path>('S', "save-state-path"_tsv,
-                                            "Save state path when triggering saving a pane's state"_sv)
-            .option<&Args::headless>('h', "headless"_tsv, "Headless mode"_sv)
-            .option<&Args::replay>('r', "replay-path"_tsv,
-                                   "Replay capture output (file paths are passed via positional args)"_sv)
-            .option<&Args::term>('t', "term"_tsv, "Set TERM environment variable (default xterm-ttx)"_sv)
-            .option<&Args::clipboard_mode>({}, "clipboard"_tsv, "Set the clipboard mode"_sv)
-            .option<&Args::print_terminfo_mode>({}, "terminfo"_tsv,
-                                                "Print terminfo (mode can be one of: [terminfo, verbose])"_sv)
-            .option<&Args::force_local_terminfo>(
+        return di::cli_parser<New>("new"_tsv, "Start a new ttx instance"_sv)
+            .option<&NewBase::prefix>('p', "prefix"_tsv, "Prefix key for key bindings"_sv, false, "KEY"_sv)
+            .option<&NewBase::hide_status_bar>('s', "hide-status-bar"_tsv, "Hide the status bar"_sv)
+            .option<&NewBase::capture_command_output_path>('c', "capture-command-output-path"_tsv,
+                                                           "Capture command output to a file"_sv)
+            .option<&NewBase::save_state_path>('S', "save-state-path"_tsv,
+                                               "Save state path when triggering saving a pane's state"_sv)
+            .option<&NewBase::headless>('h', "headless"_tsv, "Headless mode"_sv)
+            .option<&NewBase::term>('t', "term"_tsv, "Set TERM environment variable"_sv)
+            .option<&NewBase::clipboard_mode>({}, "clipboard"_tsv, "Set the clipboard mode"_sv, false, "MODE"_sv)
+            .option<&NewBase::force_local_terminfo>(
                 {}, "force-local-terminfo"_tsv,
                 "Always try and compile built-in terminfo, and set TERMINFO env variable"_sv)
-            .option<&Args::layout_save_name>(
+            .option<&NewBase::layout_save_name>(
                 'l', "layout-save"_tsv,
-                "Name of a saved layout, automatically synced by ttx (including restore at startup)"_sv)
-            .option<&Args::layout_restore_name>('R', "layout-restore"_tsv,
-                                                "Name of a saved layout, to be restored on startup"_sv)
-            .argument<&Args::command>("COMMAND"_sv, "Program to run in terminal"_sv)
+                "Name of a saved layout, automatically synced by ttx (including restore at startup)"_sv, false,
+                "NAME"_sv)
+            .option<&NewBase::layout_restore_name>(
+                'R', "layout-restore"_tsv, "Name of a saved layout, to be restored on startup"_sv, false, "NAME"_sv)
+            .argument<&NewBase::command>("COMMAND"_sv, "Program to run in terminal (default: $SHELL)"_sv, false,
+                                         di::cli::ValueType::CommandWithArgs)
             .help();
+    }
+};
+
+struct Replay : NewBase {
+    bool help { false };
+
+    constexpr static auto get_cli_parser() {
+        return di::cli_parser<Replay>("replay"_tsv, "Start a Replay ttx instance"_sv)
+            .option<&NewBase::prefix>('p', "prefix"_tsv, "Prefix key for key bindings"_sv, false, "KEY"_sv)
+            .option<&NewBase::capture_command_output_path>('c', "capture-command-output-path"_tsv,
+                                                           "Capture command output to a file"_sv)
+            .option<&NewBase::save_state_path>('S', "save-state-path"_tsv,
+                                               "Save state path when triggering saving a pane's state"_sv)
+            .option<&NewBase::headless>('h', "headless"_tsv, "Headless mode"_sv)
+            .argument<&NewBase::replay_paths>("REPLAY_FILES"_sv, "Files to replay (each file gets its own pane)"_sv,
+                                              true)
+            .help();
+    }
+};
+
+struct Keybinds {
+    Key prefix { Key::B };
+    bool replay_mode { false };
+    di::Optional<di::PathView> save_state_path;
+    bool help { false };
+
+    constexpr static auto get_cli_parser() {
+        return di::cli_parser<Keybinds>("keybinds"_tsv, "List active keybinds for ttx"_sv)
+            .option<&Keybinds::prefix>('p', "prefix"_tsv, "Prefix key for key bindings"_sv, false, "KEY"_sv)
+            .option<&Keybinds::replay_mode>('r', "replay-mode"_tsv, "Print keybindings when running in replay mode"_sv)
+            .option<&Keybinds::save_state_path>('S', "save-state-path"_tsv,
+                                                "Save state path when triggering saving a pane's state"_sv)
+            .help();
+    }
+};
+
+struct Completions {
+    di::cli::Shell shell { di::cli::Shell::Bash };
+    bool help { false };
+
+    constexpr static auto get_cli_parser() {
+        return di::cli_parser<Completions>("completions"_tsv, "Write shell completions for ttx to stdout"_sv)
+            .argument<&Completions::shell>("SHELL"_sv, "Shell to generate completions for"_sv, true)
+            .help();
+    }
+};
+
+struct Features {
+    bool help { false };
+
+    constexpr static auto get_cli_parser() {
+        return di::cli_parser<Features>("features"_tsv, "List features detected in the current terminal"_sv).help();
+    }
+};
+
+enum class TerminfoFormat {
+    Terminfo,
+    Verbose,
+};
+
+constexpr static auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<TerminfoFormat>) {
+    using enum TerminfoFormat;
+    return di::make_enumerators<"TerminfoFormat">(
+        di::enumerator<"terminfo", Terminfo, "Official terminfo format used by tools like tic">,
+        di::enumerator<"verbose", Verbose,
+                       "Verbose format with descriptions to understand the details of ttx's terminfo">);
+}
+
+struct Terminfo {
+    TerminfoFormat format { TerminfoFormat::Terminfo };
+    bool help { false };
+
+    constexpr static auto get_cli_parser() {
+        return di::cli_parser<Terminfo>("terminfo"_tsv, "Display the terminfo for ttx"_sv)
+            .option<&Terminfo::format>('f', "format"_tsv, "Display format for the terminfo"_sv)
+            .help();
+    }
+};
+
+struct Args {
+    di::Variant<New, Completions, Replay, Keybinds, Features, Terminfo> subcommand;
+    bool help { false };
+
+    constexpr static auto get_cli_parser() {
+        return di::cli_parser<Args>("ttx"_tsv, "Terminal multiplexer"_sv).subcommands<&Args::subcommand>().help();
     }
 };
 
@@ -174,59 +260,20 @@ static auto maybe_get_terminfo_dir(di::Optional<di::TransparentStringView> term,
     return terminfo_dir;
 }
 
-static auto main(Args& args) -> di::Result<void> {
-    auto const replay_mode = args.replay;
+static auto do_new(Args&, NewBase& args) -> di::Result<> {
+    auto const replay_mode = !args.replay_paths.empty();
     auto key_binds = make_key_binds(
         args.prefix, args.save_state_path.value_or("/tmp/ttx-save-state.ansi"_pv).to_owned(), replay_mode);
-    if (args.print_keybinds) {
-        for (auto const& bind : key_binds) {
-            dius::println("{}"_sv, bind);
-        }
-        return {};
-    }
-
-    if (args.print_terminfo_mode) {
-        auto const& terminfo = terminal::get_ttx_terminfo();
-        if (args.print_terminfo_mode == "terminfo"_tsv) {
-            dius::print("{}"_sv, terminfo.serialize());
-            return {};
-        }
-        if (args.print_terminfo_mode == "verbose"_tsv) {
-            dius::println("{}: {}"_sv, di::Styled("Names"_sv, di::FormatEffect::Bold),
-                          terminfo.names | di::transform(di::to_string) | di::join_with(", "_sv) |
-                              di::to<di::String>());
-
-            for (auto const& capability : terminfo.capabilities | di::filter(&terminal::Capability::enabled)) {
-                dius::println("\t{: <32}{: <90}{: <80}"_sv, di::Styled(capability.long_name, di::FormatEffect::Bold),
-                              capability.description, capability.serialize());
-            }
-            return {};
-        }
-        return di::Unexpected(di::BasicError::InvalidArgument);
-    }
 
     auto features = Feature::All;
     if (!args.headless) {
-        features = TRY(detect_features(dius::stdin));
-    }
-    if (args.print_features) {
-        dius::println("Feature: {}"_sv, features);
-        return {};
+        features = TRY(detect_features(dius::std_in));
     }
 
-    args.hide_status_bar |= replay_mode;
-    if (args.command.empty()) {
-        if (!args.replay) {
-            dius::eprintln("error: ttx requires a command argument to know what to launch"_sv);
-            return di::Unexpected(di::BasicError::InvalidArgument);
-        }
-        dius::eprintln("error: ttx requires at least 1 argument to know what file to replay"_sv);
-        return di::Unexpected(di::BasicError::InvalidArgument);
-    }
     auto command = args.command | di::transform(di::to_owned) | di::to<di::Vector>();
 
     // Setup - log to file.
-    [[maybe_unused]] auto& log = dius::stderr = TRY(dius::open_sync("/tmp/ttx.log"_pv, dius::OpenMode::WriteClobber));
+    [[maybe_unused]] auto& log = dius::std_err = TRY(dius::open_sync("/tmp/ttx.log"_pv, dius::OpenMode::WriteClobber));
 
     // Setup - potentially compile terminfo database
     auto maybe_terminfo_dir = TRY(maybe_get_terminfo_dir(args.term, args.force_local_terminfo));
@@ -237,21 +284,21 @@ static auto main(Args& args) -> di::Result<void> {
         .capture_command_output_path = args.capture_command_output_path.transform(di::to_owned),
         .save_state_path = args.save_state_path.transform(di::to_owned),
         .terminfo_dir = di::move(maybe_terminfo_dir),
-        .term = args.term.value_or("xterm-ttx"_tsv),
+        .term = args.term,
     };
 
     // Setup - in headless mode there is no terminal. Ensure stdin is not valid.
     if (args.headless) {
-        (void) dius::stdin.close();
+        (void) dius::std_in.close();
     }
 
     // Setup - initial state and terminal size.
     auto initial_size = args.headless ? Size { 24, 80, 24 * 16, 80 * 16 }
-                                      : Size::from_window_size(TRY(dius::stdin.get_tty_window_size()));
+                                      : Size::from_window_size(TRY(dius::std_in.get_tty_window_size()));
     auto layout_state = di::Synchronized(LayoutState(initial_size, args.hide_status_bar));
 
     // Setup - raw mode
-    auto _ = args.headless ? di::ScopeExit(di::Function<void()>([] {})) : TRY(dius::stdin.enter_raw_mode());
+    auto _ = args.headless ? di::ScopeExit(di::Function<void()>([] {})) : TRY(dius::std_in.enter_raw_mode());
 
     // Setup - block SIGWINCH.
     TRY(dius::system::mask_signal(dius::Signal::WindowChange));
@@ -331,7 +378,7 @@ static auto main(Args& args) -> di::Result<void> {
     auto exit_status = 0;
     TRY(layout_state.with_lock([&](LayoutState& state) -> di::Result<> {
         if (replay_mode) {
-            for (auto replay_path : args.command) {
+            for (auto replay_path : args.replay_paths) {
                 auto create_pane_args = base_create_pane_args.clone();
                 create_pane_args.replay_path = di::PathView(replay_path).to_owned();
                 if (state.empty()) {
@@ -404,7 +451,7 @@ static auto main(Args& args) -> di::Result<void> {
             break;
         }
 
-        auto size = dius::stdin.get_tty_window_size();
+        auto size = dius::std_in.get_tty_window_size();
         if (!size) {
             continue;
         }
@@ -416,6 +463,73 @@ static auto main(Args& args) -> di::Result<void> {
         return di::Unexpected(di::BasicError::InvalidArgument);
     }
     return {};
+}
+
+static auto main(Args& base_args, New& args) -> di::Result<> {
+    if (args.command.empty()) {
+        auto const& env = dius::system::get_environment();
+        if (!env.contains("SHELL"_tsv)) {
+            return di::Unexpected(di::StringError(
+                "$SHELL environment variable not set. Either set the environment variable or explicitly pass a command to run"_s));
+        }
+        args.command = { env.at("SHELL"_tsv).value() };
+    }
+    return do_new(base_args, args);
+}
+
+static auto main(Args& base_args, Replay& args) -> di::Result<> {
+    args.hide_status_bar = true;
+    return do_new(base_args, args);
+}
+
+static auto main(Args&, Completions& args) -> di::Result<> {
+    auto parser = di::get_cli_parser<Args>();
+    parser.write_completions(dius::std_out, args.shell);
+    return {};
+}
+
+static auto main(Args&, Keybinds& args) -> di::Result<> {
+    auto key_binds = make_key_binds(
+        args.prefix, args.save_state_path.value_or("/tmp/ttx-save-state.ansi"_pv).to_owned(), args.replay_mode);
+    for (auto const& bind : key_binds) {
+        dius::println("{}"_sv, bind);
+    }
+    return {};
+}
+
+static auto main(Args&, Features&) -> di::Result<> {
+    auto features = TRY(detect_features(dius::std_in).transform_error([](auto error) {
+        return di::format_error("Failed to detect terminal features: {}"_sv, error);
+    }));
+    dius::println("Feature: {}"_sv, features);
+    return {};
+}
+
+static auto main(Args&, Terminfo& args) -> di::Result<> {
+    auto const& terminfo = terminal::get_ttx_terminfo();
+    if (args.format == TerminfoFormat::Terminfo) {
+        dius::print("{}"_sv, terminfo.serialize());
+        return {};
+    }
+    if (args.format == TerminfoFormat::Verbose) {
+        dius::println("{}: {}"_sv, di::Styled("Names"_sv, di::FormatEffect::Bold),
+                      terminfo.names | di::transform(di::to_string) | di::join_with(", "_sv) | di::to<di::String>());
+
+        for (auto const& capability : terminfo.capabilities | di::filter(&terminal::Capability::enabled)) {
+            dius::println("\t{: <32}{: <90}{: <80}"_sv, di::Styled(capability.long_name, di::FormatEffect::Bold),
+                          capability.description, capability.serialize());
+        }
+        return {};
+    }
+    return di::Unexpected(di::BasicError::InvalidArgument);
+}
+
+static auto main(Args& args) -> di::Result<> {
+    return di::visit(
+        [&](auto& subcommand) {
+            return main(args, subcommand);
+        },
+        args.subcommand);
 }
 }
 

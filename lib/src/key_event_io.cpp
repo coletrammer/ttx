@@ -399,14 +399,14 @@ static auto make_key_event_string(u32 num, u32 modifiers, c32 ending_code_point,
     if (num == 1 && modifiers == 1 && event_type == 1 && shifted_key == 0 && base_layout_key == 0 && text.empty()) {
         // If in application cursor key mode, send SS3 code_point instead of CSI code_point.
         if (cursor_key_mode == ApplicationCursorKeysMode::Enabled) {
-            return *di::present("\033O{}"_sv, ending_code_point);
+            return di::format("\033O{}"_sv, ending_code_point);
         }
-        return *di::present("\033[{}"_sv, ending_code_point);
+        return di::format("\033[{}"_sv, ending_code_point);
     }
 
     // Special case: modifiers=1 and event_type=1 and shifted=0 and base=0 and text="".
     if (modifiers == 1 && event_type == 1 && shifted_key == 0 && base_layout_key == 0 && text.empty()) {
-        return *di::present("\033[{}{}"_sv, num, ending_code_point);
+        return di::format("\033[{}{}"_sv, num, ending_code_point);
     }
 
     // Build up the paramaters. We'll end up with a string like:
@@ -446,7 +446,7 @@ static auto make_key_event_string(u32 num, u32 modifiers, c32 ending_code_point,
                              di::to<di::Vector>());
     }
 
-    return *di::present("\033[{}{}"_sv, params, ending_code_point);
+    return di::format("\033[{}{}"_sv, params, ending_code_point);
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
@@ -500,12 +500,12 @@ auto serialize_key_event(KeyEvent const& event, ApplicationCursorKeysMode cursor
         // Tab special case: shift+tab outputs CSI Z.
         if (key == Key::Tab && !!(modifiers & Modifiers::Shift) &&
             !(modifiers & ~(Modifiers::Shift | Modifiers::Control))) {
-            return *di::present("{}\x1b[Z"_sv, has_alt ? "\x1b"_sv : ""_sv);
+            return di::format("{}\x1b[Z"_sv, has_alt ? "\x1b"_sv : ""_sv);
         }
 
         for (auto const& mapping : legacy_code_point_mappings) {
             if (key == mapping.key && modifiers == mapping.modifiers) {
-                return *di::present("{}{}"_sv, has_alt ? "\x1b"_sv : ""_sv, mapping.code_point);
+                return di::format("{}{}"_sv, has_alt ? "\x1b"_sv : ""_sv, mapping.code_point);
             }
         }
 
@@ -517,7 +517,7 @@ auto serialize_key_event(KeyEvent const& event, ApplicationCursorKeysMode cursor
 
             for (auto const& mapping : legacy_code_point_mappings) {
                 if (key == mapping.key && modifiers == mapping.modifiers) {
-                    return *di::present("{}{}"_sv, has_alt ? "\x1b"_sv : ""_sv, mapping.code_point);
+                    return di::format("{}{}"_sv, has_alt ? "\x1b"_sv : ""_sv, mapping.code_point);
                 }
             }
         }

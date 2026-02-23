@@ -12,15 +12,15 @@ auto Capability::serialize() const -> di::String {
     return di::visit(di::overload(
                          [&](di::Void) -> di::String {
                              // Boolean capability
-                             return *di::present("{}"_sv, short_name.to_owned());
+                             return di::format("{}"_sv, short_name.to_owned());
                          },
                          [&](u32 value) {
                              // Numeric capability
-                             return *di::present("{}#{}"_sv, short_name, value);
+                             return di::format("{}#{}"_sv, short_name, value);
                          },
                          [&](di::TransparentStringView value) {
                              // String capability
-                             return *di::present("{}={}"_sv, short_name, value);
+                             return di::format("{}={}"_sv, short_name, value);
                          }),
                      value);
 }
@@ -34,7 +34,7 @@ auto Terminfo::serialize() const -> di::String {
 
     // Each capability goes on a separate line
     for (auto const& capability : capabilities | di::filter(&Capability::enabled)) {
-        result += *di::present("\t{},\n"_sv, capability.serialize());
+        result += di::format("\t{},\n"_sv, capability.serialize());
     }
 
     return result;

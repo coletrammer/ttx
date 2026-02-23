@@ -10,7 +10,7 @@ set(terminfo_input "${CMAKE_CURRENT_BINARY_DIR}/ttx.terminfo")
 add_custom_command(
     OUTPUT "${terminfo_input}"
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
-    COMMAND sh -c "./ttx --terminfo terminfo >${terminfo_input}"
+    COMMAND sh -c "./ttx terminfo >${terminfo_input}"
     DEPENDS ttx_app
     COMMENT "Generating ttx terminfo"
     VERBATIM
