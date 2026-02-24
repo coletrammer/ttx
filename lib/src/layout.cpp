@@ -486,9 +486,9 @@ auto LayoutGroup::resize(LayoutNode& root, Pane* pane, ResizeDirection direction
 auto LayoutGroup::layout(Size const& size, u32 row_offset, u32 col_offset) -> di::Box<LayoutNode> {
     auto node = di::make_box<LayoutNode>(row_offset, col_offset, size,
                                          di::Vector<di::Variant<di::Box<LayoutNode>, LayoutEntry>> {}, nullptr, this,
-                                         direction());
+                                         direction(), di::Vector<u32> {}, di::Vector<u32> {});
 
-    // Base case: we less than 1 pane, so allocate all of our space to it.
+    // Base case: we have less than 1 pane, so allocate all of our space to it.
     if (m_direction == Direction::None) {
         ASSERT(empty() || single());
         if (single()) {
@@ -528,6 +528,7 @@ auto LayoutGroup::layout(Size const& size, u32 row_offset, u32 col_offset) -> di
     auto fixed_offset = m_direction == Direction::Horizontal ? row_offset : col_offset;
     auto dynamic_offset = m_direction == Direction::Horizontal ? col_offset : row_offset;
 
+    auto first = true;
     for (auto const& child : m_children) {
         leftover_dynamic_size += di::Rational(di::visit(GetRelativeSize {}, child), max_layout_precision) *
                                  available_size.*dynamic_dimension;
@@ -543,6 +544,11 @@ auto LayoutGroup::layout(Size const& size, u32 row_offset, u32 col_offset) -> di
         };
         auto row = m_direction == Direction::Horizontal ? fixed_offset : dynamic_offset;
         auto col = m_direction == Direction::Horizontal ? dynamic_offset : fixed_offset;
+
+        if (!first) {
+            node->start_intersections.push_back(dynamic_offset - 1);
+            node->end_intersections.push_back(dynamic_offset - 1);
+        }
 
         // Do recursive layout.
         di::visit(di::overload(
@@ -560,10 +566,24 @@ auto LayoutGroup::layout(Size const& size, u32 row_offset, u32 col_offset) -> di
                       [&](di::Box<LayoutGroup> const& group) {
                           auto result = group->layout(size, row, col);
                           result->parent = node.get();
+
+                          // Add the intersections from the node's outermost grandchildren to the node's intersections
+                          // because they share borders. This assumes that all nested layout groups alternate in
+                          // direction.
+                          if (!result->children.empty()) {
+                              auto [first_grandchild_start_intersections, _] =
+                                  border_intersections(result->children.front().value());
+                              auto [_, last_grandchild_end_intersections] =
+                                  border_intersections(result->children.back().value());
+                              node->start_intersections.append_container(first_grandchild_start_intersections);
+                              node->end_intersections.append_container(last_grandchild_end_intersections);
+                          }
+
                           node->children.emplace_back(di::move(result));
                       }),
                   child);
 
+        first = false;
         leftover_dynamic_size -= dynamic_size;
         dynamic_offset += dynamic_size;
         dynamic_offset++; // Account for the minimum dynamic size of 1.
@@ -571,6 +591,18 @@ auto LayoutGroup::layout(Size const& size, u32 row_offset, u32 col_offset) -> di
     }
 
     return node;
+}
+
+auto border_intersections(di::Variant<di::Box<LayoutNode>, LayoutEntry> const& layout)
+    -> di::Tuple<di::Span<u32 const>, di::Span<u32 const>> {
+    return di::visit(di::overload(
+                         [&](di::Box<LayoutNode> const& node) -> di::Tuple<di::Span<u32 const>, di::Span<u32 const>> {
+                             return { node->start_intersections, node->end_intersections };
+                         },
+                         [&](LayoutEntry const&) -> di::Tuple<di::Span<u32 const>, di::Span<u32 const>> {
+                             return {};
+                         }),
+                     layout);
 }
 
 struct ToJsonV1 {

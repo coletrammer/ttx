@@ -43,6 +43,10 @@ struct LayoutNode {
     LayoutNode* parent { nullptr };
     LayoutGroup* group { nullptr };
     Direction direction { Direction::None };
+    // Intersection points with the leading edge of this node splitting up descendants placed in the same direction.
+    di::Vector<u32> start_intersections;
+    // Intersection points with the trailing edge of this node splitting up descendants placed in the same direction.
+    di::Vector<u32> end_intersections;
 
     auto find_pane(Pane* pane) -> di::Optional<LayoutEntry&>;
     auto find_pane_by_id(u64 id) -> di::Optional<LayoutEntry&>;
@@ -56,9 +60,15 @@ struct LayoutNode {
             di::field<"row", &LayoutNode::row>, di::field<"col", &LayoutNode::col>,
             di::field<"size", &LayoutNode::size>, di::field<"children", &LayoutNode::children>,
             di::field<"parent", &LayoutNode::parent>, di::field<"group", &LayoutNode::group>,
-            di::field<"direction", &LayoutNode::direction>);
+            di::field<"direction", &LayoutNode::direction>,
+            di::field<"start_intersections", &LayoutNode::start_intersections>,
+            di::field<"end_intersections", &LayoutNode::end_intersections>);
     }
 };
+
+// Get the start and end intersections of a LayoutNode's or LayoutEntry's borders.
+auto border_intersections(di::Variant<di::Box<LayoutNode>, LayoutEntry> const& layout)
+    -> di::Tuple<di::Span<u32 const>, di::Span<u32 const>>;
 
 // Pane sizes are computed in units of this number of precision, using fixed point arithemetic.
 constexpr inline auto max_layout_precision = i64(100'000);

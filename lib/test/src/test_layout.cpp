@@ -17,6 +17,11 @@ static auto add_pane(LayoutGroup& root, Size const& size, Pane* reference, Direc
     return { *pane, di::move(layout_tree) };
 };
 
+static auto get_child_node(LayoutNode const& tree, size_t index) -> LayoutNode const& {
+    ASSERT_LT(index, tree.children.size());
+    return *tree.children.at(index).value().get<di::Box<LayoutNode>>();
+}
+
 static auto validate_layout_for_pane(Pane& pane, LayoutNode& tree, u32 row, u32 col, Size size) {
     auto entry = tree.find_pane(&pane);
     ASSERT(entry);
@@ -31,6 +36,19 @@ static auto validate_layout_for_pane(Pane& pane, LayoutNode& tree, u32 row, u32 
     ASSERT_EQ(entry->size, size);
 };
 
+static void validate_layout_intersections(LayoutNode const& tree, di::Vector<u32> const& start_intersections,
+                                          di::Vector<u32> const& end_intersections) {
+    ASSERT_EQ(tree.start_intersections.size(), start_intersections.size());
+    ASSERT_EQ(tree.end_intersections.size(), end_intersections.size());
+
+    for (auto [actual_intersection, expected_intersection] : di::zip(tree.start_intersections, start_intersections)) {
+        ASSERT_EQ(actual_intersection, expected_intersection);
+    }
+    for (auto [actual_intersection, expected_intersection] : di::zip(tree.end_intersections, end_intersections)) {
+        ASSERT_EQ(actual_intersection, expected_intersection);
+    }
+}
+
 static void splits() {
     constexpr auto size = Size(64, 128, 1280, 640);
 
@@ -39,17 +57,21 @@ static void splits() {
     // Initial pane
     auto [pane0, l0] = add_pane(root, size, nullptr, Direction::None);
     validate_layout_for_pane(pane0, *l0, 0, 0, size);
+    validate_layout_intersections(*l0, {}, {});
 
     // Vertical split
     auto [pane1, l1] = add_pane(root, size, &pane0, Direction::Vertical);
     validate_layout_for_pane(pane0, *l1, 0, 0, { 32, 128 });
     validate_layout_for_pane(pane1, *l1, 33, 0, { 31, 128 });
+    validate_layout_intersections(*l1, { 32 }, { 32 });
 
     // Horitzontal split above
     auto [pane2, l2] = add_pane(root, size, &pane0, Direction::Horizontal);
     validate_layout_for_pane(pane0, *l2, 0, 0, { 32, 64 });
     validate_layout_for_pane(pane1, *l2, 33, 0, { 31, 128 });
     validate_layout_for_pane(pane2, *l2, 0, 65, { 32, 63 });
+    validate_layout_intersections(*l2, { 32 }, { 32 });
+    validate_layout_intersections(get_child_node(*l2, 0), { 64 }, { 64 });
 
     // 2 Veritcal splits under pane 2.
     auto [pane4, _] = add_pane(root, size, &pane2, Direction::Vertical);
@@ -59,6 +81,8 @@ static void splits() {
     validate_layout_for_pane(pane2, *l3, 0, 65, { 10, 63 });
     validate_layout_for_pane(pane3, *l3, 11, 65, { 10, 63 });
     validate_layout_for_pane(pane4, *l3, 22, 65, { 10, 63 });
+    validate_layout_intersections(*l3, { 32 }, { 10, 21, 32 });
+    validate_layout_intersections(get_child_node(*l3, 0), { 64 }, { 64 });
 }
 
 static void many_splits() {
@@ -77,11 +101,57 @@ static void many_splits() {
     }
 
     auto l = root.layout(size, 0, 0);
+    auto expected_intersections = di::Vector<u32> {};
     for (auto* pane : panes) {
         auto entry = l->find_pane(pane);
         ASSERT(entry);
 
         ASSERT_EQ(entry->size.rows, 10);
+        expected_intersections.push_back(entry->row - 1);
+    }
+
+    di::container::reverse(expected_intersections);
+    validate_layout_intersections(*l, expected_intersections, expected_intersections);
+}
+
+static void nested_splits() {
+    constexpr auto size = Size(64, 128, 1280, 640);
+    constexpr auto num_splits = 8;
+
+    auto root = LayoutGroup {};
+
+    // Initial pane
+    auto [pane0, l0] = add_pane(root, size, nullptr, Direction::None);
+
+    // Recursively split the last pane 8 times along alternating directions
+    auto* curr_pane = &pane0;
+    auto horizontal_intersections = di::Vector<u32> {};
+    auto vertical_intersections = di::Vector<u32> {};
+    for (auto i = 0; i < num_splits; i++) {
+        auto [next_pane, _] = add_pane(root, size, curr_pane, i % 2 ? Direction::Horizontal : Direction::Vertical);
+        if (i % 2) {
+            horizontal_intersections.push_back(size.cols - size.cols / (2 << (i / 2)));
+        } else {
+            vertical_intersections.push_back(size.rows - size.rows / (2 << (i / 2)));
+        }
+        curr_pane = &next_pane;
+    }
+
+    auto l = root.layout(size, 0, 0);
+
+    // Validate that the descendant intersections are applied to the ancestor borders
+    auto const* curr_node = l.get();
+    for (auto i = 0; i < num_splits - 1; i++) {
+        if (i % 2) {
+            auto first_intersection = horizontal_intersections.front().value();
+            validate_layout_intersections(*curr_node, { first_intersection }, horizontal_intersections);
+            horizontal_intersections.erase(horizontal_intersections.begin());
+        } else {
+            auto first_intersection = vertical_intersections.front().value();
+            validate_layout_intersections(*curr_node, { first_intersection }, vertical_intersections);
+            vertical_intersections.erase(vertical_intersections.begin());
+        }
+        curr_node = &get_child_node(*curr_node, 1);
     }
 }
 
@@ -313,6 +383,10 @@ static void resize() {
         validate_layout_for_pane(pane1, *l, u32(33 + e0), 0, { u32(32 - e0), u32(64 + e2) });
         validate_layout_for_pane(pane2, *l, 0, u32(65 + e1), { u32(32 + e0), u32(64 - e1) });
         validate_layout_for_pane(pane3, *l, u32(33 + e0), u32(65 + e2), { u32(32 - e0), u32(64 - e2) });
+
+        validate_layout_intersections(*l, { u32(32 + e0) }, { u32(32 + e0) });
+        validate_layout_intersections(get_child_node(*l, 0), { u32(64 + e1) }, { u32(64 + e1) });
+        validate_layout_intersections(get_child_node(*l, 1), { u32(64 + e2) }, { u32(64 + e2) });
     };
 
     // Initially, the layout should be valid.
@@ -400,6 +474,7 @@ static void resize_to_zero() {
 
 TEST(layout, splits)
 TEST(layout, many_splits)
+TEST(layout, nested_splits)
 TEST(layout, remove_pane)
 TEST(layout, remove_then_split)
 TEST(layout, hit_test)

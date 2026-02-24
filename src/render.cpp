@@ -218,28 +218,50 @@ struct Render {
     LayoutState& state;
     bool have_status_bar { false };
 
+    auto border_code_point(Direction direction, u32 pos, di::Span<u32 const>& interior_intersections,
+                           di::Span<u32 const>& exterior_intersections) -> c32 {
+        auto combined_intersections = (direction == Direction::Horizontal) << 2;
+        if (interior_intersections.front().has_value() && interior_intersections.front().value() == pos) {
+            combined_intersections |= 1 << 0;
+            interior_intersections = interior_intersections.subspan(1).value();
+        }
+        if (exterior_intersections.front().has_value() && exterior_intersections.front().value() == pos) {
+            combined_intersections |= 1 << 1;
+            exterior_intersections = exterior_intersections.subspan(1).value();
+        }
+
+        constexpr static auto code_point_lookup = di::Array { U'─', U'┬', U'┴', U'┼', U'│', U'├', U'┤', U'┼' };
+        return code_point_lookup[combined_intersections];
+    }
+
     void operator()(di::Box<LayoutNode> const& node) { (*this)(*node); }
 
     void operator()(LayoutNode& node) {
-        auto first = true;
-        for (auto const& child : node.children) {
-            if (!first) {
-                // Draw a border around the pane.
-                auto [row, col, size] = di::visit(PositionAndSize {}, child);
-                renderer.set_bound(0, 0, state.size().cols, state.size().rows);
-                if (node.direction == Direction::Horizontal) {
-                    for (auto r : di::range(row + have_status_bar, row + have_status_bar + size.rows)) {
-                        auto code_point = U'│';
-                        renderer.put_text(code_point, r, col - 1);
-                    }
-                } else if (node.direction == Direction::Vertical) {
-                    for (auto c : di::range(col, col + size.cols)) {
-                        auto code_point = U'─';
-                        renderer.put_text(code_point, row + have_status_bar - 1, c);
-                    }
+        // Special case to visit the first child since no preceding border is drawn for it.
+        if (!node.children.empty()) {
+            di::visit(*this, node.children.front().value());
+        }
+
+        for (auto const&& [prev_child, child] : node.children | di::pairwise) {
+            auto [_, exterior_intersections] = border_intersections(prev_child);
+            auto [interior_intersections, _] = border_intersections(child);
+
+            // Draw a border around the pane.
+            auto [row, col, size] = di::visit(PositionAndSize {}, child);
+            renderer.set_bound(0, 0, state.size().cols, state.size().rows);
+            if (node.direction == Direction::Horizontal) {
+                for (auto r : di::range(row + have_status_bar, row + have_status_bar + size.rows)) {
+                    auto code_point = border_code_point(node.direction, r - have_status_bar, interior_intersections,
+                                                        exterior_intersections);
+                    renderer.put_text(code_point, r, col - 1);
+                }
+            } else if (node.direction == Direction::Vertical) {
+                for (auto c : di::range(col, col + size.cols)) {
+                    auto code_point =
+                        border_code_point(node.direction, c, interior_intersections, exterior_intersections);
+                    renderer.put_text(code_point, row + have_status_bar - 1, c);
                 }
             }
-            first = false;
 
             di::visit(*this, child);
         }
