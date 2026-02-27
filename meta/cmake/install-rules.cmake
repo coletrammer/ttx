@@ -9,9 +9,37 @@ if(NOT ttx_LIB_ONLY)
 
     # terminfo
     if(ttx_BUILD_TERMINFO)
+        set(ttx_INSTALL_TERMINFO_DIR
+            "${CMAKE_INSTALL_DATADIR}/terminfo"
+            CACHE STRING "compiled terminfo location relative to the install prefix"
+        )
         install(
             DIRECTORY "${CMAKE_BINARY_DIR}/terminfo/"
-            DESTINATION "${CMAKE_INSTALL_DATADIR}/terminfo"
+            DESTINATION "${ttx_INSTALL_TERMINFO_DIR}"
+            COMPONENT ttx_Terminfo
+        )
+    endif()
+
+    # shell completions
+    if(ttx_BUILD_SHELL_COMPLETIONS)
+        # Allow package maintainers to freely override the path for the shell completions
+        set(ttx_INSTALL_BASH_COMPLETIONS_DIR
+            "${CMAKE_INSTALL_DATADIR}/bash-completions/completions"
+            CACHE STRING "bash shell completion script location relative to the install prefix"
+        )
+        set(ttx_INSTALL_ZSH_COMPLETIONS_DIR
+            "${CMAKE_INSTALL_DATADIR}/zsh/site-functions"
+            CACHE STRING "zsh shell completion script location relative to the install prefix"
+        )
+
+        install(
+            FILES "${CMAKE_BINARY_DIR}/completions/ttx.bash"
+            DESTINATION "${ttx_INSTALL_BASH_COMPLETIONS_DIR}"
+            COMPONENT ttx_Runtime
+        )
+        install(
+            FILES "${CMAKE_BINARY_DIR}/completions/_ttx"
+            DESTINATION "${ttx_INSTALL_ZSH_COMPLETIONS_DIR}"
             COMPONENT ttx_Runtime
         )
     endif()

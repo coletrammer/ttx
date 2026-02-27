@@ -40,17 +40,51 @@ ln -s "$(realpath ./dius)" ./ttx/dius
 
 ### Manual Build Commands
 
-To manually build ttx and its library, use the following commands.
+To manually build ttx and its library, use the following commands. Note that you should omit the
+`ttx_INSTALL_TERMINFO_DIR` option if you plan to do not plan to install `ttx` or are installing it
+with root permissions to system directories.
 
 ```sh
-cmake -S . -B build -D CMAKE_BUILD_TYPE=Release
+cmake -S . -B build -D CMAKE_BUILD_TYPE=Release -D ttx_INSTALL_TERMINFO_DIR=.terminfo
 cmake --build build
 ```
 
 ### Install Commands
 
+This installs the `ttx` to a user specific directory so that install as root is not
+required:
+
 ```sh
-cmake --install build
+cmake --install build --prefix ~/.local --component ttx_Runtime
+```
+
+Terminfo must be installed to a different directory to work by default:
+
+```sh
+cmake --install build --prefix ~/ --component ttx_Terminfo
+```
+
+Under this configuration, the following files will be installed:
+
+| File                                                 | Desciption                                                            |
+| ---------------------------------------------------- | --------------------------------------------------------------------- |
+| ~/.local/bin/ttx                                     | The actual `ttx` binary.                                              |
+| ~/.local/share/bash-completions/completions/ttx.bash | Shell completion script for bash.                                     |
+| ~/.local/share/zsh/site-functions/\_ttx              | Shell completion script for zsh.                                      |
+| ~/.terminfo/<VARIES>/xterm-ttx                       | Terminfo for `ttx`. The actual path varies depending on the platform. |
+
+Once installed, ensure you add `~/.local/bin` to your `PATH` in your shell's init scripts, via:
+
+```sh
+export PATH="~/.local/bin:$PATH"
+```
+
+Shell completions and terminfo should be found automatically as the files have been installed to their standard
+locations. For zsh, if the directory is not already in your `fpath` you can add it as follows (but you probably don't
+need to):
+
+```sh
+fpath=(~/.local/share/zsh/site-functions $fpath)
 ```
 
 ### Consuming the ttx Library via CMake

@@ -91,6 +91,11 @@ if(NOT ttx_LIB_ONLY)
     if(ttx_BUILD_TERMINFO)
         include(meta/cmake/terminfo.cmake)
     endif()
+
+    # ---- Shell completions ----
+    if(ttx_BUILD_SHELL_COMPLETIONS)
+        include(meta/cmake/shell-completions.cmake)
+    endif()
 endif()
 
 # ---- Install rules ----

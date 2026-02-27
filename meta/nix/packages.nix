@@ -57,6 +57,7 @@
           ];
 
           nativeBuildInputs = with pkgs; [
+            installShellFiles
             makeBinaryWrapper
           ];
 
@@ -64,6 +65,9 @@
           installPhase = ''
             mkdir -p $out/bin
             cp ${dep}/bin/* $out/bin
+
+            installShellCompletion --zsh ${dep}/share/zsh/site-functions/_ttx
+            installShellCompletion --bash ${dep}/share/bash-completions/completions/ttx.bash
 
             mkdir -p $terminfo/share
             cp -r -p "${dep}/share/terminfo" $terminfo/share/terminfo
