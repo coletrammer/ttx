@@ -1,9 +1,48 @@
 # Install
 
-The easiest way to install ttx is using [nix](https://nixos). As of now, the only alternative is compiling from source.
-In the future, a statically linked binary will available via a GitHub release. However the user will
-still need to install `fzf` to make use to the application. To build ttx from source, see the steps
+ttx can be installed via [nix](https://nixos) or by downloading a statically linked binary created in CI.
+Using nix is preferred because it will install dependencies and associated files automatically.
+To build ttx from source, see the steps
 [here](./build.md).
+
+## Installing from GitHub Release
+
+The latest builds of ttx are available by [here](https://github.com/coletrammer/ttx/releases/tag/latest).
+You must download the correct version of ttx for your platform.
+If you are using a platform other than an ARM mac or x86_64 linux you must compile from source
+or use nix.
+
+### Install Script
+
+The following script downloads the latest release to `~/.local/bin`, installs shell completion scripts,
+and compiles the ttx terminfo.
+
+```sh
+curl -sS https://github.com/coletrammer/ttx/releases/download/latest/install.sh | sh
+```
+
+The script installs the following files:
+
+| File                                                 | Desciption                                                            |
+| ---------------------------------------------------- | --------------------------------------------------------------------- |
+| ~/.local/bin/ttx                                     | The actual `ttx` binary.                                              |
+| ~/.local/share/bash-completions/completions/ttx.bash | Shell completion script for bash.                                     |
+| ~/.local/share/zsh/site-functions/\_ttx              | Shell completion script for zsh.                                      |
+| ~/.terminfo/<VARIES>/xterm-ttx                       | Terminfo for `ttx`. The actual path varies depending on the platform. |
+
+Once installed, ensure you add `~/.local/bin` to your `PATH` in your shell's init scripts, via:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Terminfo should be found automatically as the files have been installed to their standard
+locations. Bash completions should also work with no additional steps. For zsh, if the completion
+directory is not already in your `fpath` you can add it as follows:
+
+```sh
+fpath=(~/.local/share/zsh/site-functions $fpath)
+```
 
 ## Installing with Nix
 
@@ -56,10 +95,6 @@ Enable in your configuration:
 ```nix
 programs.ttx = {
   enable = true;
-  settings = {
-    prefix = "A";
-    shell = lib.getExe pkgs.zsh;
-  };
 };
 ```
 

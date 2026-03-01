@@ -88,10 +88,14 @@
 
       ttx-lib = mkLibPackage pkgs.stdenv "ttx-lib" "dius";
       ttx-lib-dius-runtime = mkLibPackage pkgs.stdenv "ttx-lib-dius-runtime" "dius-runtime";
+      ttx-lib-static = mkLibPackage pkgs.pkgsStatic.stdenv "ttx-lib-static" "dius-static";
       ttx-unwrapped = mkUnwrappedPackage pkgs.stdenv "ttx-unwrapped" ttx-lib;
       ttx-dius-runtime-unwrapped =
         mkUnwrappedPackage pkgs.stdenv "ttx-dius-runtime-unwrapped"
           ttx-lib-dius-runtime;
+      ttx-static-unwrapped =
+        mkUnwrappedPackage pkgs.pkgsStatic.stdenv "ttx-static-unwrapped"
+          ttx-lib-static;
       ttx = mkWrappedPackage pkgs.stdenv "ttx" ttx-unwrapped [
         pkgs.fzf # fzf is used for popup menus
         pkgs.ncurses # tic may be used to compile terminfo, if not already installed
@@ -100,24 +104,33 @@
         pkgs.fzf
         pkgs.ncurses
       ];
+      ttx-static = mkWrappedPackage pkgs.pkgsStatic.stdenv "ttx-static" ttx-static-unwrapped [
+        pkgs.fzf
+        pkgs.ncurses
+      ];
 
       ttx-app = mkApp ttx;
       ttx-app-dius-runtime = mkApp ttx-dius-runtime;
+      ttx-app-static = mkApp ttx-static;
     in
     {
       apps = {
         default = ttx-app;
         ttx = ttx-app;
         ttx-dius-runtime = ttx-app-dius-runtime;
+        ttx-static = ttx-app-static;
       };
       packages = {
         default = ttx;
         ttx = ttx;
         ttx-dius-runtime = ttx-dius-runtime;
+        ttx-static = ttx-static;
         ttx-unwrapped = ttx-unwrapped;
         ttx-dius-runtime-unwrapped = ttx-dius-runtime-unwrapped;
+        ttx-static-unwrapped = ttx-static-unwrapped;
         ttx-lib = ttx-lib;
         ttx-lib-dius-runtime = ttx-lib-dius-runtime;
+        ttx-lib-static = ttx-lib-static;
       };
     };
 }

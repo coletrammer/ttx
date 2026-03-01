@@ -1,0 +1,66 @@
+name: Latest Release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: linux-x86_64
+          - os: macos-latest
+            arch: macos-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v6
+      - name: Install nix
+        uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Nix build
+        run: |
+          nix build .#ttx-static-unwrapped
+          cp -p result/bin/ttx ./ttx-${{ matrix.arch }}
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ttx-${{ matrix.arch }}
+          path: ./ttx-${{ matrix.arch }}
+
+  release:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v6
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+      - name: Update latest release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Latest Build"
+          body: "Automated latest build from the main branch."
+          preserve_order: true
+          prerelease: true
+          make_latest: false
+          files: |
+            ttx-linux-x86_64/*
+            ttx-macos-arm64/*
+            meta/scripts/install.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
