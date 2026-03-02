@@ -38,15 +38,8 @@ static auto validate_layout_for_pane(Pane& pane, LayoutNode& tree, u32 row, u32 
 
 static void validate_layout_intersections(LayoutNode const& tree, di::Vector<u32> const& start_intersections,
                                           di::Vector<u32> const& end_intersections) {
-    ASSERT_EQ(tree.start_intersections.size(), start_intersections.size());
-    ASSERT_EQ(tree.end_intersections.size(), end_intersections.size());
-
-    for (auto [actual_intersection, expected_intersection] : di::zip(tree.start_intersections, start_intersections)) {
-        ASSERT_EQ(actual_intersection, expected_intersection);
-    }
-    for (auto [actual_intersection, expected_intersection] : di::zip(tree.end_intersections, end_intersections)) {
-        ASSERT_EQ(actual_intersection, expected_intersection);
-    }
+    ASSERT_EQ(tree.start_intersections, start_intersections);
+    ASSERT_EQ(tree.end_intersections, end_intersections);
 }
 
 static void splits() {
@@ -439,6 +432,86 @@ static void resize() {
     }
 }
 
+static void resize_nested() {
+    constexpr auto size = Size(65, 129, 1290, 650);
+
+    auto root = LayoutGroup {};
+
+    // Initial pane
+    auto [pane0, _] = add_pane(root, size, nullptr, Direction::None);
+
+    // Horizontal split
+    auto [pane1, _] = add_pane(root, size, &pane0, Direction::Horizontal);
+
+    // Vertical split
+    auto [pane2, _] = add_pane(root, size, &pane1, Direction::Vertical);
+
+    // Horizontal split
+    auto [pane3, l] = add_pane(root, size, &pane2, Direction::Horizontal);
+
+    // Now the layout looks something like this:
+    // |---------|--------|
+    // |0        |1       |
+    // |         |--------|
+    // |         |2  | 3  |
+    // |---------|--------|
+
+    // Validate the layout after adjusting an edge accordingly.
+    auto validate = [&](i32 e0, i32 e1, i32 e2, bool size_goes_to_two) {
+        validate_layout_for_pane(pane0, *l, 0, 0, { 65, u32(64 + e0) });
+        validate_layout_for_pane(pane1, *l, 0, u32(65 + e0), { u32(32 + e1), u32(64 - e0) });
+        validate_layout_for_pane(pane2, *l, u32(33 + e1), u32(65 + e0),
+                                 { u32(32 - e1), u32(32 + e2 + (!size_goes_to_two ? -e0 : 0)) });
+        validate_layout_for_pane(pane3, *l, u32(33 + e1), u32(98 + e2 + (size_goes_to_two ? e0 : 0)),
+                                 { u32(32 - e1), u32(31 - e2 + (size_goes_to_two ? -e0 : 0)) });
+
+        validate_layout_intersections(*l, { u32(64 + e0) },
+                                      { u32(64 + e0), u32(97 + e2 + (size_goes_to_two ? e0 : 0)) });
+        validate_layout_intersections(get_child_node(*l, 1), { u32(32 + e1) }, { u32(32 + e1) });
+        validate_layout_intersections(get_child_node(get_child_node(*l, 1), 1),
+                                      { u32(97 + e2 + (size_goes_to_two ? e0 : 0)) },
+                                      { u32(97 + e2 + (size_goes_to_two ? e0 : 0)) });
+    };
+
+    // Initially, the layout should be valid.
+    validate(0, 0, 0, false);
+
+    struct Case {
+        Pane* pane { nullptr };
+        ResizeDirection direction { ResizeDirection::Bottom };
+        i32 amount { 0 };
+        di::Tuple<i32, i32, i32> edges;
+        bool changed { true };
+        bool size_goes_to_two { false };
+    };
+
+    // Now test several possible resize events to make they work.
+    auto cases = di::Array {
+        // Pane 2
+        Case { &pane2, ResizeDirection::Top, -1, { 0, 1, 0 } },
+        Case { &pane2, ResizeDirection::Top, 1, { 0, -1, 0 } },
+        Case { &pane2, ResizeDirection::Left, -1, { 1, 0, 0 } },
+        Case { &pane2, ResizeDirection::Left, 1, { -1, 0, 0 }, true, true },
+        Case { &pane2, ResizeDirection::Bottom, 1, { 0, 0, 0 }, false },
+        Case { &pane2, ResizeDirection::Bottom, -1, { 0, 0, 0 }, false },
+    };
+
+    for (auto [pane, direction, amount, edges, changed, size_goes_to_two] : cases) {
+        auto [e0, e1, e2] = edges;
+
+        // Do the resize.
+        ASSERT_EQ(root.resize(*l, pane, direction, amount), changed);
+
+        l = root.layout(size, 0, 0);
+        validate(e0, e1, e2, size_goes_to_two);
+
+        // Undo the resize.
+        ASSERT_EQ(root.resize(*l, pane, direction, -amount), changed);
+        l = root.layout(size, 0, 0);
+        validate(0, 0, 0, false);
+    }
+}
+
 static void resize_to_zero() {
     constexpr auto size = Size(64, 128, 1280, 640);
 
@@ -479,5 +552,6 @@ TEST(layout, remove_pane)
 TEST(layout, remove_then_split)
 TEST(layout, hit_test)
 TEST(layout, resize)
+TEST(layout, resize_nested)
 TEST(layout, resize_to_zero)
 }

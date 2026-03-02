@@ -9,6 +9,7 @@
 #include "di/vocab/variant/get_if.h"
 #include "di/vocab/variant/holds_alternative.h"
 #include "dius/print.h"
+#include "ttx/direction.h"
 #include "ttx/layout_json.h"
 #include "ttx/size.h"
 
@@ -407,18 +408,52 @@ auto LayoutGroup::resize(LayoutNode& root, Pane* pane, ResizeDirection direction
     if (!entry) {
         return false;
     }
-    auto* parent = entry->parent;
-    ASSERT(parent);
-    ASSERT(parent->group);
-    auto* grand_parent = parent->parent;
 
-    // First identify whether we are modifying the parent layout group or the grand parent layout group.
-    // Each level only concerns itself with horizontal or vertical spacing, not both.
-    auto is_horizontal = direction == ResizeDirection::Right || direction == ResizeDirection::Left;
-    auto* relevant_node = (parent->direction == Direction::Horizontal && is_horizontal) ||
-                                  (parent->direction == Direction::Vertical && !is_horizontal)
-                              ? parent
-                              : grand_parent;
+    // First identify which node will actually resized. We walk the tree starting from the pane and find the
+    // first layout group in the correct direction. Additionally, if we're resizing in a direction where we
+    // cannot expand, we need to keep walking the tree. (For instance, resizing left the first pane in a horizontal
+    // group).
+    auto const sibling_is_prior = direction == ResizeDirection::Left || direction == ResizeDirection::Top;
+    auto const is_horizontal = direction == ResizeDirection::Right || direction == ResizeDirection::Left;
+    auto* relevant_node = entry->parent;
+    auto* prev_relevant_node = relevant_node;
+    while (relevant_node) {
+        ASSERT(relevant_node->group);
+
+        if ((relevant_node->direction != Direction::Horizontal && is_horizontal) ||
+            (relevant_node->direction != Direction::Vertical && !is_horizontal)) {
+            prev_relevant_node = relevant_node;
+            relevant_node = relevant_node->parent;
+            continue;
+        }
+
+        auto* it = di::find_if(relevant_node->group->m_children, [&](auto const& x) {
+            return di::visit(di::overload(
+                                 [&](di::Box<LayoutPane> const& layout_pane) -> bool {
+                                     return layout_pane->pane.get() == pane;
+                                 },
+                                 [&](di::Box<LayoutGroup> const& layout_node) -> bool {
+                                     return layout_node.get() == prev_relevant_node->group;
+                                 }),
+                             x);
+        });
+        ASSERT_NOT_EQ(it, relevant_node->group->m_children.end());
+
+        // Now determine the sibling we need to take size from, and validate that it exists.
+        if (it == relevant_node->group->m_children.begin() && sibling_is_prior) {
+            prev_relevant_node = relevant_node;
+            relevant_node = relevant_node->parent;
+            continue;
+        }
+        auto* sibling = sibling_is_prior ? di::prev(it) : di::next(it);
+        if (sibling == relevant_node->group->m_children.end()) {
+            prev_relevant_node = relevant_node;
+            relevant_node = relevant_node->parent;
+            continue;
+        }
+
+        break;
+    }
 
     // Ignore request to resize groups in the wrong direction or if there is only a single item in the group
     // (direction == Direction::None).
@@ -439,14 +474,13 @@ auto LayoutGroup::resize(LayoutNode& root, Pane* pane, ResizeDirection direction
                                  return layout_pane->pane.get() == pane;
                              },
                              [&](di::Box<LayoutGroup> const& layout_node) -> bool {
-                                 return layout_node.get() == parent->group;
+                                 return layout_node.get() == prev_relevant_node->group;
                              }),
                          x);
     });
     ASSERT_NOT_EQ(it, relevant_node->group->m_children.end());
 
     // Now determine the sibling we need to take size from, and validate that it exists.
-    auto sibling_is_prior = direction == ResizeDirection::Left || direction == ResizeDirection::Top;
     if (it == relevant_node->group->m_children.begin() && sibling_is_prior) {
         return false;
     }
