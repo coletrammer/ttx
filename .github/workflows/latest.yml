@@ -33,7 +33,7 @@ jobs:
           nix build .#ttx-static-unwrapped
           cp -p result/bin/ttx ./ttx-${{ matrix.arch }}
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ttx-${{ matrix.arch }}
           path: ./ttx-${{ matrix.arch }}
