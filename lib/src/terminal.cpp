@@ -25,6 +25,8 @@
 #include "ttx/terminal/escapes/size_report.h"
 #include "ttx/terminal/screen.h"
 
+// #define LOG_UNKNOWN_ESCAPES
+
 namespace ttx {
 Terminal::Terminal(u64 id, Size const& size)
     : m_id(id), m_primary_screen(size, terminal::Screen::ScrollBackEnabled::Yes), m_available_size(size) {}
@@ -55,6 +57,9 @@ void Terminal::on_parser_result(DCS&& dcs) {
         dcs_xtgettcap(dcs.params, dcs.data);
         return;
     }
+#ifdef LOG_UNKNOWN_ESCAPES
+    dius::eprintln("unknown DCS: {}"_sv, dcs);
+#endif
 }
 
 void Terminal::on_parser_result(OSC&& osc) {
@@ -88,6 +93,9 @@ void Terminal::on_parser_result(OSC&& osc) {
         osc_8671(osc.data.substr(ps_end.end()));
         return;
     }
+#ifdef LOG_UNKNOWN_ESCAPES
+    dius::eprintln("unknown OSC: {}"_sv, osc);
+#endif
 }
 
 void Terminal::on_parser_result(APC&& apc) {
@@ -123,6 +131,9 @@ void Terminal::on_parser_result(ControlCharacter&& control_character) {
             return;
         }
         default:
+#ifdef LOG_UNKNOWN_ESCAPES
+            dius::eprintln("unknown control character: {}"_sv, control_character);
+#endif
             return;
     }
 }
@@ -135,6 +146,9 @@ void Terminal::on_parser_result(CSI&& csi) {
                 return;
             }
             default:
+#ifdef LOG_UNKNOWN_ESCAPES
+                dius::eprintln("unknown CSI: {}"_sv, csi);
+#endif
                 return;
         }
     }
@@ -150,6 +164,9 @@ void Terminal::on_parser_result(CSI&& csi) {
                 return;
             }
             default:
+#ifdef LOG_UNKNOWN_ESCAPES
+                dius::eprintln("unknown CSI: {}"_sv, csi);
+#endif
                 return;
         }
     }
@@ -169,6 +186,9 @@ void Terminal::on_parser_result(CSI&& csi) {
                 return;
             }
             default:
+#ifdef LOG_UNKNOWN_ESCAPES
+                dius::eprintln("unknown CSI: {}"_sv, csi);
+#endif
                 return;
         }
     }
@@ -180,6 +200,9 @@ void Terminal::on_parser_result(CSI&& csi) {
                 return;
             }
             default:
+#ifdef LOG_UNKNOWN_ESCAPES
+                dius::eprintln("unknown CSI: {}"_sv, csi);
+#endif
                 return;
         }
     }
@@ -199,6 +222,9 @@ void Terminal::on_parser_result(CSI&& csi) {
                 return;
             }
             default:
+#ifdef LOG_UNKNOWN_ESCAPES
+                dius::eprintln("unknown CSI: {}"_sv, csi);
+#endif
                 return;
         }
     }
@@ -210,6 +236,9 @@ void Terminal::on_parser_result(CSI&& csi) {
                 return;
             }
             default:
+#ifdef LOG_UNKNOWN_ESCAPES
+                dius::eprintln("unknown CSI: {}"_sv, csi);
+#endif
                 return;
         }
     }
@@ -221,11 +250,17 @@ void Terminal::on_parser_result(CSI&& csi) {
                 return;
             }
             default:
+#ifdef LOG_UNKNOWN_ESCAPES
+                dius::eprintln("unknown CSI: {}"_sv, csi);
+#endif
                 return;
         }
     }
 
     if (!csi.intermediate.empty()) {
+#ifdef LOG_UNKNOWN_ESCAPES
+        dius::eprintln("unknown CSI: {}"_sv, csi);
+#endif
         return;
     }
 
@@ -266,6 +301,10 @@ void Terminal::on_parser_result(CSI&& csi) {
             csi_cup(csi.params);
             return;
         }
+        case 'I': {
+            csi_cht(csi.params);
+            return;
+        }
         case 'J': {
             csi_ed(csi.params);
             return;
@@ -298,6 +337,14 @@ void Terminal::on_parser_result(CSI&& csi) {
             csi_ech(csi.params);
             return;
         }
+        case '`': {
+            csi_hpa(csi.params);
+            return;
+        }
+        case 'a': {
+            csi_hpr(csi.params);
+            return;
+        }
         case 'b': {
             csi_rep(csi.params);
             return;
@@ -308,6 +355,10 @@ void Terminal::on_parser_result(CSI&& csi) {
         }
         case 'd': {
             csi_vpa(csi.params);
+            return;
+        }
+        case 'e': {
+            csi_vpr(csi.params);
             return;
         }
         case 'f': {
@@ -343,6 +394,9 @@ void Terminal::on_parser_result(CSI&& csi) {
             return;
         }
         default:
+#ifdef LOG_UNKNOWN_ESCAPES
+            dius::eprintln("unknown CSI: {}"_sv, csi);
+#endif
             return;
     }
 }
@@ -355,11 +409,17 @@ void Terminal::on_parser_result(Escape&& escape) {
                 return;
             }
             default:
+#ifdef LOG_UNKNOWN_ESCAPES
+                dius::eprintln("unknown ESC: {}"_sv, escape);
+#endif
                 return;
         }
     }
 
     if (!escape.intermediate.empty()) {
+#ifdef LOG_UNKNOWN_ESCAPES
+        dius::eprintln("unknown ESC: {}"_sv, escape);
+#endif
         return;
     }
 
@@ -390,6 +450,9 @@ void Terminal::on_parser_result(Escape&& escape) {
             return;
         }
         default:
+#ifdef LOG_UNKNOWN_ESCAPES
+            dius::eprintln("unknown ESC: {}"_sv, escape);
+#endif
             return;
     }
 }
@@ -840,6 +903,21 @@ void Terminal::csi_hvp(Params const& params) {
     csi_cup(params);
 }
 
+// Horizontal Position Absolute - https://vt100.net/docs/vt510-rm/HPA.html
+void Terminal::csi_hpa(Params const& params) {
+    csi_cha(params);
+}
+
+// Horizontal Position Relative - https://vt100.net/docs/vt510-rm/HPR.html
+void Terminal::csi_hpr(Params const& params) {
+    csi_cuf(params);
+}
+
+// Vertical Position Relative - https://vt100.net/docs/vt510-rm/VPR.html
+void Terminal::csi_vpr(Params const& params) {
+    csi_cud(params);
+}
+
 // Tab Clear - https://vt100.net/docs/vt510-rm/TBC.html
 void Terminal::csi_tbc(Params const& params) {
     switch (params.get(0, 0)) {
@@ -853,6 +931,16 @@ void Terminal::csi_tbc(Params const& params) {
             return;
         default:
             return;
+    }
+}
+
+// Set Cursor Style - https://vt100.net/docs/vt510-rm/CHT.html
+void Terminal::csi_cht(Params const& params) {
+    for (auto _ : di::range(params.get(0, 1))) {
+        if (cursor_col() >= max_col_inclusive()) {
+            break;
+        }
+        c0_ht();
     }
 }
 

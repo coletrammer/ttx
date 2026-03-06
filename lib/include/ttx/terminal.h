@@ -201,7 +201,11 @@ private:
     void csi_da3(Params const& params);
     void csi_vpa(Params const& params);
     void csi_hvp(Params const& params);
+    void csi_hpa(Params const& params);
+    void csi_hpr(Params const& params);
+    void csi_vpr(Params const& params);
     void csi_tbc(Params const& params);
+    void csi_cht(Params const& params);
     void csi_decset(Params const& params);
     void csi_decrst(Params const& params);
     void csi_decrqm(Params const& params);
