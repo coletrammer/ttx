@@ -1,5 +1,6 @@
 #pragma once
 
+#include "config.h"
 #include "di/container/queue/queue.h"
 #include "dius/condition_variable.h"
 #include "input_mode.h"
@@ -42,17 +43,21 @@ struct ClipboardRequest {
     bool reply { false };
 };
 
+struct UpdateConfig {
+    Config config;
+};
+
 using RenderEvent = di::Variant<Size, PaneExited, InputStatus, WriteString, StatusMessage, DoRender, MouseEvent,
-                                ClipboardRequest, Exit>;
+                                ClipboardRequest, UpdateConfig, Exit>;
 
 class RenderThread {
 public:
-    explicit RenderThread(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit,
-                          ClipboardMode clipboard_mode, Feature features);
+    explicit RenderThread(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit, Config config,
+                          Feature features);
     ~RenderThread();
 
-    static auto create(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit,
-                       ClipboardMode clipboard_mode, Feature features) -> di::Result<di::Box<RenderThread>>;
+    static auto create(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit, Config config,
+                       Feature features) -> di::Result<di::Box<RenderThread>>;
     static auto create_mock(di::Synchronized<LayoutState>& layout_state) -> RenderThread;
 
     void push_event(RenderEvent event);

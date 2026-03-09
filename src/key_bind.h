@@ -1,6 +1,7 @@
 #pragma once
 
 #include "action.h"
+#include "config.h"
 #include "di/reflect/prelude.h"
 #include "input_mode.h"
 #include "ttx/key.h"
@@ -24,5 +25,5 @@ struct KeyBind {
     }
 };
 
-auto make_key_binds(Key prefix, di::Path save_state_path, bool replay_mode) -> di::Vector<KeyBind>;
+auto make_key_binds(InputConfig const& config, bool replay_mode) -> di::Vector<KeyBind>;
 }

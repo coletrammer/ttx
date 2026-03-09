@@ -67,6 +67,7 @@ public:
         -> di::Vector<Reply>;
 
     [[nodiscard]] auto mode() const { return m_mode; }
+    void set_mode(ClipboardMode mode) { m_mode = mode; }
 
 private:
     void expire(dius::SteadyClock::TimePoint reception);

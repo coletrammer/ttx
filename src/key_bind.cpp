@@ -114,7 +114,7 @@ static auto make_replay_key_binds() -> di::Vector<KeyBind> {
     return result;
 }
 
-auto make_key_binds(Key prefix, di::Path save_state_path, bool replay_mode) -> di::Vector<KeyBind> {
+auto make_key_binds(InputConfig const& config, bool replay_mode) -> di::Vector<KeyBind> {
     if (replay_mode) {
         return make_replay_key_binds();
     }
@@ -124,7 +124,7 @@ auto make_key_binds(Key prefix, di::Path save_state_path, bool replay_mode) -> d
     // Insert mode
     {
         result.push_back({
-            .key = prefix,
+            .key = config.prefix,
             .modifiers = Modifiers::Control,
             .mode = InputMode::Insert,
             .next_mode = InputMode::Normal,
@@ -165,7 +165,7 @@ auto make_key_binds(Key prefix, di::Path save_state_path, bool replay_mode) -> d
     // Normal Mode
     {
         result.push_back({
-            .key = prefix,
+            .key = config.prefix,
             .modifiers = Modifiers::Control,
             .mode = InputMode::Normal,
             .action = send_to_pane(),
@@ -215,7 +215,7 @@ auto make_key_binds(Key prefix, di::Path save_state_path, bool replay_mode) -> d
             .key = Key::S,
             .modifiers = Modifiers::Shift,
             .mode = InputMode::Normal,
-            .action = save_state(di::move(save_state_path)),
+            .action = save_state(config.save_state_path.clone()),
         });
         result.push_back({
             .key = Key::X,
@@ -305,7 +305,7 @@ auto make_key_binds(Key prefix, di::Path save_state_path, bool replay_mode) -> d
     // Switch Mode
     {
         result.push_back({
-            .key = prefix,
+            .key = config.prefix,
             .modifiers = Modifiers::Control,
             .mode = InputMode::Switch,
             .next_mode = InputMode::Normal,
@@ -322,7 +322,7 @@ auto make_key_binds(Key prefix, di::Path save_state_path, bool replay_mode) -> d
     // Resize Mode
     {
         result.push_back({
-            .key = prefix,
+            .key = config.prefix,
             .modifiers = Modifiers::Control,
             .mode = InputMode::Resize,
             .next_mode = InputMode::Normal,

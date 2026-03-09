@@ -1,5 +1,6 @@
 #pragma once
 
+#include "config.h"
 #include "di/random/prelude.h"
 #include "di/reflect/prelude.h"
 #include "input_mode.h"
@@ -26,15 +27,14 @@ class RenderThread;
 
 class InputThread {
 public:
-    static auto create(CreatePaneArgs create_pane_args, di::Vector<KeyBind> key_binds,
-                       di::Synchronized<LayoutState>& layout_state, Feature features, RenderThread& render_thread,
-                       SaveLayoutThread& save_layout_thread) -> di::Result<di::Box<InputThread>>;
+    static auto create(CreatePaneArgs create_pane_args, Config config, di::Synchronized<LayoutState>& layout_state,
+                       Feature features, RenderThread& render_thread, SaveLayoutThread& save_layout_thread)
+        -> di::Result<di::Box<InputThread>>;
     static auto create_mock(di::Synchronized<LayoutState>& layout_state, RenderThread& render_thread,
                             SaveLayoutThread& save_layout_thread) -> di::Box<InputThread>;
 
-    explicit InputThread(CreatePaneArgs create_pane_args, di::Vector<KeyBind> key_binds,
-                         di::Synchronized<LayoutState>& layout_state, Feature features, RenderThread& render_thread,
-                         SaveLayoutThread& save_layout_thread);
+    explicit InputThread(CreatePaneArgs create_pane_args, Config config, di::Synchronized<LayoutState>& layout_state,
+                         Feature features, RenderThread& render_thread, SaveLayoutThread& save_layout_thread);
     ~InputThread();
 
     void request_exit();
@@ -71,6 +71,7 @@ private:
     };
 
     InputMode m_mode { InputMode::Insert };
+    Config m_config;
     di::Vector<KeyBind> m_key_binds;
     CreatePaneArgs m_create_pane_args;
     di::Atomic<bool> m_done { false };

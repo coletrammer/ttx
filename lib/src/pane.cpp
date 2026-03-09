@@ -45,7 +45,7 @@ static auto spawn_child(CreatePaneArgs& args, dius::SyncFile& pty, Size const& s
     }
     result = di::move(result)
                  .with_new_session()
-                 .with_env("TERM"_ts, args.term.to_owned())
+                 .with_env("TERM"_ts, args.term.clone())
                  .with_env("COLORTERM"_ts, "truecolor"_ts)
                  .with_env("TERM_PROGRAM"_ts, "ttx"_ts)
                  .with_file_open(2, di::move(tty_path), dius::OpenMode::ReadWrite)

@@ -7,7 +7,15 @@
 #include "ttx/pane.h"
 
 namespace ttx {
-LayoutState::LayoutState(Size const& size, bool hide_status_bar) : m_size(size), m_hide_status_bar(hide_status_bar) {}
+LayoutState::LayoutState(Size const& size, LayoutConfig config) : m_size(size), m_config(di::move(config)) {}
+
+void LayoutState::set_config(LayoutConfig config) {
+    if (m_config == config) {
+        return;
+    }
+    m_config = config;
+    layout({});
+}
 
 void LayoutState::layout(di::Optional<Size> size) {
     if (!size) {
@@ -196,7 +204,7 @@ auto LayoutState::as_json() const -> json::Layout {
 
 auto LayoutState::restore_json_v1(json::v1::LayoutState const& json, CreatePaneArgs args, RenderThread& render_thread,
                                   InputThread& input_thread) -> di::Result<> {
-    auto size = m_hide_status_bar ? m_size : m_size.rows_shrinked(1);
+    auto size = hide_status_bar() ? m_size : m_size.rows_shrinked(1);
     for (auto const& session_json : json.sessions) {
         m_sessions.push_back(
             TRY(Session::from_json_v1(session_json, this, size, args.clone(), render_thread, input_thread)));

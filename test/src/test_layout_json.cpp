@@ -172,7 +172,7 @@ static void roundtrip() {
     ASSERT(json_object);
     ASSERT(di::holds_alternative<ttx::json::v1::LayoutState>(json_object.value()));
 
-    auto state = di::Synchronized(ttx::LayoutState({ 10, 10 }, false));
+    auto state = di::Synchronized(ttx::LayoutState({ 10, 10 }, {}));
     auto render_thread = ttx::RenderThread::create_mock(state);
     auto layout_save_thread = ttx::SaveLayoutThread::create_mock(state);
     auto input_thread = ttx::InputThread::create_mock(state, render_thread, *layout_save_thread);

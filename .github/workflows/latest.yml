@@ -59,6 +59,7 @@ jobs:
           body: "Automated latest build from the main branch."
           preserve_order: true
           prerelease: true
+          draft: false
           make_latest: false
           files: |
             ttx-linux-x86_64/*

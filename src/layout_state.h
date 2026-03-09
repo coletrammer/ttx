@@ -1,5 +1,6 @@
 #pragma once
 
+#include "config.h"
 #include "di/container/vector/vector.h"
 #include "di/serialization/json_value.h"
 #include "session.h"
@@ -11,8 +12,9 @@
 namespace ttx {
 class LayoutState {
 public:
-    explicit LayoutState(Size const& size, bool hide_status_bar);
+    explicit LayoutState(Size const& size, LayoutConfig config);
 
+    void set_config(LayoutConfig config);
     void layout(di::Optional<Size> size = {});
     auto set_active_tab(Session& session, Tab* tab) -> bool;
     void remove_tab(Session& session, Tab& tab);
@@ -38,7 +40,7 @@ public:
     auto active_pane() const -> di::Optional<Pane&>;
     auto full_screen_pane() const -> di::Optional<Pane&>;
     auto size() const -> Size { return m_size; }
-    auto hide_status_bar() const -> bool { return m_hide_status_bar; }
+    auto hide_status_bar() const -> bool { return m_config.hide_status_bar; }
 
     auto active_popup() const -> di::Optional<Popup&>;
 
@@ -59,6 +61,6 @@ private:
     u64 m_next_pane_id { 1 };
     u64 m_next_tab_id { 1 };
     u64 m_next_session_id { 1 };
-    bool m_hide_status_bar { false };
+    LayoutConfig m_config;
 };
 }

@@ -1,13 +1,13 @@
 #include "save_layout.h"
 
+#include "config.h"
 #include "dius/filesystem/operations.h"
 #include "layout_state.h"
 
 namespace ttx {
-auto SaveLayoutThread::create(di::Synchronized<LayoutState>& layout_state, di::Path save_dir,
-                              di::Optional<di::TransparentString> layout_name)
+auto SaveLayoutThread::create(di::Synchronized<LayoutState>& layout_state, di::Path save_dir, SessionConfig config)
     -> di::Result<di::Box<SaveLayoutThread>> {
-    auto result = di::make_box<SaveLayoutThread>(layout_state, di::move(save_dir), di::move(layout_name));
+    auto result = di::make_box<SaveLayoutThread>(layout_state, di::move(save_dir), di::move(config));
     result->m_thread = TRY(dius::Thread::create([&self = *result.get()] {
         self.save_layout_thread();
     }));
@@ -15,12 +15,11 @@ auto SaveLayoutThread::create(di::Synchronized<LayoutState>& layout_state, di::P
 }
 
 auto SaveLayoutThread::create_mock(di::Synchronized<LayoutState>& layout_state) -> di::Box<SaveLayoutThread> {
-    return di::make_box<SaveLayoutThread>(layout_state, di::Path {}, di::Optional<di::TransparentString> {});
+    return di::make_box<SaveLayoutThread>(layout_state, di::Path {}, SessionConfig {});
 }
 
-SaveLayoutThread::SaveLayoutThread(di::Synchronized<LayoutState>& layout_state, di::Path save_dir,
-                                   di::Optional<di::TransparentString> layout_name)
-    : m_layout_state(layout_state), m_save_dir(di::move(save_dir)), m_layout_name(di::move(layout_name)) {}
+SaveLayoutThread::SaveLayoutThread(di::Synchronized<LayoutState>& layout_state, di::Path save_dir, SessionConfig config)
+    : m_layout_state(layout_state), m_save_dir(di::move(save_dir)), m_config(di::move(config)) {}
 
 SaveLayoutThread::~SaveLayoutThread() {
     (void) m_thread.join();
@@ -83,8 +82,12 @@ void SaveLayoutThread::save_layout_thread() {
             // Pattern matching would be nice here...
             if (auto ev = di::get_if<SaveLayout>(event)) {
                 if (ev->layout_name) {
-                    m_layout_name = di::move(ev->layout_name);
+                    (void) save_layout(ev->layout_name.value());
                 }
+                continue;
+            }
+            if (auto ev = di::get_if<SaveLayoutUpdateConfig>(event)) {
+                m_config = di::move(ev->config);
                 continue;
             }
             if (auto ev = di::get_if<SaveLayoutExit>(event)) {
@@ -93,8 +96,8 @@ void SaveLayoutThread::save_layout_thread() {
             }
         }
 
-        for (auto const& layout_name : m_layout_name) {
-            (void) save_layout(layout_name);
+        if (m_config.save_layout) {
+            (void) save_layout(m_config.layout_name);
         }
     }
 }

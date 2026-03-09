@@ -60,7 +60,7 @@ struct CreatePaneArgs {
                  pipe_input.clone(),
                  cwd.clone(),
                  terminfo_dir.clone(),
-                 term,
+                 term.clone(),
                  pipe_output,
                  mock,
                  {} };
@@ -79,7 +79,7 @@ struct CreatePaneArgs {
     di::Optional<di::String> pipe_input {};
     di::Optional<di::Path> cwd {};
     di::Optional<di::Path> terminfo_dir {};
-    di::TransparentStringView term { "xterm-ttx"_tsv };
+    di::TransparentString term { "xterm-ttx"_ts };
     bool pipe_output { false };
     bool mock { false };
     PaneHooks hooks {};

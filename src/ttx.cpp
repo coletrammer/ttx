@@ -1,3 +1,5 @@
+#include "config.h"
+#include "config_json.h"
 #include "di/cli/parser.h"
 #include "di/container/string/string_view.h"
 #include "di/io/writer_print.h"
@@ -16,19 +18,21 @@
 
 namespace ttx {
 struct NewBase {
-    Key prefix { Key::B };
+    di::Optional<Key> prefix;
     bool hide_status_bar { false };
     bool headless { false };
     di::Optional<di::PathView> save_state_path;
     di::Optional<di::PathView> capture_command_output_path;
 
     // New
-    di::Optional<di::TransparentStringView> layout_save_name;
-    di::Optional<di::TransparentStringView> layout_restore_name;
-    di::TransparentStringView term { "xterm-ttx"_tsv };
-    ClipboardMode clipboard_mode { ClipboardMode::System };
+    bool disable_layout_restore { false };
+    bool disable_layout_save { false };
+    di::Optional<di::TransparentStringView> layout_name;
+    di::Optional<di::TransparentStringView> term;
+    di::Optional<ClipboardMode> clipboard_mode;
     bool force_local_terminfo { false };
     di::Vector<di::TransparentStringView> command;
+    di::TransparentStringView profile { "main"_tsv };
 
     // Replay
     di::Vector<di::PathView> replay_paths;
@@ -39,24 +43,27 @@ struct New : NewBase {
 
     constexpr static auto get_cli_parser() {
         return di::cli_parser<New>("new"_tsv, "Start a new ttx instance"_sv)
-            .option<&NewBase::prefix>('p', "prefix"_tsv, "Prefix key for key bindings"_sv, false, "KEY"_sv)
+            .option<&NewBase::prefix>({}, "prefix"_tsv, "Override config prefix key for key bindings"_sv, false,
+                                      "KEY"_sv)
+            .option<&NewBase::disable_layout_restore>({}, "disable-layout-restore"_tsv,
+                                                      "Disable restoring from saved layout"_sv)
+            .option<&NewBase::disable_layout_save>({}, "disable-layout-restore"_tsv,
+                                                   "Disable continuously saving the current layout"_sv)
+            .option<&NewBase::layout_name>({}, "layout-name"_tsv,
+                                           "Layout name for save/restore (default: profile name)"_sv)
+            .option<&NewBase::profile>('p', "profile"_tsv,
+                                       "Profile name to use for this session (empty string loads no configuration)"_sv)
             .option<&NewBase::hide_status_bar>('s', "hide-status-bar"_tsv, "Hide the status bar"_sv)
             .option<&NewBase::capture_command_output_path>('c', "capture-command-output-path"_tsv,
                                                            "Capture command output to a file"_sv)
             .option<&NewBase::save_state_path>('S', "save-state-path"_tsv,
                                                "Save state path when triggering saving a pane's state"_sv)
             .option<&NewBase::headless>('h', "headless"_tsv, "Headless mode"_sv)
-            .option<&NewBase::term>('t', "term"_tsv, "Set TERM environment variable"_sv)
+            .option<&NewBase::term>('t', "term"_tsv, "Override config TERM environment variable"_sv)
             .option<&NewBase::clipboard_mode>({}, "clipboard"_tsv, "Set the clipboard mode"_sv, false, "MODE"_sv)
             .option<&NewBase::force_local_terminfo>(
                 {}, "force-local-terminfo"_tsv,
                 "Always try and compile built-in terminfo, and set TERMINFO env variable"_sv)
-            .option<&NewBase::layout_save_name>(
-                'l', "layout-save"_tsv,
-                "Name of a saved layout, automatically synced by ttx (including restore at startup)"_sv, false,
-                "NAME"_sv)
-            .option<&NewBase::layout_restore_name>(
-                'R', "layout-restore"_tsv, "Name of a saved layout, to be restored on startup"_sv, false, "NAME"_sv)
             .argument<&NewBase::command>("COMMAND"_sv, "Program to run in terminal (default: $SHELL)"_sv, false,
                                          di::cli::ValueType::CommandWithArgs)
             .help();
@@ -81,17 +88,16 @@ struct Replay : NewBase {
 };
 
 struct Keybinds {
-    Key prefix { Key::B };
+    di::TransparentStringView profile { "main"_tsv };
     bool replay_mode { false };
-    di::Optional<di::PathView> save_state_path;
     bool help { false };
 
     constexpr static auto get_cli_parser() {
         return di::cli_parser<Keybinds>("keybinds"_tsv, "List active keybinds for ttx"_sv)
-            .option<&Keybinds::prefix>('p', "prefix"_tsv, "Prefix key for key bindings"_sv, false, "KEY"_sv)
-            .option<&Keybinds::replay_mode>('r', "replay-mode"_tsv, "Print keybindings when running in replay mode"_sv)
-            .option<&Keybinds::save_state_path>('S', "save-state-path"_tsv,
-                                                "Save state path when triggering saving a pane's state"_sv)
+            .option<&Keybinds::profile>('p', "profile"_tsv,
+                                        "Profile name to use for this session (empty string loads no configuration)"_sv)
+            .option<&Keybinds::profile>({}, "replay-mode"_tsv,
+                                        "Show keybinds assuming ttx is replaying an captured input file"_sv)
             .help();
     }
 };
@@ -190,10 +196,10 @@ static auto get_local_terminfo_dir() -> di::Result<di::Path> {
     return di::move(result);
 }
 
-static auto maybe_get_terminfo_dir(di::Optional<di::TransparentStringView> term, bool force_local_terminfo)
+static auto maybe_get_terminfo_dir(di::TransparentStringView term, bool force_local_terminfo)
     -> di::Result<di::Optional<di::Path>> {
     // If the user is overriding TERM, don't setup our terminfo.
-    if (term.has_value() && term != "ttx"_tsv && term != "xterm-ttx"_tsv) {
+    if (term != "ttx"_tsv && term != "xterm-ttx"_tsv) {
         return {};
     }
 
@@ -262,29 +268,57 @@ static auto maybe_get_terminfo_dir(di::Optional<di::TransparentStringView> term,
 
 static auto do_new(Args&, NewBase& args) -> di::Result<> {
     auto const replay_mode = !args.replay_paths.empty();
-    auto key_binds = make_key_binds(
-        args.prefix, args.save_state_path.value_or("/tmp/ttx-save-state.ansi"_pv).to_owned(), replay_mode);
+
+    auto config_from_args = config_json::v1::Config {
+        .input = {
+            .prefix = args.prefix,
+            .save_state_path = args.save_state_path.transform(config_json::v1::to_utf8_string),
+        },
+        .layout = {
+            .hide_status_bar = args.hide_status_bar ? di::Optional(true) : di::nullopt,
+        },
+        .clipboard = {
+            .mode = args.clipboard_mode,
+        },
+        .session = {
+            .restore_layout = args.disable_layout_restore ? di::Optional(false) : di::nullopt,
+            .save_layout = args.disable_layout_save ? di::Optional(false) : di::nullopt,
+            .layout_name = args.layout_name.transform(config_json::v1::to_utf8_string),
+        },
+        .shell = {
+            .command = !args.command.empty () ? di::Optional(args.command | di::transform(config_json::v1::to_utf8_string) | di::to<di::Vector>()) : di::nullopt,
+        },
+        .terminfo = {
+            .term = args.term.transform(config_json::v1::to_utf8_string),
+            .force_local_terminfo = args.force_local_terminfo ? di::Optional(true) : di::nullopt,
+        },
+    };
+    auto config = args.profile.empty() ? Config()
+                                       : TRY(config_json::v1::resolve_profile(args.profile, di::move(config_from_args))
+                                                 .transform_error([&](auto&& error) {
+                                                     return di::format_error("Failed to resolve profile '{}': {}"_sv,
+                                                                             args.profile, error);
+                                                 }));
 
     auto features = Feature::All;
     if (!args.headless) {
         features = TRY(detect_features(dius::std_in));
     }
 
-    auto command = args.command | di::transform(di::to_owned) | di::to<di::Vector>();
-
     // Setup - log to file.
     [[maybe_unused]] auto& log = dius::std_err = TRY(dius::open_sync("/tmp/ttx.log"_pv, dius::OpenMode::WriteClobber));
 
-    // Setup - potentially compile terminfo database
-    auto maybe_terminfo_dir = TRY(maybe_get_terminfo_dir(args.term, args.force_local_terminfo));
+    // Setup - potentially compile terminfo database (this config only applies at startup)
+    auto maybe_terminfo_dir =
+        TRY(maybe_get_terminfo_dir(config.terminfo.term.view(), config.terminfo.force_local_terminfo));
 
     // Setup - initialize pane arguments
     auto base_create_pane_args = CreatePaneArgs {
-        .command = command.clone(),
+        .command = config.shell.command.clone(),
         .capture_command_output_path = args.capture_command_output_path.transform(di::to_owned),
-        .save_state_path = args.save_state_path.transform(di::to_owned),
+        .save_state_path = config.input.save_state_path.clone(),
         .terminfo_dir = di::move(maybe_terminfo_dir),
-        .term = args.term,
+        .term = config.terminfo.term.clone(),
     };
 
     // Setup - in headless mode there is no terminal. Ensure stdin is not valid.
@@ -295,7 +329,7 @@ static auto do_new(Args&, NewBase& args) -> di::Result<> {
     // Setup - initial state and terminal size.
     auto initial_size = args.headless ? Size { 24, 80, 24 * 16, 80 * 16 }
                                       : Size::from_window_size(TRY(dius::std_in.get_tty_window_size()));
-    auto layout_state = di::Synchronized(LayoutState(initial_size, args.hide_status_bar));
+    auto layout_state = di::Synchronized(LayoutState(initial_size, config.layout));
 
     // Setup - raw mode
     auto _ = args.headless ? di::ScopeExit(di::Function<void()>([] {})) : TRY(dius::std_in.enter_raw_mode());
@@ -318,22 +352,21 @@ static auto do_new(Args&, NewBase& args) -> di::Result<> {
         if (args.headless) {
             return SaveLayoutThread::create_mock(layout_state);
         }
-        return SaveLayoutThread::create(layout_state, session_save_dir.clone(),
-                                        args.layout_save_name.transform(di::to_owned));
+        return SaveLayoutThread::create(layout_state, session_save_dir.clone(), di::clone(config.session));
     }());
     auto _ = di::ScopeExit([&] {
         if (layout_save_thread) {
             layout_save_thread->request_exit();
         }
     });
-    if (layout_save_thread && args.layout_save_name) {
+    if (layout_save_thread) {
         layout_state.get_assuming_no_concurrent_accesses().set_layout_did_update([&] {
             layout_save_thread->request_save_layout();
         });
     }
 
     // Setup - render thread.
-    auto render_thread = TRY(RenderThread::create(layout_state, set_done, args.clipboard_mode, features));
+    auto render_thread = TRY(RenderThread::create(layout_state, set_done, di::clone(config), features));
     auto _ = di::ScopeExit([&] {
         render_thread->request_exit();
     });
@@ -343,7 +376,7 @@ static auto do_new(Args&, NewBase& args) -> di::Result<> {
         if (args.headless) {
             return InputThread::create_mock(layout_state, *render_thread, *layout_save_thread);
         }
-        return InputThread::create(base_create_pane_args.clone(), di::move(key_binds), layout_state, features,
+        return InputThread::create(base_create_pane_args.clone(), di::clone(config), layout_state, features,
                                    *render_thread, *layout_save_thread);
     }());
     auto _ = di::ScopeExit([&] {
@@ -406,19 +439,18 @@ static auto do_new(Args&, NewBase& args) -> di::Result<> {
             };
 
             // Attempt to restore layout when running in auto-layout mode, or when specifically requested.
-            if (args.layout_save_name || args.layout_restore_name) {
+            if (config.session.restore_layout) {
                 auto path = session_save_dir.clone();
-                path /= args.layout_restore_name.has_value() ? args.layout_restore_name.value()
-                                                             : args.layout_save_name.value();
+                path /= config.session.layout_name;
                 path += ".json"_tsv;
 
-                // Ignore errors, like the file not existing, when in auto-layout mode.
+                // Ignore file not found errors.
                 auto file = dius::open_sync(path, dius::OpenMode::Readonly);
                 if (file) {
                     auto string = TRY(di::read_to_string(file.value()));
                     auto json = TRY(di::from_json_string<json::Layout>(string));
                     TRY(state.restore_json(json, make_pane_args(), *render_thread, *input_thread));
-                } else if (args.layout_restore_name) {
+                } else if (file.error() != dius::PosixError::NoSuchFileOrDirectory) {
                     return di::Unexpected(di::move(file).error());
                 }
             }
@@ -479,6 +511,8 @@ static auto main(Args& base_args, New& args) -> di::Result<> {
 
 static auto main(Args& base_args, Replay& args) -> di::Result<> {
     args.hide_status_bar = true;
+    args.disable_layout_save = true;
+    args.disable_layout_restore = true;
     return do_new(base_args, args);
 }
 
@@ -489,8 +523,12 @@ static auto main(Args&, Completions& args) -> di::Result<> {
 }
 
 static auto main(Args&, Keybinds& args) -> di::Result<> {
-    auto key_binds = make_key_binds(
-        args.prefix, args.save_state_path.value_or("/tmp/ttx-save-state.ansi"_pv).to_owned(), args.replay_mode);
+    auto config = args.profile.empty()
+                      ? Config()
+                      : TRY(config_json::v1::resolve_profile(args.profile, {}).transform_error([&](auto&& error) {
+                            return di::format_error("Failed to resolve profile '{}': {}"_sv, args.profile, error);
+                        }));
+    auto key_binds = make_key_binds(config.input, args.replay_mode);
     for (auto const& bind : key_binds) {
         dius::println("{}"_sv, bind);
     }

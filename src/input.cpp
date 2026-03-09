@@ -1,5 +1,6 @@
 #include "input.h"
 
+#include "config.h"
 #include "input_mode.h"
 #include "key_bind.h"
 #include "layout_state.h"
@@ -22,10 +23,10 @@
 #include "ttx/utf8_stream_decoder.h"
 
 namespace ttx {
-auto InputThread::create(CreatePaneArgs create_pane_args, di::Vector<KeyBind> key_binds,
-                         di::Synchronized<LayoutState>& layout_state, Feature features, RenderThread& render_thread,
-                         SaveLayoutThread& save_layout_thread) -> di::Result<di::Box<InputThread>> {
-    auto result = di::make_box<InputThread>(di::move(create_pane_args), di::move(key_binds), layout_state, features,
+auto InputThread::create(CreatePaneArgs create_pane_args, Config config, di::Synchronized<LayoutState>& layout_state,
+                         Feature features, RenderThread& render_thread, SaveLayoutThread& save_layout_thread)
+    -> di::Result<di::Box<InputThread>> {
+    auto result = di::make_box<InputThread>(di::move(create_pane_args), di::move(config), layout_state, features,
                                             render_thread, save_layout_thread);
     result->m_thread = TRY(dius::Thread::create([&self = *result.get()] {
         self.input_thread();
@@ -35,14 +36,14 @@ auto InputThread::create(CreatePaneArgs create_pane_args, di::Vector<KeyBind> ke
 
 auto InputThread::create_mock(di::Synchronized<LayoutState>& layout_state, RenderThread& render_thread,
                               SaveLayoutThread& save_layout_thread) -> di::Box<InputThread> {
-    return di::make_box<InputThread>(CreatePaneArgs {}, di::Vector<KeyBind> {}, layout_state, Feature::All,
-                                     render_thread, save_layout_thread);
+    return di::make_box<InputThread>(CreatePaneArgs {}, Config {}, layout_state, Feature::All, render_thread,
+                                     save_layout_thread);
 }
 
-InputThread::InputThread(CreatePaneArgs create_pane_args, di::Vector<KeyBind> key_binds,
-                         di::Synchronized<LayoutState>& layout_state, Feature features, RenderThread& render_thread,
-                         SaveLayoutThread& save_layout_thread)
-    : m_key_binds(di::move(key_binds))
+InputThread::InputThread(CreatePaneArgs create_pane_args, Config config, di::Synchronized<LayoutState>& layout_state,
+                         Feature features, RenderThread& render_thread, SaveLayoutThread& save_layout_thread)
+    : m_config(di::move(config))
+    , m_key_binds(make_key_binds(m_config.input, create_pane_args.replay_path.has_value()))
     , m_create_pane_args(di::move(create_pane_args))
     , m_layout_state(layout_state)
     , m_render_thread(render_thread)
