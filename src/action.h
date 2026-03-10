@@ -1,5 +1,6 @@
 #pragma once
 
+#include "config_json.h"
 #include "layout_state.h"
 #include "render.h"
 #include "save_layout.h"
@@ -16,6 +17,9 @@ struct ActionContext {
     SaveLayoutThread& save_layout_thread;
     InputThread& input_thread;
     CreatePaneArgs const& create_pane_args;
+    Config const& config;
+    config_json::v1::Config const& base_config;
+    di::TransparentStringView profile;
     di::Atomic<bool>& done;
 };
 

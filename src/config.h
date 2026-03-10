@@ -73,7 +73,7 @@ struct TerminfoConfig {
     constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<TerminfoConfig>) {
         return di::make_fields<"TerminfoConfig">(
             di::field<"term", &TerminfoConfig::term>,
-            di::field<"force_local_TerminfoConfig", &TerminfoConfig::force_local_terminfo>);
+            di::field<"force_local_terminfo", &TerminfoConfig::force_local_terminfo>);
     }
 };
 

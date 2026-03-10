@@ -27,18 +27,21 @@ class RenderThread;
 
 class InputThread {
 public:
-    static auto create(CreatePaneArgs create_pane_args, Config config, di::Synchronized<LayoutState>& layout_state,
-                       Feature features, RenderThread& render_thread, SaveLayoutThread& save_layout_thread)
+    static auto create(CreatePaneArgs create_pane_args, Config config, config_json::v1::Config base_config,
+                       di::TransparentStringView profile, di::Synchronized<LayoutState>& layout_state, Feature features,
+                       RenderThread& render_thread, SaveLayoutThread& save_layout_thread)
         -> di::Result<di::Box<InputThread>>;
     static auto create_mock(di::Synchronized<LayoutState>& layout_state, RenderThread& render_thread,
                             SaveLayoutThread& save_layout_thread) -> di::Box<InputThread>;
 
-    explicit InputThread(CreatePaneArgs create_pane_args, Config config, di::Synchronized<LayoutState>& layout_state,
+    explicit InputThread(CreatePaneArgs create_pane_args, Config config, config_json::v1::Config base_config,
+                         di::TransparentStringView profile, di::Synchronized<LayoutState>& layout_state,
                          Feature features, RenderThread& render_thread, SaveLayoutThread& save_layout_thread);
     ~InputThread();
 
     void request_exit();
     void request_navigate(terminal::NavigateDirection direction);
+    void set_config(Config config);
 
     void notify_osc_8671(terminal::OSC8671&& osc_8671);
 
@@ -72,6 +75,8 @@ private:
 
     InputMode m_mode { InputMode::Insert };
     Config m_config;
+    config_json::v1::Config m_base_config;
+    di::TransparentStringView m_profile;
     di::Vector<KeyBind> m_key_binds;
     CreatePaneArgs m_create_pane_args;
     di::Atomic<bool> m_done { false };

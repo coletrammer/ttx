@@ -23,11 +23,12 @@
 #include "ttx/utf8_stream_decoder.h"
 
 namespace ttx {
-auto InputThread::create(CreatePaneArgs create_pane_args, Config config, di::Synchronized<LayoutState>& layout_state,
+auto InputThread::create(CreatePaneArgs create_pane_args, Config config, config_json::v1::Config base_config,
+                         di::TransparentStringView profile, di::Synchronized<LayoutState>& layout_state,
                          Feature features, RenderThread& render_thread, SaveLayoutThread& save_layout_thread)
     -> di::Result<di::Box<InputThread>> {
-    auto result = di::make_box<InputThread>(di::move(create_pane_args), di::move(config), layout_state, features,
-                                            render_thread, save_layout_thread);
+    auto result = di::make_box<InputThread>(di::move(create_pane_args), di::move(config), di::move(base_config),
+                                            profile, layout_state, features, render_thread, save_layout_thread);
     result->m_thread = TRY(dius::Thread::create([&self = *result.get()] {
         self.input_thread();
     }));
@@ -36,13 +37,16 @@ auto InputThread::create(CreatePaneArgs create_pane_args, Config config, di::Syn
 
 auto InputThread::create_mock(di::Synchronized<LayoutState>& layout_state, RenderThread& render_thread,
                               SaveLayoutThread& save_layout_thread) -> di::Box<InputThread> {
-    return di::make_box<InputThread>(CreatePaneArgs {}, Config {}, layout_state, Feature::All, render_thread,
-                                     save_layout_thread);
+    return di::make_box<InputThread>(CreatePaneArgs {}, Config {}, config_json::v1::Config {}, ""_tsv, layout_state,
+                                     Feature::All, render_thread, save_layout_thread);
 }
 
-InputThread::InputThread(CreatePaneArgs create_pane_args, Config config, di::Synchronized<LayoutState>& layout_state,
+InputThread::InputThread(CreatePaneArgs create_pane_args, Config config, config_json::v1::Config base_config,
+                         di::TransparentStringView profile, di::Synchronized<LayoutState>& layout_state,
                          Feature features, RenderThread& render_thread, SaveLayoutThread& save_layout_thread)
     : m_config(di::move(config))
+    , m_base_config(di::move(base_config))
+    , m_profile(profile)
     , m_key_binds(make_key_binds(m_config.input, create_pane_args.replay_path.has_value()))
     , m_create_pane_args(di::move(create_pane_args))
     , m_layout_state(layout_state)
@@ -71,6 +75,14 @@ void InputThread::set_input_mode(InputMode mode) {
 
     m_mode = mode;
     m_render_thread.push_event(InputStatus { .mode = mode });
+}
+
+void InputThread::set_config(Config config) {
+    m_config = di::move(config);
+    m_key_binds = make_key_binds(m_config.input, m_create_pane_args.replay_path.has_value());
+    m_create_pane_args.command = m_config.shell.command.clone();
+    m_create_pane_args.save_state_path = config.input.save_state_path.clone();
+    m_create_pane_args.term = config.terminfo.term.clone();
 }
 
 void InputThread::input_thread() {
@@ -171,6 +183,9 @@ void InputThread::handle_event(KeyEvent&& event) {
                 .save_layout_thread = m_save_layout_thread,
                 .input_thread = *this,
                 .create_pane_args = m_create_pane_args,
+                .config = m_config,
+                .base_config = m_base_config,
+                .profile = m_profile,
                 .done = m_done,
             });
             set_input_mode(bind.next_mode);

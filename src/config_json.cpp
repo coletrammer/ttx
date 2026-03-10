@@ -66,45 +66,81 @@ static auto resolve_config_path(di::Span<di::Path const> search_paths, di::Trans
     return di::Unexpected(dius::PosixError::NoSuchFileOrDirectory);
 }
 
-static auto merge(Config& left, Config&& right) {
-    if (right.input.prefix) {
-        left.input.prefix = right.input.prefix;
+struct Merge {
+    template<di::concepts::ReflectableToFields T>
+    static void operator()(T& left, T&& right) {
+        di::tuple_for_each(
+            [&](auto field) {
+                using Value = di::meta::Type<decltype(field)>;
+                if constexpr (di::concepts::Optional<Value>) {
+                    if (field.get(right)) {
+                        field.get(left) = di::move(field.get(right));
+                    }
+                } else if constexpr (di::ReflectableToFields<Value>) {
+                    Merge::operator()(field.get(left), di::move(field.get(right)));
+                }
+            },
+            di::reflect(left));
     }
-    if (right.input.disable_default_keybinds) {
-        left.input.disable_default_keybinds = right.input.disable_default_keybinds;
-    }
-    if (right.input.save_state_path) {
-        left.input.save_state_path = di::move(right.input.save_state_path);
-    }
-    if (right.layout.hide_status_bar) {
-        left.layout.hide_status_bar = right.layout.hide_status_bar;
-    }
-    if (right.clipboard.mode) {
-        left.clipboard.mode = right.clipboard.mode;
-    }
-    if (right.session.restore_layout) {
-        left.session.restore_layout = right.session.restore_layout;
-    }
-    if (right.session.save_layout) {
-        left.session.save_layout = right.session.save_layout;
-    }
-    if (right.session.layout_name) {
-        left.session.layout_name = di::move(right.session.layout_name);
-    }
-    if (right.shell.command) {
-        left.shell.command = di::move(right.shell.command);
-    }
-    if (right.terminfo.term) {
-        left.terminfo.term = di::move(right.terminfo.term);
-    }
-    if (right.terminfo.force_local_terminfo) {
-        left.terminfo.force_local_terminfo = right.terminfo.force_local_terminfo;
-    }
-}
+};
+
+constexpr inline auto merge = Merge {};
 
 static auto to_transparent_string(di::String const& s) -> di::TransparentString {
     return s.span() | di::transform(di::construct<char>) | di::to<di::TransparentString>();
 }
+
+struct ConvertValue {
+    template<typename T>
+    static auto operator()(di::InPlaceType<T>, T&& value) -> T {
+        return di::forward<T>(value);
+    }
+
+    template<typename T, typename U>
+    static auto operator()(di::InPlaceType<di::Vector<T>>, di::Vector<U>&& value) {
+        auto result = di::Vector<T> {};
+        for (auto& v : value) {
+            result.emplace_back(ConvertValue::operator()(di::in_place_type<T>, di::move(v)));
+        }
+        return result;
+    }
+
+    static auto operator()(di::InPlaceType<di::Path>, di::String&& value) {
+        return di::Path(to_transparent_string(value));
+    }
+
+    static auto operator()(di::InPlaceType<di::TransparentString>, di::String&& value) {
+        return to_transparent_string(value);
+    }
+};
+
+constexpr inline auto convert_value = ConvertValue {};
+
+struct DoConvert {
+    template<di::concepts::ReflectableToFields Config, di::concepts::ReflectableToFields JsonConfig>
+    static auto operator()(Config& config, JsonConfig&& json_config) {
+        di::tuple_for_each(
+            [&](auto field) {
+                di::tuple_for_each(
+                    [&](auto json_field) {
+                        if constexpr (field.name == json_field.name) {
+                            DoConvert::operator()(field.get(config), di::move(json_field.get(json_config)));
+                        }
+                    },
+                    di::reflect(json_config));
+            },
+            di::reflect(config));
+    }
+
+    template<typename T, di::concepts::Optional U>
+    static auto operator()(T& value, U&& maybe_json_value) {
+        if (maybe_json_value.has_value()) {
+            value = convert_value(di::in_place_type<T>, di::forward<U>(maybe_json_value).value());
+        }
+    }
+};
+
+constexpr inline auto do_convert = DoConvert {};
 
 static auto convert(di::TransparentStringView profile, Config&& json_config) -> di::Result<ttx::Config> {
     if (!json_config.shell.command || json_config.shell.command.value().empty()) {
@@ -116,35 +152,16 @@ static auto convert(di::TransparentStringView profile, Config&& json_config) -> 
         json_config.shell.command =
             di::single(to_utf8_string(env.at("SHELL"_tsv).value())) | di::as_rvalue | di::to<di::Vector>();
     }
-    auto default_config = ttx::Config {};
-    return ttx::Config{
-        .input = {
-            .prefix = json_config.input.prefix.value_or(default_config.input.prefix),
-            .disable_default_keybinds = json_config.input.disable_default_keybinds.value_or(default_config.input.disable_default_keybinds),
-            .save_state_path = json_config.input.save_state_path.transform(to_transparent_string).transform(di::construct<di::Path>).value_or(default_config.input.save_state_path.clone()),
-        },
-        .layout = {
-            .hide_status_bar = json_config.layout.hide_status_bar.value_or(default_config.layout.hide_status_bar),
-        },
-        .clipboard = {
-            .mode = json_config.clipboard.mode.value_or(default_config.clipboard.mode),
-        },
-        .session = {
-            .restore_layout = json_config.session.restore_layout.value_or(default_config.session.restore_layout),
-            .save_layout = json_config.session.save_layout.value_or(default_config.session.save_layout),
-            .layout_name = json_config.session.layout_name.transform(to_transparent_string).value_or(profile.to_owned()),
-        },
-        .shell = {
-            .command = json_config.shell.command.value() | di::transform(to_transparent_string) | di::to<di::Vector>(),
-        },
-        .terminfo = {
-            .term = json_config.terminfo.term.transform(to_transparent_string).value_or(default_config.terminfo.term.clone()),
-            .force_local_terminfo = json_config.terminfo.force_local_terminfo.value_or(default_config.terminfo.force_local_terminfo),
-        },
-    };
+    if (!json_config.session.layout_name) {
+        json_config.session.layout_name = to_utf8_string(profile);
+    }
+    auto result = ttx::Config {};
+    do_convert(result, di::move(json_config));
+    return result;
 }
 
 auto resolve_profile(di::TransparentStringView profile, Config&& base_config) -> di::Result<ttx::Config> {
+    auto const profile_name = di::PathView(profile).stem().value();
     auto const search_paths = TRY(get_search_paths());
     auto maybe_profile_config = resolve_config_path(search_paths.span(), profile);
     if (!maybe_profile_config.has_value()) {
@@ -160,6 +177,6 @@ auto resolve_profile(di::TransparentStringView profile, Config&& base_config) ->
                                    return di::format_error("Failed to parse JSON: {}"_sv, error);
                                }));
     merge(config_json, di::move(base_config));
-    return convert(profile, di::move(config_json));
+    return convert(profile_name, di::move(config_json));
 }
 }

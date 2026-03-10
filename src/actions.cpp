@@ -1,10 +1,12 @@
 #include "actions.h"
 
 #include "action.h"
+#include "config_json.h"
 #include "di/format/prelude.h"
 #include "di/util/construct.h"
 #include "fzf.h"
 #include "input.h"
+#include "render.h"
 #include "tab.h"
 #include "ttx/layout.h"
 
@@ -390,6 +392,25 @@ auto find_session() -> Action {
                     }
                 });
                 context.render_thread.request_render();
+            },
+    };
+}
+
+auto reload_config() -> Action {
+    return {
+        .description = "Reload configuration files"_s,
+        .apply =
+            [](ActionContext const& context) {
+                auto new_config = config_json::v1::resolve_profile(context.profile, di::clone(context.base_config));
+                if (!new_config) {
+                    context.render_thread.status_message(
+                        di::format("Failed to load configuration: {}"_sv, new_config.error()));
+                    return;
+                }
+
+                context.input_thread.set_config(di::clone(new_config.value()));
+                context.render_thread.set_config(di::clone(new_config.value()));
+                context.save_layout_thread.set_config(di::clone(new_config.value().session));
             },
     };
 }

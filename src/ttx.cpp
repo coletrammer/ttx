@@ -269,6 +269,9 @@ static auto maybe_get_terminfo_dir(di::TransparentStringView term, bool force_lo
 static auto do_new(Args&, NewBase& args) -> di::Result<> {
     auto const replay_mode = !args.replay_paths.empty();
 
+    if (args.profile.ends_with('/')) {
+        return di::Unexpected(di::format_error("--profile cannot be a directory"_sv));
+    }
     auto config_from_args = config_json::v1::Config {
         .input = {
             .prefix = args.prefix,
@@ -294,7 +297,7 @@ static auto do_new(Args&, NewBase& args) -> di::Result<> {
         },
     };
     auto config = args.profile.empty() ? Config()
-                                       : TRY(config_json::v1::resolve_profile(args.profile, di::move(config_from_args))
+                                       : TRY(config_json::v1::resolve_profile(args.profile, di::clone(config_from_args))
                                                  .transform_error([&](auto&& error) {
                                                      return di::format_error("Failed to resolve profile '{}': {}"_sv,
                                                                              args.profile, error);
@@ -376,8 +379,8 @@ static auto do_new(Args&, NewBase& args) -> di::Result<> {
         if (args.headless) {
             return InputThread::create_mock(layout_state, *render_thread, *layout_save_thread);
         }
-        return InputThread::create(base_create_pane_args.clone(), di::clone(config), layout_state, features,
-                                   *render_thread, *layout_save_thread);
+        return InputThread::create(base_create_pane_args.clone(), di::clone(config), di::clone(config_from_args),
+                                   args.profile, layout_state, features, *render_thread, *layout_save_thread);
     }());
     auto _ = di::ScopeExit([&] {
         if (input_thread) {

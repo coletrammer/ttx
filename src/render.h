@@ -66,6 +66,7 @@ public:
     void status_message(di::String message, dius::SteadyClock::Duration duration = di::Seconds(1)) {
         push_event(StatusMessage { di::move(message), duration });
     }
+    void set_config(Config config) { push_event(UpdateConfig(di::move(config))); }
 
 private:
     void render_thread();
