@@ -168,6 +168,8 @@ constexpr auto test_layout = R"(
 )"_sv;
 
 static void roundtrip() {
+    (void) dius::std_in.close();
+
     auto json_object = di::from_json_string<ttx::json::Layout>(test_layout);
     ASSERT(json_object);
     ASSERT(di::holds_alternative<ttx::json::v1::LayoutState>(json_object.value()));

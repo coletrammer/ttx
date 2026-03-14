@@ -1,0 +1,21 @@
+{
+    "version": 1,
+    "extends": ["subconfig.json"],
+    "input": {
+        "prefix": "A"
+    },
+    "layout": {
+        "hide_status_bar": false
+    },
+    "session": {
+        "save_layout": false,
+        "layout_name": "layout"
+    },
+    "clipboard": {
+        "mode": "disabled"
+    },
+    "terminfo": {
+        "term": "ttx",
+        "force_local_terminfo": true
+    }
+}

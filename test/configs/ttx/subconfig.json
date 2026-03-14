@@ -1,0 +1,7 @@
+{
+    "version": 1,
+    "extends": ["subsubconfig"],
+    "shell": {
+        "command": ["zsh"]
+    }
+}

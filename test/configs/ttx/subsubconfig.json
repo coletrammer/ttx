@@ -1,0 +1,9 @@
+{
+    "version": 1,
+    "layout": {
+        "hide_status_bar": true
+    },
+    "session": {
+        "restore_layout": false
+    }
+}
