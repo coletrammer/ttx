@@ -63,7 +63,7 @@ public:
     void push_event(RenderEvent event);
     void request_render() { push_event(DoRender {}); }
     void request_exit() { push_event(Exit {}); }
-    void status_message(di::String message, dius::SteadyClock::Duration duration = di::Seconds(1)) {
+    void status_message(di::String message, dius::SteadyClock::Duration duration = di::Seconds(5)) {
         push_event(StatusMessage { di::move(message), duration });
     }
     void set_config(Config config) { push_event(UpdateConfig(di::move(config))); }

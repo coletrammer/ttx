@@ -1,6 +1,7 @@
 #include "config_json.h"
 
 #include "config.h"
+#include "di/container/tree/tree_set.h"
 #include "di/serialization/json_deserializer.h"
 #include "di/util/construct.h"
 #include "di/vocab/error/string_error.h"
@@ -160,22 +161,43 @@ static auto convert(di::TransparentStringView profile, Config&& json_config) -> 
     return result;
 }
 
-auto resolve_profile(di::TransparentStringView profile, Config&& base_config) -> di::Result<ttx::Config> {
-    auto const profile_name = di::PathView(profile).stem().value();
-    auto const search_paths = TRY(get_search_paths());
-    auto maybe_profile_config = resolve_config_path(search_paths.span(), profile);
+static auto load_config_recursively(di::Span<di::Path const> search_paths, di::TreeSet<di::TransparentString>& visited,
+                                    di::TransparentStringView config_name) -> di::Result<Config> {
+    if (visited.contains(config_name)) {
+        return di::Unexpected(
+            di::format_error("Failed loading configuration due to circular import of config '{}'"_sv, config_name));
+    }
+
+    auto maybe_profile_config = resolve_config_path(search_paths.span(), config_name);
     if (!maybe_profile_config.has_value()) {
-        // If no config file is found, we just use the default configuration without erroring.
-        if (maybe_profile_config.error() == dius::PosixError::NoSuchFileOrDirectory) {
-            return convert(profile, di::move(base_config));
+        // If no config file is found and this is the root config file, we just use the default configuration without
+        // erroring.
+        if (visited.empty() && maybe_profile_config.error() == dius::PosixError::NoSuchFileOrDirectory) {
+            return {};
         }
         return di::Unexpected(di::format_error("Failed to reading config file: {}"_sv, maybe_profile_config.error()));
     }
 
-    auto config_json = TRY(di::from_json_string<Config>(maybe_profile_config.value().view())
-                               .transform_error([&](auto&& error) -> di::Error {
-                                   return di::format_error("Failed to parse JSON: {}"_sv, error);
-                               }));
+    visited.insert(config_name.to_owned());
+    auto config_json =
+        TRY(di::from_json_string<Config>(maybe_profile_config.value().view())
+                .transform_error([&](auto&& error) -> di::Error {
+                    return di::format_error("Failed to parse JSON for config '{}': {}"_sv, config_name, error);
+                }));
+    for (auto const& name : config_json.extends) {
+        auto name_ts = to_transparent_string(name);
+        auto subconfig = TRY(load_config_recursively(search_paths, visited, name_ts));
+        merge(subconfig, di::move(config_json));
+        config_json = di::move(subconfig);
+    }
+    return config_json;
+}
+
+auto resolve_profile(di::TransparentStringView profile, Config&& base_config) -> di::Result<ttx::Config> {
+    auto const profile_name = di::PathView(profile).stem().value();
+    auto const search_paths = TRY(get_search_paths());
+    auto visited = di::TreeSet<di::TransparentString> {};
+    auto config_json = TRY(load_config_recursively(search_paths.span(), visited, profile));
     merge(config_json, di::move(base_config));
     return convert(profile_name, di::move(config_json));
 }

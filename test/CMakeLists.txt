@@ -16,5 +16,6 @@ file(GLOB sources CONFIGURE_DEPENDS src/*.cpp)
 add_executable(ttx_test ${sources})
 
 target_link_libraries(ttx_test PRIVATE ttx::ttx_app_lib dius::dius_test_main)
+target_compile_definitions(ttx_test PRIVATE CONFIG_FILES=\"${CMAKE_CURRENT_SOURCE_DIR}/configs\")
 
 add_test(NAME ttx_test COMMAND ttx_test)
