@@ -1,4 +1,5 @@
 {
+    "$schema": "../../../meta/schema/config.json",
     "version": 1,
     "layout": {
         "hide_status_bar": true

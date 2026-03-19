@@ -41,8 +41,8 @@ struct ClipboardConfig {
 };
 
 struct SessionConfig {
-    bool restore_layout { false };
-    bool save_layout { false };
+    bool restore_layout { true };
+    bool save_layout { true };
     di::TransparentString layout_name;
 
     auto operator==(SessionConfig const&) const -> bool = default;

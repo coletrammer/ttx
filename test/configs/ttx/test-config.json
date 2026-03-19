@@ -1,4 +1,5 @@
 {
+    "$schema": "../../../meta/schema/config.json",
     "version": 1,
     "extends": ["subconfig.json"],
     "input": {

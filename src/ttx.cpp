@@ -1,6 +1,7 @@
 #include "config.h"
 #include "config_json.h"
 #include "di/cli/parser.h"
+#include "di/container/string/conversion.h"
 #include "di/container/string/string_view.h"
 #include "di/io/writer_print.h"
 #include "di/sync/synchronized.h"
@@ -121,6 +122,38 @@ struct Features {
     }
 };
 
+struct ConfigShow {
+    di::TransparentStringView profile { "main"_tsv };
+    bool help { false };
+
+    constexpr static auto get_cli_parser() {
+        return di::cli_parser<ConfigShow>(
+                   "show"_tsv, "Print the resolved configuration for the profile as a valid JSON configuration file"_sv)
+            .option<&ConfigShow::profile>(
+                'p', "profile"_tsv, "Profile name to use for this session (empty string loads no configuration)"_sv)
+            .help();
+    }
+};
+
+struct ConfigSchema {
+    bool help { false };
+
+    constexpr static auto get_cli_parser() {
+        return di::cli_parser<ConfigSchema>("schema"_tsv, "Print the JSON schema for ttx configuration"_sv).help();
+    }
+};
+
+struct ConfigCommand {
+    di::Variant<ConfigShow, ConfigSchema> subcommand;
+    bool help { false };
+
+    constexpr static auto get_cli_parser() {
+        return di::cli_parser<ConfigCommand>("config"_tsv, "Show information about ttx's configuration"_sv)
+            .subcommands<&ConfigCommand::subcommand>()
+            .help();
+    }
+};
+
 enum class TerminfoFormat {
     Terminfo,
     Verbose,
@@ -146,7 +179,7 @@ struct Terminfo {
 };
 
 struct Args {
-    di::Variant<New, Completions, Replay, Keybinds, Features, Terminfo> subcommand;
+    di::Variant<New, ConfigCommand, Completions, Replay, Keybinds, Features, Terminfo> subcommand;
     bool help { false };
 
     constexpr static auto get_cli_parser() {
@@ -275,7 +308,7 @@ static auto do_new(Args&, NewBase& args) -> di::Result<> {
     auto config_from_args = config_json::v1::Config {
         .input = {
             .prefix = args.prefix,
-            .save_state_path = args.save_state_path.transform(config_json::v1::to_utf8_string),
+            .save_state_path = args.save_state_path.transform([](di::PathView path) { return di::to_utf8_string_lossy(path.data()); }),
         },
         .layout = {
             .hide_status_bar = args.hide_status_bar ? di::Optional(true) : di::nullopt,
@@ -286,13 +319,13 @@ static auto do_new(Args&, NewBase& args) -> di::Result<> {
         .session = {
             .restore_layout = args.disable_layout_restore ? di::Optional(false) : di::nullopt,
             .save_layout = args.disable_layout_save ? di::Optional(false) : di::nullopt,
-            .layout_name = args.layout_name.transform(config_json::v1::to_utf8_string),
+            .layout_name = args.layout_name.transform(di::to_utf8_string_lossy),
         },
         .shell = {
-            .command = !args.command.empty () ? di::Optional(args.command | di::transform(config_json::v1::to_utf8_string) | di::to<di::Vector>()) : di::nullopt,
+            .command = !args.command.empty () ? di::Optional(args.command | di::transform(di::to_utf8_string_lossy) | di::to<di::Vector>()) : di::nullopt,
         },
         .terminfo = {
-            .term = args.term.transform(config_json::v1::to_utf8_string),
+            .term = args.term.transform(di::to_utf8_string_lossy),
             .force_local_terminfo = args.force_local_terminfo ? di::Optional(true) : di::nullopt,
         },
     };
@@ -563,6 +596,41 @@ static auto main(Args&, Terminfo& args) -> di::Result<> {
         return {};
     }
     return di::Unexpected(di::BasicError::InvalidArgument);
+}
+
+static auto main(Args&, ConfigCommand&, ConfigShow& args) -> di::Result<> {
+    if (args.profile.ends_with('/')) {
+        return di::Unexpected(di::format_error("--profile cannot be a directory"_sv));
+    }
+    auto config = args.profile.empty()
+                      ? Config()
+                      : TRY(config_json::v1::resolve_profile(args.profile).transform_error([&](auto&& error) {
+                            return di::format_error("Failed to resolve profile '{}': {}"_sv, args.profile, error);
+                        }));
+    auto string = *di::to_json_string(config_json::v1::to_config_json(di::move(config)),
+                                      di::JsonSerializerConfig().pretty().indent_width(4));
+    dius::println("{}"_sv, string);
+    return {};
+}
+
+static auto main(Args&, ConfigCommand&, ConfigSchema&) -> di::Result<> {
+    auto string =
+        *di::to_json_string(config_json::v1::json_schema(), di::JsonSerializerConfig().pretty().indent_width(4));
+    dius::println("{}"_sv, string);
+    return {};
+}
+
+static auto main(Args& base_args, ConfigCommand& args) -> di::Result<> {
+    return di::visit(
+        [&](auto& subcommand) -> di::Result<> {
+            if constexpr (di::SameAs<di::Void, di::meta::RemoveCVRef<decltype(subcommand)>>) {
+                ASSERT(false);
+                return {};
+            } else {
+                return main(base_args, args, subcommand);
+            }
+        },
+        args.subcommand);
 }
 
 static auto main(Args& args) -> di::Result<> {

@@ -1,10 +1,15 @@
 #include "config_json.h"
 
+#include <di/reflect/reflect.h>
+#include <di/serialization/json_serializer.h>
+
 #include "config.h"
+#include "di/container/string/conversion.h"
 #include "di/container/tree/tree_set.h"
 #include "di/serialization/json_deserializer.h"
 #include "di/util/construct.h"
 #include "di/vocab/error/string_error.h"
+#include "dius/print.h"
 #include "dius/system/process.h"
 
 namespace ttx::config_json::v1 {
@@ -87,10 +92,6 @@ struct Merge {
 
 constexpr inline auto merge = Merge {};
 
-static auto to_transparent_string(di::String const& s) -> di::TransparentString {
-    return s.span() | di::transform(di::construct<char>) | di::to<di::TransparentString>();
-}
-
 struct ConvertValue {
     template<typename T>
     static auto operator()(di::InPlaceType<T>, T&& value) -> T {
@@ -107,15 +108,52 @@ struct ConvertValue {
     }
 
     static auto operator()(di::InPlaceType<di::Path>, di::String&& value) {
-        return di::Path(to_transparent_string(value));
+        return di::Path(di::to_transparent_string(value));
+    }
+
+    static auto operator()(di::InPlaceType<di::String>, di::Path&& value) {
+        return di::to_utf8_string_lossy(value.data());
     }
 
     static auto operator()(di::InPlaceType<di::TransparentString>, di::String&& value) {
-        return to_transparent_string(value);
+        return di::to_transparent_string(value);
+    }
+
+    static auto operator()(di::InPlaceType<di::String>, di::TransparentString&& value) {
+        return di::to_utf8_string_lossy(value);
     }
 };
 
 constexpr inline auto convert_value = ConvertValue {};
+
+struct DoUnconvert {
+    template<di::concepts::ReflectableToFields JsonConfig, di::concepts::ReflectableToFields Config>
+    static auto operator()(JsonConfig& json_config, Config&& config) {
+        di::tuple_for_each(
+            [&](auto json_field) {
+                di::tuple_for_each(
+                    [&](auto field) {
+                        if constexpr (json_field.name == field.name) {
+                            DoUnconvert::operator()(json_field.get(json_config), di::move(field.get(config)));
+                        }
+                    },
+                    di::reflect(config));
+            },
+            di::reflect(json_config));
+    }
+
+    template<di::concepts::Optional T, typename U>
+    static auto operator()(T& maybe_json_value, U&& value) {
+        if constexpr (di::concepts::SameAs<di::TransparentString, di::meta::RemoveCVRef<U>>) {
+            if (value.empty()) {
+                return;
+            }
+        }
+        maybe_json_value = convert_value(di::in_place_type<di::meta::OptionalValue<T>>, di::forward<U>(value));
+    }
+};
+
+constexpr inline auto do_unconvert = DoUnconvert {};
 
 struct DoConvert {
     template<di::concepts::ReflectableToFields Config, di::concepts::ReflectableToFields JsonConfig>
@@ -151,10 +189,10 @@ static auto convert(di::TransparentStringView profile, Config&& json_config) -> 
                 "$SHELL environment variable not set. Either set the environment variable, specify shell.command in your config file, or pass a command explicitly when starting ttx"_s));
         }
         json_config.shell.command =
-            di::single(to_utf8_string(env.at("SHELL"_tsv).value())) | di::as_rvalue | di::to<di::Vector>();
+            di::single(di::to_utf8_string_lossy(env.at("SHELL"_tsv).value())) | di::as_rvalue | di::to<di::Vector>();
     }
     if (!json_config.session.layout_name) {
-        json_config.session.layout_name = to_utf8_string(profile);
+        json_config.session.layout_name = di::to_utf8_string_lossy(profile);
     }
     auto result = ttx::Config {};
     do_convert(result, di::move(json_config));
@@ -185,7 +223,7 @@ static auto load_config_recursively(di::Span<di::Path const> search_paths, di::T
                     return di::format_error("Failed to parse JSON for config '{}': {}"_sv, config_name, error);
                 }));
     for (auto const& name : config_json.extends) {
-        auto name_ts = to_transparent_string(name);
+        auto name_ts = di::to_transparent_string(name);
         auto subconfig = TRY(load_config_recursively(search_paths, visited, name_ts));
         merge(subconfig, di::move(config_json));
         config_json = di::move(subconfig);
@@ -193,12 +231,161 @@ static auto load_config_recursively(di::Span<di::Path const> search_paths, di::T
     return config_json;
 }
 
-auto resolve_profile(di::TransparentStringView profile, Config&& base_config) -> di::Result<ttx::Config> {
+auto resolve_profile(di::TransparentStringView profile, Config&& cli_config) -> di::Result<ttx::Config> {
     auto const profile_name = di::PathView(profile).stem().value();
     auto const search_paths = TRY(get_search_paths());
     auto visited = di::TreeSet<di::TransparentString> {};
     auto config_json = TRY(load_config_recursively(search_paths.span(), visited, profile));
-    merge(config_json, di::move(base_config));
+    merge(config_json, di::move(cli_config));
     return convert(profile_name, di::move(config_json));
+}
+
+auto to_config_json(ttx::Config&& config) -> Config {
+    auto result = Config {};
+    do_unconvert(result, di::move(config));
+    return result;
+}
+
+struct BuidlJsonSchemaDefinitions {
+    static auto operator()(di::InPlaceType<bool>, di::TreeMap<di::String, di::json::Object>&, bool const& defaults)
+        -> di::json::Object {
+        auto response = di::json::Object {};
+        response["type"_sv] = "boolean"_s;
+        response["default"_sv] = defaults;
+        return response;
+    }
+
+    static auto operator()(di::InPlaceType<di::String>, di::TreeMap<di::String, di::json::Object>&,
+                           di::String const& defaults) -> di::json::Object {
+        auto response = di::json::Object {};
+        response["type"_sv] = "string"_s;
+        if (!defaults.empty()) {
+            response["default"_sv] = defaults.clone();
+        }
+        return response;
+    }
+
+    template<typename T>
+    static auto operator()(di::InPlaceType<di::Optional<T>>, di::TreeMap<di::String, di::json::Object>& output,
+                           di::Optional<T> const& defaults) -> di::json::Object {
+        if (!defaults.has_value()) {
+            return BuidlJsonSchemaDefinitions::operator()(di::in_place_type<T>, output, T {});
+        }
+        return BuidlJsonSchemaDefinitions::operator()(di::in_place_type<T>, output, defaults.value());
+    }
+
+    template<typename T>
+    static auto operator()(di::InPlaceType<di::Vector<T>>, di::TreeMap<di::String, di::json::Object>& output,
+                           di::Vector<T> const&) -> di::json::Object {
+        auto response = di::json::Object {};
+        response["type"_sv] = "array"_s;
+        response["items"_sv] = BuidlJsonSchemaDefinitions::operator()(di::in_place_type<T>, output, T());
+        response["default"_sv] = di::json::Array {};
+        return response;
+    }
+
+    template<di::concepts::ReflectableToEnumerators T, typename M = di::meta::Reflect<T>>
+    static auto operator()(di::InPlaceType<T>, di::TreeMap<di::String, di::json::Object>& output, T const& defaults)
+        -> di::json::Object {
+        constexpr auto type_name = di::container::fixed_string_to_utf8_string_view<M::name>();
+
+        auto response = di::json::Object {};
+        response["default"_sv] = di::to_string(defaults);
+        response["$ref"_sv] = di::format("#/$defs/{}"_sv, type_name);
+        if (output.contains(type_name)) {
+            return response;
+        }
+
+        auto result = di::json::Object {};
+        if (!M::description.empty()) {
+            result["description"_sv] = di::container::fixed_string_to_utf8_string_view<M::description>().to_owned();
+        }
+        auto values = di::json::Array {};
+        di::tuple_for_each(
+            [&]<typename E>(E) {
+                constexpr auto enum_name = di::container::fixed_string_to_utf8_string_view<E::name>();
+                values.push_back(enum_name.to_owned());
+            },
+            M {});
+        result["enum"_sv] = di::move(values);
+        output[type_name] = di::move(result);
+        return response;
+    }
+
+    template<di::concepts::ReflectableToFields T, typename M = di::meta::Reflect<T>>
+    static auto operator()(di::InPlaceType<T>, di::TreeMap<di::String, di::json::Object>& output, T const& defaults)
+        -> di::json::Object {
+        constexpr auto type_name = di::container::fixed_string_to_utf8_string_view<M::name>();
+
+        auto response = di::json::Object {};
+        response["$ref"_sv] = di::format("#/$defs/{}"_sv, type_name);
+        if (output.contains(type_name)) {
+            return response;
+        }
+
+        auto result = di::json::Object {};
+        result["type"_sv] = "object"_s;
+        if (!M::description.empty()) {
+            result["description"_sv] = di::container::fixed_string_to_utf8_string_view<M::description>().to_owned();
+        }
+        auto properties = di::json::Object {};
+        di::tuple_for_each(
+            [&]<typename F>(F field) {
+                constexpr auto field_name = di::container::fixed_string_to_utf8_string_view<F::name>();
+                if constexpr (field_name.starts_with(U'$')) {
+                    return;
+                } else if constexpr (field_name == "version"_sv) {
+                    auto o = di::json::Object {};
+                    o["const"_sv] = 1;
+                    if (!F::description.empty()) {
+                        o["description"_sv] =
+                            di::container::fixed_string_to_utf8_string_view<F::description>().to_owned();
+                    }
+                    properties[field_name] = di::json::Value(di::move(o));
+                } else {
+                    auto o = BuidlJsonSchemaDefinitions::operator()(di::in_place_type<typename F::Type>, output,
+                                                                    field.get(defaults));
+                    if (!F::description.empty()) {
+                        o["description"_sv] =
+                            di::container::fixed_string_to_utf8_string_view<F::description>().to_owned();
+                    }
+                    properties[field_name] = di::json::Value(di::move(o));
+                }
+            },
+            M {});
+        result["properties"_sv] = di::move(properties);
+        output[type_name] = di::move(result);
+        return response;
+    }
+};
+
+constexpr inline auto build_json_schema_definitions = BuidlJsonSchemaDefinitions {};
+
+auto json_schema() -> di::json::Object {
+    auto definitions = di::TreeMap<di::String, di::json::Object> {};
+    auto const defaults = to_config_json(ttx::Config {});
+    build_json_schema_definitions(di::in_place_type<Config>, definitions, defaults);
+
+    auto& o = definitions["Config"_sv];
+    o["$schema"_sv] = "https://json-schema.org/draft/2020-12/schema"_s;
+    o["$id"_sv] = Config().schema;
+    o["title"_sv] = "ttx Configuration"_s;
+    auto defs = di::json::Object();
+    for (auto& [name, schema] : definitions) {
+        if (name == "Config"_sv) {
+            continue;
+        }
+        defs[name] = di::move(schema);
+    }
+    if (!defs.empty()) {
+        o["$defs"_sv] = di::move(defs);
+    }
+
+    auto examples = di::json::Array {};
+    auto default_as_json_string = *di::to_json_string(defaults);
+    examples.emplace_back(*di::from_json_string<di::json::Object>(default_as_json_string.view()));
+    o["examples"_sv] = di::move(examples);
+
+    return di::move(o);
 }
 }

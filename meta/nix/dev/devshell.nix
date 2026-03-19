@@ -50,6 +50,9 @@
           # For terminfo compilation
           ncurses
 
+          # JSON schema validation
+          source-meta-json-schema
+
           # Dependencies
           inputs.dius.packages.${system}.default
         ]);

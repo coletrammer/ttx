@@ -1,0 +1,244 @@
+{
+    "$defs": {
+        "Clipboard": {
+            "description": "Configuration relating to the clipboard handling of ttx (OSC 52)",
+            "properties": {
+                "mode": {
+                    "$ref": "#/$defs/ClipboardMode",
+                    "default": "system",
+                    "description": "Configure the way ttx interacts with the system clipboard when inner applications use OSC 52. By default ttx will read/write from the system clipboard. This requires configuring your terminal emulator to allow interacting with the system clipboard. If you do not want applications to access your system clipboard, specify the mode as 'local'"
+                }
+            },
+            "type": "object"
+        },
+        "ClipboardMode": {
+            "enum": [
+                "system",
+                "system-write-local-read",
+                "system-write-no-read",
+                "local",
+                "local-write-no-read",
+                "disabled"
+            ]
+        },
+        "Input": {
+            "description": "Configuration relating the input processing of ttx (primarily key bindings)",
+            "properties": {
+                "disable_default_keybinds": {
+                    "default": false,
+                    "description": "Disable all default key bindings to allow full customization",
+                    "type": "boolean"
+                },
+                "prefix": {
+                    "$ref": "#/$defs/Key",
+                    "default": "B",
+                    "description": "Prefix key to use. Almost all key bindings require using the prefix key to enter 'NORMAL' mode first. Currently, the prefix key must be pressed in conjunction with the control key. So specifying a prefix of 'A' means that to enter 'NORMAL' mode you must press 'ctrl+a'"
+                },
+                "save_state_path": {
+                    "default": "/tmp/ttx-save-state.ansi",
+                    "description": "Path to write save state files captured by ttx. These save state files can be replayed using `ttx replay`. This functionality is useful for testing and reproducing bugs",
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
+        "Key": {
+            "enum": [
+                "None",
+                "A",
+                "B",
+                "C",
+                "D",
+                "E",
+                "F",
+                "G",
+                "H",
+                "I",
+                "J",
+                "K",
+                "L",
+                "M",
+                "N",
+                "O",
+                "P",
+                "Q",
+                "R",
+                "S",
+                "T",
+                "U",
+                "V",
+                "W",
+                "X",
+                "Y",
+                "Z",
+                "0",
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6",
+                "7",
+                "8",
+                "9",
+                "Backtick",
+                "Minus",
+                "Equal",
+                "Star",
+                "Plus",
+                "LeftBracket",
+                "RightBracket",
+                "BackSlash",
+                "SemiColon",
+                "Quote",
+                "Comma",
+                "Period",
+                "Slash",
+                "Escape",
+                "Enter",
+                "Tab",
+                "Backspace",
+                "Space",
+                "Insert",
+                "Delete",
+                "Left",
+                "Right",
+                "Up",
+                "Down"
+            ]
+        },
+        "Layout": {
+            "description": "Configuration relating to the layout of panes in ttx, including the status bar and pane spacing",
+            "properties": {
+                "hide_status_bar": {
+                    "default": false,
+                    "description": "Hide the status bar for an extremely minimal layout",
+                    "type": "boolean"
+                }
+            },
+            "type": "object"
+        },
+        "Session": {
+            "description": "Configuration relating the session management, such as automatically saving and restoring the current layout",
+            "properties": {
+                "layout_name": {
+                    "description": "Layout name to use for save/restore. This defaults the name of the chosen profile",
+                    "type": "string"
+                },
+                "restore_layout": {
+                    "default": true,
+                    "description": "Automatically restore the previous layout on startup. This does not preserve commands but does restore all sessions, tabs, and panes as well as their working directories",
+                    "type": "boolean"
+                },
+                "save_layout": {
+                    "default": true,
+                    "description": "Automaticaly save the current layout to a file whenever updates occur. The layout is saved to $XDG_DATA_HOME/ttx/layouts (~/.local/share/ttx/layouts). The layout file is meant for use the `restore_layout` option",
+                    "type": "boolean"
+                }
+            },
+            "type": "object"
+        },
+        "Shell": {
+            "description": "Configuration relating to the shell ttx starts in each pane",
+            "properties": {
+                "command": {
+                    "default": [],
+                    "description": "The command to run inside is pane. This is a list of arguments passed directly to the OS. If shell expansion is desired, use a command like this: [\"sh\", \"-c\", \"<COMMAND>\"]",
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                }
+            },
+            "type": "object"
+        },
+        "Terminfo": {
+            "description": "Configuration relating to the terminfo ttx passes to inner applications",
+            "properties": {
+                "force_local_terminfo": {
+                    "default": false,
+                    "description": "Compile ttx's terminfo on startup and set TERMINFO_DIR, even if the terminfo is already installed. This shouldn't be necessary but can be used if the system's terminfo is broken or for testing",
+                    "type": "boolean"
+                },
+                "term": {
+                    "default": "xterm-ttx",
+                    "description": "Value of the TERM enviornment variable to pass to inner applications. ttx automaticaly sets up the terminfo so the default value of 'xterm-ttx' will work locally. However, ttx's terminfo is not automaticaly available when using ssh or sudo. If this is causing issues, set this option to 'xterm-256color'",
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        }
+    },
+    "$id": "https://github.com/coletrammer/ttx/raw/refs/heads/main/meta/schema/config.json",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "JSON configuration for ttx",
+    "examples": [
+        {
+            "$schema": "https://github.com/coletrammer/ttx/raw/refs/heads/main/meta/schema/config.json",
+            "clipboard": {
+                "mode": "system"
+            },
+            "extends": [],
+            "input": {
+                "disable_default_keybinds": false,
+                "prefix": "B",
+                "save_state_path": "/tmp/ttx-save-state.ansi"
+            },
+            "layout": {
+                "hide_status_bar": false
+            },
+            "session": {
+                "restore_layout": true,
+                "save_layout": true
+            },
+            "shell": {
+                "command": []
+            },
+            "terminfo": {
+                "force_local_terminfo": false,
+                "term": "xterm-ttx"
+            },
+            "version": 1
+        }
+    ],
+    "properties": {
+        "clipboard": {
+            "$ref": "#/$defs/Clipboard",
+            "description": "Configuration relating to the clipboard handling of ttx (OSC 52)"
+        },
+        "extends": {
+            "default": [],
+            "description": "List of configuration files to extend. These can recursively extend more files. Priority is given to the last time the configuration option is specified",
+            "items": {
+                "type": "string"
+            },
+            "type": "array"
+        },
+        "input": {
+            "$ref": "#/$defs/Input",
+            "description": "Configuration relating the input processing of ttx (primarily key bindings)"
+        },
+        "layout": {
+            "$ref": "#/$defs/Layout",
+            "description": "Configuration relating to the layout of panes in ttx, including the status bar and pane spacing"
+        },
+        "session": {
+            "$ref": "#/$defs/Session",
+            "description": "Configuration relating the session management, such as automatically saving and restoring the current layout"
+        },
+        "shell": {
+            "$ref": "#/$defs/Shell",
+            "description": "Configuration relating to the shell ttx starts in each pane"
+        },
+        "terminfo": {
+            "$ref": "#/$defs/Terminfo",
+            "description": "Configuration relating to the terminfo ttx passes to inner applications"
+        },
+        "version": {
+            "const": 1,
+            "description": "Version of the ttx config (should always be 1)"
+        }
+    },
+    "title": "ttx Configuration",
+    "type": "object"
+}
