@@ -107,7 +107,7 @@ struct Terminfo {
 struct Config {
     di::String schema { "https://github.com/coletrammer/ttx/raw/refs/heads/main/meta/schema/config.json"_s };
     u32 version { 1 };
-    di::Vector<di::String> extends {};
+    di::Optional<di::Vector<di::String>> extends {};
     Input input {};
     Layout layout {};
     Clipboard clipboard {};
@@ -141,4 +141,5 @@ struct Config {
 auto resolve_profile(di::TransparentStringView profile, Config&& cli_config = {}) -> di::Result<ttx::Config>;
 auto to_config_json(ttx::Config&& config) -> Config;
 auto json_schema() -> di::json::Object;
+auto nix_options() -> di::String;
 }

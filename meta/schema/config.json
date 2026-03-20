@@ -178,7 +178,6 @@
             "clipboard": {
                 "mode": "system"
             },
-            "extends": [],
             "input": {
                 "disable_default_keybinds": false,
                 "prefix": "B",

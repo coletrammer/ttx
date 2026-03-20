@@ -222,11 +222,13 @@ static auto load_config_recursively(di::Span<di::Path const> search_paths, di::T
                 .transform_error([&](auto&& error) -> di::Error {
                     return di::format_error("Failed to parse JSON for config '{}': {}"_sv, config_name, error);
                 }));
-    for (auto const& name : config_json.extends) {
-        auto name_ts = di::to_transparent_string(name);
-        auto subconfig = TRY(load_config_recursively(search_paths, visited, name_ts));
-        merge(subconfig, di::move(config_json));
-        config_json = di::move(subconfig);
+    if (config_json.extends.has_value()) {
+        for (auto const& name : config_json.extends.value()) {
+            auto name_ts = di::to_transparent_string(name);
+            auto subconfig = TRY(load_config_recursively(search_paths, visited, name_ts));
+            merge(subconfig, di::move(config_json));
+            config_json = di::move(subconfig);
+        }
     }
     return config_json;
 }
@@ -246,7 +248,7 @@ auto to_config_json(ttx::Config&& config) -> Config {
     return result;
 }
 
-struct BuidlJsonSchemaDefinitions {
+struct BuildJsonSchemaDefinitions {
     static auto operator()(di::InPlaceType<bool>, di::TreeMap<di::String, di::json::Object>&, bool const& defaults)
         -> di::json::Object {
         auto response = di::json::Object {};
@@ -269,9 +271,9 @@ struct BuidlJsonSchemaDefinitions {
     static auto operator()(di::InPlaceType<di::Optional<T>>, di::TreeMap<di::String, di::json::Object>& output,
                            di::Optional<T> const& defaults) -> di::json::Object {
         if (!defaults.has_value()) {
-            return BuidlJsonSchemaDefinitions::operator()(di::in_place_type<T>, output, T {});
+            return BuildJsonSchemaDefinitions::operator()(di::in_place_type<T>, output, T {});
         }
-        return BuidlJsonSchemaDefinitions::operator()(di::in_place_type<T>, output, defaults.value());
+        return BuildJsonSchemaDefinitions::operator()(di::in_place_type<T>, output, defaults.value());
     }
 
     template<typename T>
@@ -279,7 +281,7 @@ struct BuidlJsonSchemaDefinitions {
                            di::Vector<T> const&) -> di::json::Object {
         auto response = di::json::Object {};
         response["type"_sv] = "array"_s;
-        response["items"_sv] = BuidlJsonSchemaDefinitions::operator()(di::in_place_type<T>, output, T());
+        response["items"_sv] = BuildJsonSchemaDefinitions::operator()(di::in_place_type<T>, output, T());
         response["default"_sv] = di::json::Array {};
         return response;
     }
@@ -343,7 +345,7 @@ struct BuidlJsonSchemaDefinitions {
                     }
                     properties[field_name] = di::json::Value(di::move(o));
                 } else {
-                    auto o = BuidlJsonSchemaDefinitions::operator()(di::in_place_type<typename F::Type>, output,
+                    auto o = BuildJsonSchemaDefinitions::operator()(di::in_place_type<typename F::Type>, output,
                                                                     field.get(defaults));
                     if (!F::description.empty()) {
                         o["description"_sv] =
@@ -359,7 +361,7 @@ struct BuidlJsonSchemaDefinitions {
     }
 };
 
-constexpr inline auto build_json_schema_definitions = BuidlJsonSchemaDefinitions {};
+constexpr inline auto build_json_schema_definitions = BuildJsonSchemaDefinitions {};
 
 auto json_schema() -> di::json::Object {
     auto definitions = di::TreeMap<di::String, di::json::Object> {};
@@ -387,5 +389,179 @@ auto json_schema() -> di::json::Object {
     o["examples"_sv] = di::move(examples);
 
     return di::move(o);
+}
+
+static auto camel_case(di::StringView s) -> di::String {
+    auto result = ""_s;
+    auto first = true;
+    for (auto c : s) {
+        if (first && c >= U'A' && c <= U'Z') {
+            result.push_back(c | 0x20);
+        } else {
+            result.push_back(c);
+        }
+        first = false;
+    }
+    return result;
+}
+
+struct NixOption {
+    di::String name;
+    di::String type;
+    di::String description;
+};
+
+struct NixSubmodule {
+    di::String name;
+    di::Vector<NixOption> options;
+};
+
+struct NixEnum {
+    di::String name;
+    di::Vector<di::String> values;
+};
+
+using NixValue = di::Variant<NixSubmodule, NixEnum>;
+
+struct BuildNixOptions {
+    static auto operator()(di::InPlaceType<bool>, di::TreeMap<di::String, NixValue>&) -> di::String { return "bool"_s; }
+
+    static auto operator()(di::InPlaceType<di::String>, di::TreeMap<di::String, NixValue>&) -> di::String {
+        return "str"_s;
+    }
+
+    template<typename T>
+    static auto operator()(di::InPlaceType<di::Optional<T>>, di::TreeMap<di::String, NixValue>& output) -> di::String {
+        auto result = BuildNixOptions::operator()(di::in_place_type<T>, output);
+        return di::format("nullOr ({})"_sv, result);
+    }
+
+    template<typename T>
+    static auto operator()(di::InPlaceType<di::Vector<T>>, di::TreeMap<di::String, NixValue>& output) -> di::String {
+        auto type = BuildNixOptions::operator()(di::in_place_type<T>, output);
+        return di::format("listOf ({})"_sv, type);
+    }
+
+    template<di::concepts::ReflectableToEnumerators T, typename M = di::meta::Reflect<T>>
+    static auto operator()(di::InPlaceType<T>, di::TreeMap<di::String, NixValue>& output) -> di::String {
+        auto const type_name = camel_case(di::container::fixed_string_to_utf8_string_view<M::name>());
+
+        auto response = type_name.clone();
+        if (output.contains(type_name)) {
+            return response;
+        }
+
+        auto result = NixEnum {};
+        result.name = type_name.clone();
+        di::tuple_for_each(
+            [&]<typename E>(E) {
+                constexpr auto enum_name = di::container::fixed_string_to_utf8_string_view<E::name>();
+                result.values.push_back(enum_name.to_owned());
+            },
+            M {});
+        output[type_name] = di::move(result);
+        return response;
+    }
+
+    template<di::concepts::ReflectableToFields T, typename M = di::meta::Reflect<T>>
+    static auto operator()(di::InPlaceType<T>, di::TreeMap<di::String, NixValue>& output) -> di::String {
+        auto const type_name = camel_case(di::container::fixed_string_to_utf8_string_view<M::name>());
+
+        auto response = di::format("nullOr {}"_sv, type_name.clone());
+        if (output.contains(type_name)) {
+            return response;
+        }
+
+        auto result = NixSubmodule {};
+        result.name = type_name.clone();
+        di::tuple_for_each(
+            [&]<typename F>(F) {
+                constexpr auto field_name = di::container::fixed_string_to_utf8_string_view<F::name>();
+                if constexpr (field_name.starts_with(U'$') || field_name == "version"_sv) {
+                    return;
+                } else {
+                    auto type = BuildNixOptions::operator()(di::in_place_type<typename F::Type>, output);
+                    result.options.push_back(NixOption {
+                        .name = field_name.to_owned(),
+                        .type = di::move(type),
+                        .description = di::container::fixed_string_to_utf8_string_view<F::description>().to_owned(),
+                    });
+                }
+            },
+            M {});
+        output[type_name] = di::move(result);
+        return response;
+    }
+};
+
+constexpr inline auto build_nix_options = BuildNixOptions {};
+
+struct NixToString {
+    static auto operator()(NixEnum const& value) -> di::String {
+        return di::format("  {} = enum [ {} ]"_sv, value.name,
+                          value.values | di::transform([](auto const& value) {
+                              return di::format("\"{}\""_sv, value);
+                          }) | di::join_with(U' ') |
+                              di::to<di::String>());
+    }
+
+    static auto operator()(NixOption const& value) -> di::String {
+        auto result = ""_s;
+        result += di::format("      {} = lib.mkOption {{\n"_sv, value.name);
+        result += di::format("        type = {};\n"_sv, value.type);
+        if (!value.description.empty()) {
+            result += di::format("        description = {:?};\n"_sv, value.description);
+        }
+        result += di::format("        default = null;\n"_sv);
+        result += di::format("      }}"_sv);
+        return result;
+    }
+
+    static auto operator()(NixSubmodule const& value) -> di::String {
+        auto result = ""_s;
+        result += di::format("  {} = submodule {{\n"_sv, value.name);
+        result += di::format("    options = {{\n"_sv);
+        for (auto const& option : value.options) {
+            result += di::format("{};\n"_sv, NixToString::operator()(option));
+        }
+        result += di::format("    }};\n"_sv);
+        result += di::format("  }}"_sv);
+        return result;
+    }
+
+    static auto operator()(NixValue const& value) -> di::String { return di::visit(NixToString {}, value); }
+};
+
+constexpr inline auto nix_to_string = NixToString {};
+
+auto nix_options() -> di::String {
+    auto definitions = di::TreeMap<di::String, NixValue> {};
+    build_nix_options(di::in_place_type<Config>, definitions);
+
+    auto defs = ""_s;
+    for (auto const& [_, value] : definitions) {
+        defs += di::format("{};\n"_sv, nix_to_string(value));
+    }
+    return di::format(R"~(# This file was autogenerated via `ttx config nix`. Do not modify.
+{{ lib, ... }}:
+with lib.types;
+let
+{}in
+lib.mkOption {{
+  type = attrsOf config;
+  default = {{}};
+  description = ''
+    Attribute set representing a set ttx configuration files to be written to `$XDG_CONFIG_HOME/ttx`.
+    Each file name is accessible as a ttx profile.
+    The default ttx profile is `main`, and is commonly the only configuration file which must be defined.'';
+  example = {{
+    main = {{
+      input = {{
+        prefix = "A";
+      }};
+    }};
+  }};
+}})~"_sv,
+                      defs);
 }
 }

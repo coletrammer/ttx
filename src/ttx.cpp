@@ -135,6 +135,14 @@ struct ConfigShow {
     }
 };
 
+struct ConfigNix {
+    bool help { false };
+
+    constexpr static auto get_cli_parser() {
+        return di::cli_parser<ConfigNix>("nix"_tsv, "Print the nix option schema for ttx configuration"_sv).help();
+    }
+};
+
 struct ConfigSchema {
     bool help { false };
 
@@ -144,7 +152,7 @@ struct ConfigSchema {
 };
 
 struct ConfigCommand {
-    di::Variant<ConfigShow, ConfigSchema> subcommand;
+    di::Variant<ConfigShow, ConfigNix, ConfigSchema> subcommand;
     bool help { false };
 
     constexpr static auto get_cli_parser() {
@@ -534,14 +542,6 @@ static auto do_new(Args&, NewBase& args) -> di::Result<> {
 }
 
 static auto main(Args& base_args, New& args) -> di::Result<> {
-    if (args.command.empty()) {
-        auto const& env = dius::system::get_environment();
-        if (!env.contains("SHELL"_tsv)) {
-            return di::Unexpected(di::StringError(
-                "$SHELL environment variable not set. Either set the environment variable or explicitly pass a command to run"_s));
-        }
-        args.command = { env.at("SHELL"_tsv).value() };
-    }
     return do_new(base_args, args);
 }
 
@@ -609,6 +609,12 @@ static auto main(Args&, ConfigCommand&, ConfigShow& args) -> di::Result<> {
                         }));
     auto string = *di::to_json_string(config_json::v1::to_config_json(di::move(config)),
                                       di::JsonSerializerConfig().pretty().indent_width(4));
+    dius::println("{}"_sv, string);
+    return {};
+}
+
+static auto main(Args&, ConfigCommand&, ConfigNix&) -> di::Result<> {
+    auto string = config_json::v1::nix_options();
     dius::println("{}"_sv, string);
     return {};
 }

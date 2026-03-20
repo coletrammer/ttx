@@ -20,12 +20,32 @@
             default = pkg;
             description = "Package to install (nullable)";
           };
+
+          settings = (import ./homeoptions.nix) { lib = lib; };
         };
       };
 
-      config = lib.mkIf config.programs.ttx.enable {
-        home.packages =
-          if config.programs.ttx.package == null then [ ] else [ config.programs.ttx.package ];
-      };
+      config =
+        let
+          jsonFormat = pkgs.formats.json { };
+          removeNulls = lib.filterAttrsRecursive (_: v: v != null);
+        in
+        lib.mkIf config.programs.ttx.enable {
+          home.packages =
+            if config.programs.ttx.package == null then [ ] else [ config.programs.ttx.package ];
+
+          xdg.configFile = lib.mapAttrs' (
+            name: value:
+            lib.nameValuePair "ttx/${name}.json" {
+              source = jsonFormat.generate "${name}.json" (
+                (removeNulls value)
+                // {
+                  "$schema" = "https://github.com/coletrammer/ttx/raw/refs/heads/main/meta/schema/config.json";
+                  version = 1;
+                }
+              );
+            }
+          ) config.programs.ttx.settings;
+        };
     };
 }
