@@ -5,11 +5,11 @@
 #include "input_mode.h"
 #include "layout_state.h"
 #include "ttx/clipboard.h"
-#include "ttx/graphics_rendition.h"
 #include "ttx/layout.h"
 #include "ttx/mouse.h"
 #include "ttx/mouse_event.h"
 #include "ttx/renderer.h"
+#include "ttx/terminal/graphics_rendition.h"
 
 namespace ttx {
 auto RenderThread::create(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit, Config config,
@@ -285,36 +285,36 @@ struct Render {
 };
 
 void RenderThread::render_status_bar(LayoutState const& state, Renderer& renderer) {
-    auto const dark_bg = Color(0x11, 0x11, 0x1b);
-    auto const light_bg = Color(0x31, 0x32, 0x44);
-    auto const dark_fg = Color(0x1e, 0x1e, 0x2e);
-    auto const active_color = Color(Color::Palette::Yellow);
-    auto const inactive_color = Color(Color::Palette::Blue);
+    auto const dark_bg = terminal::Color(0x11, 0x11, 0x1b);
+    auto const light_bg = terminal::Color(0x31, 0x32, 0x44);
+    auto const dark_fg = terminal::Color(0x1e, 0x1e, 0x2e);
+    auto const active_color = terminal::Color(terminal::Color::Palette::Yellow);
+    auto const inactive_color = terminal::Color(terminal::Color::Palette::Blue);
     auto const separator = U'█';
     for (auto& session : state.active_session()) {
         auto offset = 0u;
-        renderer.clear_row(0, GraphicsRendition { .bg = dark_bg });
+        renderer.clear_row(0, terminal::GraphicsRendition { .bg = dark_bg });
 
         {
             auto color = [&] {
                 switch (m_input_status.mode) {
                     case ttx::InputMode::Switch:
-                        return Color(Color::Palette::Yellow);
+                        return terminal::Color(terminal::Color::Palette::Yellow);
                     case ttx::InputMode::Insert:
-                        return Color(Color::Palette::Blue);
+                        return terminal::Color(terminal::Color::Palette::Blue);
                     case ttx::InputMode::Normal:
-                        return Color(Color::Palette::Green);
+                        return terminal::Color(terminal::Color::Palette::Green);
                     case ttx::InputMode::Resize:
-                        return Color(Color::Palette::Red);
+                        return terminal::Color(terminal::Color::Palette::Red);
                 }
-                return Color(Color::Palette::Blue);
+                return terminal::Color(terminal::Color::Palette::Blue);
             }();
             renderer.put_text(separator, 0, offset++, { .fg = color, .bg = color });
             renderer.put_text(di::to_string(m_input_status.mode).view(), 0, offset,
-                              GraphicsRendition {
+                              terminal::GraphicsRendition {
                                   .fg = dark_fg,
                                   .bg = color,
-                                  .font_weight = FontWeight::Bold,
+                                  .font_weight = terminal::FontWeight::Bold,
                               });
             offset += 6;
             renderer.put_text(separator, 0, offset++, { .fg = color, .bg = color });
@@ -357,7 +357,8 @@ void RenderThread::render_status_bar(LayoutState const& state, Renderer& rendere
                 offset++;
             }
         } else {
-            renderer.put_text(m_pending_status_message->message.view(), 0, offset, GraphicsRendition { .bg = dark_bg });
+            renderer.put_text(m_pending_status_message->message.view(), 0, offset,
+                              terminal::GraphicsRendition { .bg = dark_bg });
         }
 
         // TODO: horizontal scrolling on overflow
@@ -374,7 +375,7 @@ void RenderThread::render_status_bar(LayoutState const& state, Renderer& rendere
             offset = state.size().cols - rhs_size;
 
             {
-                auto color = Color(Color::Palette::Green);
+                auto color = terminal::Color(terminal::Color::Palette::Green);
                 renderer.put_text(separator, 0, offset++, { .fg = color, .bg = color });
                 renderer.put_text(U'', 0, offset++, { .fg = dark_fg, .bg = color });
                 renderer.put_text(' ', 0, offset++, { .bg = color });
@@ -385,7 +386,7 @@ void RenderThread::render_status_bar(LayoutState const& state, Renderer& rendere
             }
 
             {
-                auto color = Color(Color::Palette::Magenta);
+                auto color = terminal::Color(terminal::Color::Palette::Magenta);
                 renderer.put_text(separator, 0, offset++, { .fg = color, .bg = color });
                 renderer.put_text(U'󰒋', 0, offset++, { .fg = dark_fg, .bg = color });
                 renderer.put_text(' ', 0, offset++, { .bg = color });

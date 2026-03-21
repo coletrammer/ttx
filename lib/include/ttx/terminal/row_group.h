@@ -2,7 +2,7 @@
 
 #include "di/container/ring/prelude.h"
 #include "di/container/view/cache_last.h"
-#include "ttx/graphics_rendition.h"
+#include "ttx/terminal/graphics_rendition.h"
 #include "ttx/terminal/hyperlink.h"
 #include "ttx/terminal/id_map.h"
 #include "ttx/terminal/multi_cell_info.h"

@@ -12,7 +12,6 @@
 #include "dius/unicode/width.h"
 #include "ttx/clipboard.h"
 #include "ttx/features.h"
-#include "ttx/graphics_rendition.h"
 #include "ttx/params.h"
 #include "ttx/size.h"
 #include "ttx/terminal/cursor.h"
@@ -20,6 +19,7 @@
 #include "ttx/terminal/escapes/osc_66.h"
 #include "ttx/terminal/escapes/osc_8.h"
 #include "ttx/terminal/escapes/osc_8671.h"
+#include "ttx/terminal/graphics_rendition.h"
 #include "ttx/terminal/multi_cell_info.h"
 #include "ttx/terminal/screen.h"
 
@@ -140,7 +140,7 @@ void Renderer::start(Size const& size) {
 struct Change {
     u32 phase { 0 }; // Allow separating rendering into 2 phases.
     di::Optional<terminal::Hyperlink const&> hyperlink;
-    GraphicsRendition const& graphics_rendition;
+    terminal::GraphicsRendition const& graphics_rendition;
     u32 row { 0 };
     u32 col { 0 };
     di::StringView text;
@@ -333,8 +333,8 @@ static auto compute_text_upper_bound(di::StringView text) -> usize {
     return di::max(legacy_width, grapheme_width);
 }
 
-static auto render_graphics_rendition(GraphicsRendition const& desired, Feature features,
-                                      GraphicsRendition const& current) -> di::String {
+static auto render_graphics_rendition(terminal::GraphicsRendition const& desired, Feature features,
+                                      terminal::GraphicsRendition const& current) -> di::String {
     auto as_sgr = [](Params const& params) -> di::String {
         return di::format("\033[{}m"_sv, params);
     };
@@ -567,7 +567,7 @@ auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor_in) -
     return output.write_exactly(di::as_bytes(text.span()));
 }
 
-void Renderer::put_text(di::StringView text, u32 row, u32 col, GraphicsRendition const& rendition,
+void Renderer::put_text(di::StringView text, u32 row, u32 col, terminal::GraphicsRendition const& rendition,
                         di::Optional<terminal::Hyperlink const&> hyperlink) {
     if (col >= m_bound_width || row >= m_bound_height) {
         return;
@@ -588,14 +588,14 @@ void Renderer::put_text(di::StringView text, u32 row, u32 col, GraphicsRendition
     }
 }
 
-void Renderer::put_text(c32 text, u32 row, u32 col, GraphicsRendition const& rendition,
+void Renderer::put_text(c32 text, u32 row, u32 col, terminal::GraphicsRendition const& rendition,
                         di::Optional<terminal::Hyperlink const&> hyperlink) {
     auto string = di::container::string::StringImpl<di::String::Encoding, di::StaticVector<c8, di::Constexpr<4zu>>> {};
     (void) string.push_back(text);
     put_text(string.view(), row, col, rendition, hyperlink);
 }
 
-void Renderer::put_cell(di::StringView text, u32 row, u32 col, GraphicsRendition const& rendition,
+void Renderer::put_cell(di::StringView text, u32 row, u32 col, terminal::GraphicsRendition const& rendition,
                         di::Optional<terminal::Hyperlink const&> hyperlink,
                         terminal::MultiCellInfo const& multi_cell_info, bool explicitly_sized,
                         bool complex_grapheme_cluster) {
@@ -620,7 +620,7 @@ void Renderer::put_cell(di::StringView text, u32 row, u32 col, GraphicsRendition
                               complex_grapheme_cluster);
 }
 
-void Renderer::clear_row(u32 row, GraphicsRendition const& rendition,
+void Renderer::clear_row(u32 row, terminal::GraphicsRendition const& rendition,
                          di::Optional<terminal::Hyperlink const&> hyperlink) {
     if (row >= m_bound_height) {
         return;

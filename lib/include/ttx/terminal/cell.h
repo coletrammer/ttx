@@ -2,7 +2,7 @@
 
 #include "di/math/numeric_limits.h"
 #include "di/types/integers.h"
-#include "ttx/graphics_rendition.h"
+#include "ttx/terminal/graphics_rendition.h"
 
 namespace ttx::terminal {
 /// @brief Represents a on-screen terminal cell

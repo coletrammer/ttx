@@ -311,8 +311,8 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
                         }
                         if (selected) {
                             // Taken from catpuccin mocha
-                            gfx.fg = Color(0xcd, 0xd6, 0xf4);
-                            gfx.bg = Color(0x58, 0x5b, 0x70);
+                            gfx.fg = terminal::Color(0xcd, 0xd6, 0xf4);
+                            gfx.bg = terminal::Color(0x58, 0x5b, 0x70);
                             gfx.inverted = false;
                         }
                         renderer.put_cell(text, r - m_vertical_scroll_offset, c - m_horizontal_scroll_offset, gfx,

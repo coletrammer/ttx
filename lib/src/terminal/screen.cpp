@@ -11,7 +11,7 @@
 #include "dius/unicode/grapheme_cluster.h"
 #include "dius/unicode/name.h"
 #include "dius/unicode/width.h"
-#include "ttx/graphics_rendition.h"
+#include "ttx/terminal/graphics_rendition.h"
 #include "ttx/size.h"
 #include "ttx/terminal/cell.h"
 #include "ttx/terminal/cursor.h"

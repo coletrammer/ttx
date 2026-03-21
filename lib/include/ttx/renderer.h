@@ -5,8 +5,8 @@
 #include "ttx/clipboard.h"
 #include "ttx/cursor_style.h"
 #include "ttx/features.h"
-#include "ttx/graphics_rendition.h"
 #include "ttx/size.h"
+#include "ttx/terminal/graphics_rendition.h"
 #include "ttx/terminal/hyperlink.h"
 #include "ttx/terminal/multi_cell_info.h"
 #include "ttx/terminal/screen.h"
@@ -33,16 +33,16 @@ public:
     void start(Size const& size);
     auto finish(dius::SyncFile& output, RenderedCursor const& cursor_in) -> di::Result<>;
 
-    void put_text(di::StringView text, u32 row, u32 col, GraphicsRendition const& rendition = {},
+    void put_text(di::StringView text, u32 row, u32 col, terminal::GraphicsRendition const& rendition = {},
                   di::Optional<terminal::Hyperlink const&> hyperlink = {});
-    void put_text(c32 text, u32 row, u32 col, GraphicsRendition const& rendition = {},
+    void put_text(c32 text, u32 row, u32 col, terminal::GraphicsRendition const& rendition = {},
                   di::Optional<terminal::Hyperlink const&> hyperlink = {});
 
-    void put_cell(di::StringView text, u32 row, u32 col, GraphicsRendition const& rendition,
+    void put_cell(di::StringView text, u32 row, u32 col, terminal::GraphicsRendition const& rendition,
                   di::Optional<terminal::Hyperlink const&> hyperlink, terminal::MultiCellInfo const& multi_cell_info,
                   bool explicitly_sized, bool complex_grapheme_cluster);
 
-    void clear_row(u32 row, GraphicsRendition const& graphics_rendition = {},
+    void clear_row(u32 row, terminal::GraphicsRendition const& graphics_rendition = {},
                    di::Optional<terminal::Hyperlink const&> hyperlink = {});
 
     void set_bound(u32 row, u32 col, u32 width, u32 height);

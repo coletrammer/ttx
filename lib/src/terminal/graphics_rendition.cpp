@@ -1,4 +1,4 @@
-#include "ttx/graphics_rendition.h"
+#include "ttx/terminal/graphics_rendition.h"
 
 #include "di/container/vector/vector.h"
 #include "di/parser/integral.h"
@@ -6,7 +6,7 @@
 #include "ttx/features.h"
 #include "ttx/params.h"
 
-namespace ttx {
+namespace ttx::terminal {
 // Parse complex color. This routine handles the following colors in the following form:
 //   38;2;R;G;B   -- legacy form used for backwards compatability.
 //   38:2:R:G:B   -- normal form with subparameters but without color space.

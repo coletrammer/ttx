@@ -4,7 +4,7 @@
 #include "di/container/view/cache_last.h"
 #include "di/reflect/prelude.h"
 #include "scroll_region.h"
-#include "ttx/graphics_rendition.h"
+#include "ttx/terminal/graphics_rendition.h"
 #include "ttx/size.h"
 #include "ttx/terminal/cell.h"
 #include "ttx/terminal/cursor.h"

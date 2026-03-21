@@ -1,7 +1,7 @@
 #include "di/random/prelude.h"
 #include "di/test/prelude.h"
 #include "dius/print.h"
-#include "ttx/graphics_rendition.h"
+#include "ttx/terminal/graphics_rendition.h"
 #include "ttx/terminal/multi_cell_info.h"
 #include "ttx/terminal/reflow_result.h"
 #include "ttx/terminal/screen.h"
@@ -123,11 +123,11 @@ static void validate_bg(Screen& screen, di::StringView text) {
             auto expected = [&] {
                 switch (ch) {
                     case 'r':
-                        return ttx::Color(ttx::Color::Palette::Red);
+                        return Color(Color::Palette::Red);
                     case 'b':
-                        return ttx::Color(ttx::Color::Palette::Blue);
+                        return Color(Color::Palette::Blue);
                     default:
-                        return ttx::Color();
+                        return Color();
                 }
             }();
             ASSERT_EQ(bg, expected);
@@ -568,7 +568,7 @@ static void clear_row() {
 static void clear_screen() {
     auto screen = Screen({ 5, 5 }, Screen::ScrollBackEnabled::No);
 
-    screen.set_current_graphics_rendition({ .bg = ttx::Color(ttx::Color::Palette::Red) });
+    screen.set_current_graphics_rendition({ .bg = Color(Color::Palette::Red) });
     put_text(screen, u8"abcde"
                      u8"fghij"
                      u8"$¢€𐍈x"
@@ -577,7 +577,7 @@ static void clear_screen() {
 
     screen.set_cursor(2, 2, true);
 
-    screen.set_current_graphics_rendition({ .bg = ttx::Color(ttx::Color::Palette::Blue) });
+    screen.set_current_graphics_rendition({ .bg = Color(Color::Palette::Blue) });
     screen.clear_before_cursor();
     ASSERT_EQ(screen.cursor().text_offset, 0);
     ASSERT_EQ(screen.cursor().overflow_pending, false);
@@ -945,7 +945,7 @@ static void save_restore_cursor() {
     auto save = screen.save_cursor();
 
     put_text(screen, u8"¢¢¢¢¢¢¢¢¢¢"_sv);
-    screen.set_current_graphics_rendition({ .blink_mode = ttx::BlinkMode::Normal });
+    screen.set_current_graphics_rendition({ .blink_mode = BlinkMode::Normal });
     screen.set_origin_mode(OriginMode::Enabled);
 
     screen.restore_cursor(save);
@@ -953,7 +953,7 @@ static void save_restore_cursor() {
     auto expected_cursor = Cursor { .row = 4, .col = 1, .text_offset = 2, .overflow_pending = true };
     ASSERT_EQ(screen.cursor(), expected_cursor);
     ASSERT_EQ(screen.origin_mode(), OriginMode::Disabled);
-    ASSERT_EQ(screen.current_graphics_rendition(), ttx::GraphicsRendition {});
+    ASSERT_EQ(screen.current_graphics_rendition(), GraphicsRendition {});
 }
 
 static void reflow_basic() {

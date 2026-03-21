@@ -9,7 +9,7 @@
 #include "ttx/escape_sequence_parser.h"
 #include "ttx/features.h"
 #include "ttx/focus_event_io.h"
-#include "ttx/graphics_rendition.h"
+#include "ttx/terminal/graphics_rendition.h"
 #include "ttx/key_event_io.h"
 #include "ttx/mouse_event_io.h"
 #include "ttx/params.h"
