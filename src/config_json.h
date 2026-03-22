@@ -116,7 +116,7 @@ struct Config {
     Terminfo terminfo {};
 
     constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<Config>) {
-        return di::make_fields<"Config", "JSON configuration for ttx">(
+        return di::make_fields<"Config", "Top-level JSON configuration for ttx">(
             di::field<"$schema", &Config::schema>,
             di::field<"version", &Config::version, "Version of the ttx config (should always be 1)">,
             di::field<"extends", &Config::extends,
@@ -142,4 +142,5 @@ auto resolve_profile(di::TransparentStringView profile, Config&& cli_config = {}
 auto to_config_json(ttx::Config&& config) -> Config;
 auto json_schema() -> di::json::Object;
 auto nix_options() -> di::String;
+auto markdown_docs() -> di::String;
 }

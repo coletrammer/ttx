@@ -20,7 +20,9 @@ enum class ClipboardMode {
 
 constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<ClipboardMode>) {
     using enum ClipboardMode;
-    return di::make_enumerators<"ClipboardMode">(
+    return di::make_enumerators<
+        "ClipboardMode",
+        "This mode controls how ttx interacts with applications which request to read or write to the clipboard">(
         di::enumerator<"system", System, "Attempt to read and write the system clipboard">,
         di::enumerator<"system-write-local-read", SystemWriteLocalRead,
                        "Write to system clipboard but read from internal clipboard">,

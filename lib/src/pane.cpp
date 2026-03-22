@@ -50,6 +50,7 @@ static auto spawn_child(CreatePaneArgs& args, dius::SyncFile& pty, Size const& s
                  .with_env("TERM"_ts, args.term.clone())
                  .with_env("COLORTERM"_ts, "truecolor"_ts)
                  .with_env("TERM_PROGRAM"_ts, "ttx"_ts)
+                 .with_env("TERM_PROGRAM_VERSION"_ts, "0.1"_ts)
                  .with_file_open(2, di::move(tty_path), dius::OpenMode::ReadWrite)
                  .with_file_dup(stdin_fd, 0)
                  .with_file_dup(stdout_fd, 1)

@@ -49,12 +49,16 @@ details.
   - [ ] Support creating sessions/windows/panes using remote connections
   - [ ] See remote and local on the same screen at the same time.
 - [ ] Extensibility
-  - [ ] Settings
+  - [x] Config
   - [ ] Plugins
 
 ## Installing
 
 See [here](docs/pages/install.md).
+
+## Configuration
+
+See [here](docs/pages/configuration.md).
 
 ## Unicode Support
 
@@ -65,7 +69,7 @@ Neovim 0.11 when running in these terminals.
 
 These issues can be avoided by using a terminal like [kitty](https://github.com/kovidgoyal/kitty),
 [ghostty](https://github.com/ghostty-org/ghostty), or [wezterm](https://github.com/wezterm/wezterm). To check if your terminal
-supports grapheme clustering, run `ttx --features`, and see if the `BasicGraphemeClustering` feature is detected.
+supports grapheme clustering, run `ttx features`, and see if the `BasicGraphemeClustering` feature is detected.
 
 ## Building
 

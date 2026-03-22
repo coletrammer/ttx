@@ -4,7 +4,7 @@ with lib.types;
 let
   clipboard = submodule {
     options = {
-      mode = lib.mkOption {
+      "mode" = lib.mkOption {
         type = nullOr (clipboardMode);
         description = "Configure the way ttx interacts with the system clipboard when inner applications use OSC 52. By default ttx will read/write from the system clipboard. This requires configuring your terminal emulator to allow interacting with the system clipboard. If you do not want applications to access your system clipboard, specify the mode as 'local'";
         default = null;
@@ -21,37 +21,46 @@ let
   ];
   config = submodule {
     options = {
-      extends = lib.mkOption {
+      "$schema" = lib.mkOption {
+        type = str;
+        default = null;
+      };
+      "version" = lib.mkOption {
+        type = ints.u32;
+        description = "Version of the ttx config (should always be 1)";
+        default = null;
+      };
+      "extends" = lib.mkOption {
         type = nullOr (listOf (str));
         description = "List of configuration files to extend. These can recursively extend more files. Priority is given to the last time the configuration option is specified";
         default = null;
       };
-      input = lib.mkOption {
+      "input" = lib.mkOption {
         type = nullOr input;
         description = "Configuration relating the input processing of ttx (primarily key bindings)";
         default = null;
       };
-      layout = lib.mkOption {
+      "layout" = lib.mkOption {
         type = nullOr layout;
         description = "Configuration relating to the layout of panes in ttx, including the status bar and pane spacing";
         default = null;
       };
-      clipboard = lib.mkOption {
+      "clipboard" = lib.mkOption {
         type = nullOr clipboard;
         description = "Configuration relating to the clipboard handling of ttx (OSC 52)";
         default = null;
       };
-      session = lib.mkOption {
+      "session" = lib.mkOption {
         type = nullOr session;
         description = "Configuration relating the session management, such as automatically saving and restoring the current layout";
         default = null;
       };
-      shell = lib.mkOption {
+      "shell" = lib.mkOption {
         type = nullOr shell;
         description = "Configuration relating to the shell ttx starts in each pane";
         default = null;
       };
-      terminfo = lib.mkOption {
+      "terminfo" = lib.mkOption {
         type = nullOr terminfo;
         description = "Configuration relating to the terminfo ttx passes to inner applications";
         default = null;
@@ -60,17 +69,17 @@ let
   };
   input = submodule {
     options = {
-      prefix = lib.mkOption {
+      "prefix" = lib.mkOption {
         type = nullOr (key);
         description = "Prefix key to use. Almost all key bindings require using the prefix key to enter 'NORMAL' mode first. Currently, the prefix key must be pressed in conjunction with the control key. So specifying a prefix of 'A' means that to enter 'NORMAL' mode you must press 'ctrl+a'";
         default = null;
       };
-      disable_default_keybinds = lib.mkOption {
+      "disable_default_keybinds" = lib.mkOption {
         type = nullOr (bool);
         description = "Disable all default key bindings to allow full customization";
         default = null;
       };
-      save_state_path = lib.mkOption {
+      "save_state_path" = lib.mkOption {
         type = nullOr (str);
         description = "Path to write save state files captured by ttx. These save state files can be replayed using `ttx replay`. This functionality is useful for testing and reproducing bugs";
         default = null;
@@ -142,7 +151,7 @@ let
   ];
   layout = submodule {
     options = {
-      hide_status_bar = lib.mkOption {
+      "hide_status_bar" = lib.mkOption {
         type = nullOr (bool);
         description = "Hide the status bar for an extremely minimal layout";
         default = null;
@@ -151,17 +160,17 @@ let
   };
   session = submodule {
     options = {
-      restore_layout = lib.mkOption {
+      "restore_layout" = lib.mkOption {
         type = nullOr (bool);
         description = "Automatically restore the previous layout on startup. This does not preserve commands but does restore all sessions, tabs, and panes as well as their working directories";
         default = null;
       };
-      save_layout = lib.mkOption {
+      "save_layout" = lib.mkOption {
         type = nullOr (bool);
         description = "Automaticaly save the current layout to a file whenever updates occur. The layout is saved to $XDG_DATA_HOME/ttx/layouts (~/.local/share/ttx/layouts). The layout file is meant for use the `restore_layout` option";
         default = null;
       };
-      layout_name = lib.mkOption {
+      "layout_name" = lib.mkOption {
         type = nullOr (str);
         description = "Layout name to use for save/restore. This defaults the name of the chosen profile";
         default = null;
@@ -170,7 +179,7 @@ let
   };
   shell = submodule {
     options = {
-      command = lib.mkOption {
+      "command" = lib.mkOption {
         type = nullOr (listOf (str));
         description = "The command to run inside is pane. This is a list of arguments passed directly to the OS. If shell expansion is desired, use a command like this: [\"sh\", \"-c\", \"<COMMAND>\"]";
         default = null;
@@ -179,12 +188,12 @@ let
   };
   terminfo = submodule {
     options = {
-      term = lib.mkOption {
+      "term" = lib.mkOption {
         type = nullOr (str);
         description = "Value of the TERM enviornment variable to pass to inner applications. ttx automaticaly sets up the terminfo so the default value of 'xterm-ttx' will work locally. However, ttx's terminfo is not automaticaly available when using ssh or sudo. If this is causing issues, set this option to 'xterm-256color'";
         default = null;
       };
-      force_local_terminfo = lib.mkOption {
+      "force_local_terminfo" = lib.mkOption {
         type = nullOr (bool);
         description = "Compile ttx's terminfo on startup and set TERMINFO_DIR, even if the terminfo is already installed. This shouldn't be necessary but can be used if the system's terminfo is broken or for testing";
         default = null;

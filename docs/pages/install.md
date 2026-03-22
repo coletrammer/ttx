@@ -98,6 +98,8 @@ programs.ttx = {
 };
 ```
 
+See [here](./configuration.md) for more details on configuring ttx with home manager.
+
 ### Install Directly (discouraged)
 
 This way isn't the recommended way to use nix but works just fine.

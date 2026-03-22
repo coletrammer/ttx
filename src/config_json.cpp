@@ -429,6 +429,10 @@ using NixValue = di::Variant<NixSubmodule, NixEnum>;
 struct BuildNixOptions {
     static auto operator()(di::InPlaceType<bool>, di::TreeMap<di::String, NixValue>&) -> di::String { return "bool"_s; }
 
+    static auto operator()(di::InPlaceType<u32>, di::TreeMap<di::String, NixValue>&) -> di::String {
+        return "ints.u32"_s;
+    }
+
     static auto operator()(di::InPlaceType<di::String>, di::TreeMap<di::String, NixValue>&) -> di::String {
         return "str"_s;
     }
@@ -480,16 +484,12 @@ struct BuildNixOptions {
         di::tuple_for_each(
             [&]<typename F>(F) {
                 constexpr auto field_name = di::container::fixed_string_to_utf8_string_view<F::name>();
-                if constexpr (field_name.starts_with(U'$') || field_name == "version"_sv) {
-                    return;
-                } else {
-                    auto type = BuildNixOptions::operator()(di::in_place_type<typename F::Type>, output);
-                    result.options.push_back(NixOption {
-                        .name = field_name.to_owned(),
-                        .type = di::move(type),
-                        .description = di::container::fixed_string_to_utf8_string_view<F::description>().to_owned(),
-                    });
-                }
+                auto type = BuildNixOptions::operator()(di::in_place_type<typename F::Type>, output);
+                result.options.push_back(NixOption {
+                    .name = field_name.to_owned(),
+                    .type = di::move(type),
+                    .description = di::container::fixed_string_to_utf8_string_view<F::description>().to_owned(),
+                });
             },
             M {});
         output[type_name] = di::move(result);
@@ -510,7 +510,7 @@ struct NixToString {
 
     static auto operator()(NixOption const& value) -> di::String {
         auto result = ""_s;
-        result += di::format("      {} = lib.mkOption {{\n"_sv, value.name);
+        result += di::format("      {:?} = lib.mkOption {{\n"_sv, value.name);
         result += di::format("        type = {};\n"_sv, value.type);
         if (!value.description.empty()) {
             result += di::format("        description = {:?};\n"_sv, value.description);
@@ -566,5 +566,221 @@ lib.mkOption {{
   }};
 }})~"_sv,
                       defs);
+}
+
+struct MarkdownType {
+    static auto operator()(di::InPlaceType<bool>) -> di::String { return "boolean"_s; }
+
+    static auto operator()(di::InPlaceType<u32>) -> di::String { return "unsigned integer"_s; }
+
+    static auto operator()(di::InPlaceType<di::String>) -> di::String { return "string"_s; }
+
+    template<typename T>
+    static auto operator()(di::InPlaceType<di::Vector<T>>) -> di::String {
+        return di::format("list of {}"_sv, MarkdownType::operator()(di::in_place_type<T>));
+    }
+
+    template<typename T>
+    static auto operator()(di::InPlaceType<di::Optional<T>>) -> di::String {
+        return MarkdownType::operator()(di::in_place_type<T>);
+    }
+
+    template<di::concepts::ReflectableToEnumerators T>
+    static auto operator()(di::InPlaceType<T>) -> di::String {
+        auto const type_name = di::container::fixed_string_to_utf8_string_view<di::Reflect<T>::name>();
+        return di::format("[{}](#{})"_sv, type_name, type_name);
+    }
+
+    template<di::concepts::ReflectableToFields T>
+    static auto operator()(di::InPlaceType<T>) -> di::String {
+        auto const type_name = di::container::fixed_string_to_utf8_string_view<di::Reflect<T>::name>();
+        return di::format("[{}](#{})"_sv, type_name, type_name);
+    }
+};
+
+constexpr inline auto markdown_type = MarkdownType {};
+
+struct MarkdownDefault {
+    template<di::concepts::OneOf<bool, u32> T>
+    static auto operator()(T const& value) -> di::String {
+        return di::format("{}"_sv, value);
+    }
+
+    static auto operator()(di::String const& value) -> di::String { return di::format("{:?}"_sv, value); }
+
+    template<typename T>
+    static auto operator()(di::Vector<T> const&) -> di::String {
+        return "[]"_s;
+    }
+
+    template<typename T>
+    static auto operator()(di::Optional<T> const& value) -> di::String {
+        if (!value) {
+            return "unset"_s;
+        }
+        return MarkdownDefault::operator()(value.value());
+    }
+
+    template<di::concepts::ReflectableToEnumerators T>
+    static auto operator()(T value) -> di::String {
+        return di::format("\"{}\""_sv, value);
+    }
+
+    template<di::concepts::ReflectableToFields T>
+    static auto operator()(T const&) -> di::String {
+        return "{}"_s;
+    }
+};
+
+constexpr inline auto markdown_default = MarkdownDefault {};
+
+struct BuildMarkdownTable {
+    template<di::concepts::OneOf<bool, u32, di::String> T>
+    static auto operator()(di::InPlaceType<T>, di::Vector<di::Tuple<di::String, di::String>>&, T const&) -> di::String {
+        return markdown_type(di::in_place_type<T>);
+    }
+
+    template<typename T>
+    static auto operator()(di::InPlaceType<di::Vector<T>>, di::Vector<di::Tuple<di::String, di::String>>& result,
+                           di::Vector<T> const&) -> di::String {
+        BuildMarkdownTable::operator()(di::in_place_type<T>, result, T());
+        return markdown_type(di::in_place_type<di::Vector<T>>);
+    }
+
+    template<typename T>
+    static auto operator()(di::InPlaceType<di::Optional<T>>, di::Vector<di::Tuple<di::String, di::String>>& result,
+                           di::Optional<T> const&) -> di::String {
+        BuildMarkdownTable::operator()(di::in_place_type<T>, result, T());
+        return markdown_type(di::in_place_type<di::Optional<T>>);
+    }
+
+    template<di::concepts::ReflectableToEnumerators T, typename M = di::Reflect<T>>
+    static auto operator()(di::InPlaceType<T>, di::Vector<di::Tuple<di::String, di::String>>& result, T const&)
+        -> di::String {
+        auto response = markdown_type(di::in_place_type<T>);
+        constexpr auto type_name = di::container::fixed_string_to_utf8_string_view<M::name>();
+        if (di::contains(result | di::keys, type_name)) {
+            return response;
+        }
+        auto section_content = di::format("### {}\n\n"_sv, type_name);
+        if (!M::description.empty()) {
+            section_content +=
+                di::format("{}.\n\n"_sv, di::container::fixed_string_to_utf8_string_view<M::description>());
+        }
+        section_content += "| Value | Description |\n"_sv;
+        section_content += "| - | - |\n"_sv;
+        di::tuple_for_each(
+            [&]<typename E>(E) {
+                constexpr auto enum_name = di::container::fixed_string_to_utf8_string_view<E::name>();
+                constexpr auto description = di::container::fixed_string_to_utf8_string_view<E::description>();
+                section_content += di::format("| {} | {} |\n"_sv, enum_name, description);
+            },
+            M {});
+        result.push_back(di::Tuple { type_name.to_owned(), di::move(section_content) });
+        return response;
+    }
+
+    template<di::concepts::ReflectableToFields T, typename M = di::Reflect<T>>
+    static auto operator()(di::InPlaceType<T>, di::Vector<di::Tuple<di::String, di::String>>& result, T const& defaults)
+        -> di::String {
+        auto response = markdown_type(di::in_place_type<T>);
+        constexpr auto type_name = di::container::fixed_string_to_utf8_string_view<M::name>();
+        if (di::contains(result | di::keys, type_name)) {
+            return response;
+        }
+        auto const index = result.size();
+        result.emplace_back(type_name.to_owned(), ""_s);
+        auto section_content = di::format("### {}\n\n"_sv, type_name);
+        if (!M::description.empty()) {
+            section_content +=
+                di::format("{}.\n\n"_sv, di::container::fixed_string_to_utf8_string_view<M::description>());
+        }
+        section_content += "| Field | Type | Default | Description |\n"_sv;
+        section_content += "| - | - | - | - |\n"_sv;
+        di::tuple_for_each(
+            [&]<typename F>(F field) {
+                constexpr auto field_name = di::container::fixed_string_to_utf8_string_view<F::name>();
+                if constexpr (field_name.starts_with(U'$') || field_name == "version"_sv) {
+                    return;
+                } else {
+                    constexpr auto description = di::container::fixed_string_to_utf8_string_view<F::description>();
+                    auto type = BuildMarkdownTable::operator()(di::in_place_type<typename F::Type>, result,
+                                                               field.get(defaults));
+                    section_content += di::format("| {} | {} | {} | {} |\n"_sv, field_name, type,
+                                                  markdown_default(field.get(defaults)), description);
+                }
+            },
+            M {});
+        section_content.push_back(U'\n');
+        di::get<1>(result[index]) = di::move(section_content);
+        return response;
+    }
+};
+
+constexpr inline auto build_markdown_table = BuildMarkdownTable {};
+
+auto markdown_docs() -> di::String {
+    auto result = R"md(# Configuration
+
+ttx configuration is done via JSON configuration files stored in `$XDG_CONFIG_HOME/ttx`.
+Each individual configuration file created can be loaded as a "profile" by passing `--profile=$PROFILE` to ttx new.
+The default profile is "main" so your first configuration file should be `$XDG_CONFIG_HOME/ttx/main.json`.
+
+To share configuration across multiple profiles use the "extends" field in the configuration file.
+This lets you override or combine as many other configuration files as you want into the final loaded configuration.
+To see the configuration file after handling "extends", use `ttx config show --profile "$PROFILE"`
+
+The configuration file is fully specified by a JSON schema file.
+When defining your configuration, you can include `"$schema": "https://github.com/coletrammer/ttx/raw/refs/heads/main/meta/schema/config.json"`
+to get auto-completions in your text editor.
+
+You can also start your configuration from the defaults by running:
+
+```sh
+mkdir -p ~/.config/ttx
+ttx config show > ~/.config/ttx/main.json
+```
+
+## Nix Home Manager
+
+When using home manager, use the settings field to define your configuration files.
+The top-level key is the profile name, followed by the exact same keys as the JSON configuration file.
+You can also define your configuration in JSON and load it directly into nix. You will still get the benefits of build time validation of the configuration file:
+
+```nix
+programs.ttx = {
+  enable = true;
+  settings = {
+    main = builtins.fromJSON (builtins.readFile ./ttx-main.json);
+    super = builtins.fromJSON (builtins.readFile ./ttx-super.json);
+  };
+};
+```
+
+## Configuration Format
+
+Each table below corresponds to a JSON object in the ttx configuration. The first object is the top-level
+config. Each field has a corresponding type, which for objects will link to the documentation for that JSON
+sub-object.
+
+)md"_s;
+
+    auto sections = di::Vector<di::Tuple<di::String, di::String>> {};
+    auto defaults = to_config_json(ttx::Config {});
+    defaults.extends.emplace();
+    build_markdown_table(di::in_place_type<Config>, sections, defaults);
+    for (auto const& [_, content] : sections) {
+        result += content;
+    }
+
+    result += R"md(## Default JSON Configuration
+
+This JSON block contains the default JSON configuration used by ttx:
+
+```json
+)md"_sv;
+    result += *di::to_json_string(defaults, di::JsonSerializerConfig().pretty().indent_width(4));
+    result += "\n```\n"_sv;
+    return result;
 }
 }

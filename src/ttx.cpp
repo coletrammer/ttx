@@ -116,9 +116,13 @@ struct Completions {
 
 struct Features {
     bool help { false };
+    bool only_show_supported { false };
 
     constexpr static auto get_cli_parser() {
-        return di::cli_parser<Features>("features"_tsv, "List features detected in the current terminal"_sv).help();
+        return di::cli_parser<Features>("features"_tsv, "List features detected in the current terminal"_sv)
+            .option<&Features::only_show_supported>({}, "only-show-supported"_tsv,
+                                                    "Only log information feature which are detected"_sv)
+            .help();
     }
 };
 
@@ -131,6 +135,15 @@ struct ConfigShow {
                    "show"_tsv, "Print the resolved configuration for the profile as a valid JSON configuration file"_sv)
             .option<&ConfigShow::profile>(
                 'p', "profile"_tsv, "Profile name to use for this session (empty string loads no configuration)"_sv)
+            .help();
+    }
+};
+
+struct ConfigDocs {
+    bool help { false };
+
+    constexpr static auto get_cli_parser() {
+        return di::cli_parser<ConfigDocs>("docs"_tsv, "Print the makrdown documentation for ttx configuration"_sv)
             .help();
     }
 };
@@ -152,7 +165,7 @@ struct ConfigSchema {
 };
 
 struct ConfigCommand {
-    di::Variant<ConfigShow, ConfigNix, ConfigSchema> subcommand;
+    di::Variant<ConfigShow, ConfigDocs, ConfigNix, ConfigSchema> subcommand;
     bool help { false };
 
     constexpr static auto get_cli_parser() {
@@ -578,11 +591,32 @@ static auto main(Args&, Keybinds& args) -> di::Result<> {
     return {};
 }
 
-static auto main(Args&, Features&) -> di::Result<> {
+static auto main(Args&, Features& args) -> di::Result<> {
     auto features = TRY(detect_features(dius::std_in).transform_error([](auto error) {
         return di::format_error("Failed to detect terminal features: {}"_sv, error);
     }));
-    dius::println("Feature: {}"_sv, features);
+
+    dius::println("{: <30}{: <20}{: <90}"_sv, di::Styled("Feature"_sv, di::FormatEffect::Bold),
+                  di::Styled("Is Supported"_sv, di::FormatEffect::Bold),
+                  di::Styled("Description"_sv, di::FormatEffect::Bold));
+    dius::println("{:=<150}"_sv, ""_sv);
+    di::tuple_for_each(
+        [&]<typename E>(E) {
+            if (E::value == Feature::None) {
+                return;
+            }
+
+            auto name = di::container::fixed_string_to_utf8_string_view<E::name>();
+            auto description = di::container::fixed_string_to_utf8_string_view<E::description>();
+            auto supported = !!(features & E::value);
+            if (supported || !args.only_show_supported) {
+                dius::println("{: <30}{: <20}{: <90}"_sv, di::Styled(name, di::FormatEffect::Bold),
+                              supported ? di::Styled("supported"_sv, di::FormatColor::Green)
+                                        : di::Styled("unsupported"_sv, di::FormatColor::Red),
+                              description);
+            }
+        },
+        di::reflect(features));
     return {};
 }
 
@@ -616,6 +650,12 @@ static auto main(Args&, ConfigCommand&, ConfigShow& args) -> di::Result<> {
                         }));
     auto string = *di::to_json_string(config_json::v1::to_config_json(di::move(config)),
                                       di::JsonSerializerConfig().pretty().indent_width(4));
+    dius::println("{}"_sv, string);
+    return {};
+}
+
+static auto main(Args&, ConfigCommand&, ConfigDocs&) -> di::Result<> {
+    auto string = config_json::v1::markdown_docs();
     dius::println("{}"_sv, string);
     return {};
 }

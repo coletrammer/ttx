@@ -38,11 +38,11 @@
             name: value:
             lib.nameValuePair "ttx/${name}.json" {
               source = jsonFormat.generate "${name}.json" (
-                (removeNulls value)
-                // {
+                {
                   "$schema" = "https://github.com/coletrammer/ttx/raw/refs/heads/main/meta/schema/config.json";
                   version = 1;
                 }
+                // (removeNulls value)
               );
             }
           ) config.programs.ttx.settings;

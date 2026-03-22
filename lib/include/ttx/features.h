@@ -31,18 +31,35 @@ DI_DEFINE_ENUM_BITWISE_OPERATIONS(Feature)
 constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<Feature>) {
     using enum Feature;
     return di::make_enumerators<"Feature">(
-        di::enumerator<"None", None>, di::enumerator<"SyncronizedOutput", SyncronizedOutput>,
-        di::enumerator<"TextSizingWidth", TextSizingWidth>, di::enumerator<"TextSizingFull", TextSizingFull>,
-        di::enumerator<"ThemeDetection", ThemeDetection>, di::enumerator<"InBandSizeReports", InBandSizeReports>,
-        di::enumerator<"GraphemeClusteringMode", GraphemeClusteringMode>,
-        di::enumerator<"KittyKeyProtocol", KittyKeyProtocol>, di::enumerator<"Undercurl", Undercurl>,
-        di::enumerator<"BasicGraphemeClustering", BasicGraphemeClustering>,
-        di::enumerator<"FullGraphemeClustering", FullGraphemeClustering>,
-        di::enumerator<"TextSizingPresentation", TextSizingPresentation>, di::enumerator<"Clipboard", Clipboard>,
-        di::enumerator<"DynamicPalette", DynamicPalette>,
-        di::enumerator<"BackgroundCharacterErase", BackgroundCharacterErase>,
-        di::enumerator<"SeamlessNavigation", SeamlessNavigation>,
-        di::enumerator<"DynamicPaletteKitty", DynamicPaletteKitty>);
+        di::enumerator<"None", None>,
+        di::enumerator<"SyncronizedOutput", SyncronizedOutput,
+                       "Allow using DEC private mode 2026 to synchronize screen updates to prevent tearing">,
+        di::enumerator<"TextSizingWidth", TextSizingWidth,
+                       "Supports using kitty text sizing protocol (OSC 66) to specify explicit widths">,
+        di::enumerator<"TextSizingFull", TextSizingFull,
+                       "Supports using kitty text sizing protocol (OSC 66) to specify multi-height cells">,
+        di::enumerator<"ThemeDetection", ThemeDetection,
+                       "Supports light/dark mode detection via DEC private mode 2031">,
+        di::enumerator<"InBandSizeReports", InBandSizeReports,
+                       "Supported in-band size reports via DEC private mode 2048">,
+        di::enumerator<"GraphemeClusteringMode", GraphemeClusteringMode,
+                       "Reports some support for grapheme clustering DEC private mode 2038">,
+        di::enumerator<"KittyKeyProtocol", KittyKeyProtocol, "Supports kitty key reporting protocol">,
+        di::enumerator<"Undercurl", Undercurl, "Supports undercurl (fancy underline) and underline colors">,
+        di::enumerator<"BasicGraphemeClustering", BasicGraphemeClustering, "Properly handles multi-code point emojis">,
+        di::enumerator<"FullGraphemeClustering", FullGraphemeClustering,
+                       "Grapheme clustering behavior matches the kitty specification on extreme edge cases">,
+        di::enumerator<
+            "TextSizingPresentation", TextSizingPresentation,
+            "Supports using kitty text sizing protocl (OSC 66) to specifiy fractional scaling and cell alignment">,
+        di::enumerator<"Clipboard", Clipboard, "Supports settings the clipboard via OSC 52">,
+        di::enumerator<"DynamicPalette", DynamicPalette, "Supports setting the color palette dynamically via OSC 4">,
+        di::enumerator<"BackgroundCharacterErase", BackgroundCharacterErase,
+                       "Clearing the screen will set the background color of cells">,
+        di::enumerator<"SeamlessNavigation", SeamlessNavigation,
+                       "Suppports the seamless navigation protocol (OSC 8671)">,
+        di::enumerator<"DynamicPaletteKitty", DynamicPaletteKitty,
+                       "Supports setting the color palette via kitty color protocol (OSC 21)">);
 }
 
 auto detect_features(dius::SyncFile& terminal) -> di::Result<Feature>;

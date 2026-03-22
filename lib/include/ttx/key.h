@@ -183,24 +183,25 @@ enum class Key {
 
 constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<Key>) {
     using enum Key;
-    return di::make_enumerators<"Key">(
-        di::enumerator<"None", None>, di::enumerator<"A", A>, di::enumerator<"B", B>, di::enumerator<"C", C>,
-        di::enumerator<"D", D>, di::enumerator<"E", E>, di::enumerator<"F", F>, di::enumerator<"G", G>,
-        di::enumerator<"H", H>, di::enumerator<"I", I>, di::enumerator<"J", J>, di::enumerator<"K", K>,
-        di::enumerator<"L", L>, di::enumerator<"M", M>, di::enumerator<"N", N>, di::enumerator<"O", O>,
-        di::enumerator<"P", P>, di::enumerator<"Q", Q>, di::enumerator<"R", R>, di::enumerator<"S", S>,
-        di::enumerator<"T", T>, di::enumerator<"U", U>, di::enumerator<"V", V>, di::enumerator<"W", W>,
-        di::enumerator<"X", X>, di::enumerator<"Y", Y>, di::enumerator<"Z", Z>, di::enumerator<"0", _0>,
-        di::enumerator<"1", _1>, di::enumerator<"2", _2>, di::enumerator<"3", _3>, di::enumerator<"4", _4>,
-        di::enumerator<"5", _5>, di::enumerator<"6", _6>, di::enumerator<"7", _7>, di::enumerator<"8", _8>,
-        di::enumerator<"9", _9>, di::enumerator<"Backtick", Backtick>, di::enumerator<"Minus", Minus>,
-        di::enumerator<"Equal", Equal>, di::enumerator<"Star", Star>, di::enumerator<"Plus", Plus>,
-        di::enumerator<"LeftBracket", LeftBracket>, di::enumerator<"RightBracket", RightBracket>,
-        di::enumerator<"BackSlash", BackSlash>, di::enumerator<"SemiColon", SemiColon>, di::enumerator<"Quote", Quote>,
-        di::enumerator<"Comma", Comma>, di::enumerator<"Period", Period>, di::enumerator<"Slash", Slash>,
-        di::enumerator<"Escape", Escape>, di::enumerator<"Enter", Enter>, di::enumerator<"Tab", Tab>,
-        di::enumerator<"Backspace", Backspace>, di::enumerator<"Space", Space>, di::enumerator<"Insert", Insert>,
-        di::enumerator<"Delete", Delete>, di::enumerator<"Left", Left>, di::enumerator<"Right", Right>,
-        di::enumerator<"Up", Up>, di::enumerator<"Down", Down>);
+    return di::make_enumerators<"Key", "Represents a supported key for specifying key bindings">(
+        di::enumerator<"None", None, "Disables a key binding">, di::enumerator<"A", A>, di::enumerator<"B", B>,
+        di::enumerator<"C", C>, di::enumerator<"D", D>, di::enumerator<"E", E>, di::enumerator<"F", F>,
+        di::enumerator<"G", G>, di::enumerator<"H", H>, di::enumerator<"I", I>, di::enumerator<"J", J>,
+        di::enumerator<"K", K>, di::enumerator<"L", L>, di::enumerator<"M", M>, di::enumerator<"N", N>,
+        di::enumerator<"O", O>, di::enumerator<"P", P>, di::enumerator<"Q", Q>, di::enumerator<"R", R>,
+        di::enumerator<"S", S>, di::enumerator<"T", T>, di::enumerator<"U", U>, di::enumerator<"V", V>,
+        di::enumerator<"W", W>, di::enumerator<"X", X>, di::enumerator<"Y", Y>, di::enumerator<"Z", Z>,
+        di::enumerator<"0", _0>, di::enumerator<"1", _1>, di::enumerator<"2", _2>, di::enumerator<"3", _3>,
+        di::enumerator<"4", _4>, di::enumerator<"5", _5>, di::enumerator<"6", _6>, di::enumerator<"7", _7>,
+        di::enumerator<"8", _8>, di::enumerator<"9", _9>, di::enumerator<"Backtick", Backtick>,
+        di::enumerator<"Minus", Minus>, di::enumerator<"Equal", Equal>, di::enumerator<"Star", Star>,
+        di::enumerator<"Plus", Plus>, di::enumerator<"LeftBracket", LeftBracket>,
+        di::enumerator<"RightBracket", RightBracket>, di::enumerator<"BackSlash", BackSlash>,
+        di::enumerator<"SemiColon", SemiColon>, di::enumerator<"Quote", Quote>, di::enumerator<"Comma", Comma>,
+        di::enumerator<"Period", Period>, di::enumerator<"Slash", Slash>, di::enumerator<"Escape", Escape>,
+        di::enumerator<"Enter", Enter>, di::enumerator<"Tab", Tab>, di::enumerator<"Backspace", Backspace>,
+        di::enumerator<"Space", Space>, di::enumerator<"Insert", Insert>, di::enumerator<"Delete", Delete>,
+        di::enumerator<"Left", Left>, di::enumerator<"Right", Right>, di::enumerator<"Up", Up>,
+        di::enumerator<"Down", Down>);
 }
 }
