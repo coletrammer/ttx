@@ -34,11 +34,19 @@ struct Color {
     Color() = default;
     constexpr Color(Palette c) : type(Type::Palette), r(c) {}
     constexpr Color(u8 r, u8 g, u8 b) : type(Type::Custom), r(r), g(g), b(b) {}
+    constexpr explicit Color(Type t) : type(t) {}
 
     Type type = Type::Default;
     u8 r = 0;
     u8 g = 0;
     u8 b = 0;
+
+    auto is_default() const { return type == Type::Default; }
+    auto is_palette() const { return type == Type::Palette; }
+    auto is_custom() const { return type == Type::Custom; }
+    auto is_dynamic() const { return type == Type::Dynamic; }
+
+    auto value_or(Color other) const { return is_default() ? other : *this; }
 
     auto operator==(Color const& other) const -> bool = default;
     auto operator<=>(Color const& other) const = default;

@@ -1,11 +1,15 @@
 #pragma once
 
+#include <di/util/scope_exit.h>
+
 #include "di/container/string/string_view.h"
 #include "dius/sync_file.h"
 #include "ttx/clipboard.h"
 #include "ttx/cursor_style.h"
 #include "ttx/features.h"
+#include "ttx/palette.h"
 #include "ttx/size.h"
+#include "ttx/terminal/color.h"
 #include "ttx/terminal/graphics_rendition.h"
 #include "ttx/terminal/hyperlink.h"
 #include "ttx/terminal/multi_cell_info.h"
@@ -16,6 +20,8 @@ struct RenderedCursor {
     u32 cursor_row { 0 };
     u32 cursor_col { 0 };
     CursorStyle style { CursorStyle::SteadyBlock };
+    terminal::Color color {};
+    terminal::Color text_color {};
     bool hidden { false };
 
     auto operator==(RenderedCursor const&) const -> bool = default;
@@ -47,14 +53,28 @@ public:
 
     void set_bound(u32 row, u32 col, u32 width, u32 height);
 
+    [[nodiscard]] auto set_palette(terminal::Palette const& palette) -> di::ScopeExit<di::Function<void()>> {
+        m_palette = palette;
+        return di::ScopeExit(di::make_function<void()>([this] {
+            reset_palette();
+        }));
+    }
+    void reset_palette() { m_palette = {}; }
+
 private:
     auto size() const -> Size { return m_current_screen.size(); }
+
+    auto resolve_rendition(terminal::GraphicsRendition const& rendition) const -> terminal::GraphicsRendition;
+    auto resolve_color(terminal::Color color) const -> terminal::Color;
+    auto resolve_foreground(terminal::Color color) const -> terminal::Color;
+    auto resolve_background(terminal::Color color) const -> terminal::Color;
 
     terminal::Screen m_current_screen;
     terminal::Screen m_desired_screen;
     di::Optional<RenderedCursor> m_current_cursor;
     di::Vector<di::String> m_cleanup;
     Feature m_features { Feature::None };
+    di::Optional<terminal::Palette const&> m_palette;
 
     u32 m_row_offset { 0 };
     u32 m_col_offset { 0 };

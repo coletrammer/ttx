@@ -15,6 +15,7 @@
 #include "ttx/params.h"
 #include "ttx/size.h"
 #include "ttx/terminal/cursor.h"
+#include "ttx/terminal/escapes/osc_21.h"
 #include "ttx/terminal/escapes/osc_52.h"
 #include "ttx/terminal/escapes/osc_66.h"
 #include "ttx/terminal/escapes/osc_8.h"
@@ -37,6 +38,17 @@ auto Renderer::setup(dius::SyncFile& output, Feature features, ClipboardMode cli
     // Setup - disable autowrap.
     di::writer_print<di::String::Encoding>(buffer, "\033[?7l"_sv);
     m_cleanup.push_back("\033[?7h"_s);
+
+    // Setup - restore cursor colors.
+    // TODO: restore the original cursor color in cleanup() instead of clearing it.
+    auto osc21 = terminal::OSC21 {};
+    osc21.requests.push_back(terminal::OSC21::Request {
+        .palette = terminal::PaletteIndex::Cursor,
+    });
+    osc21.requests.push_back(terminal::OSC21::Request {
+        .palette = terminal::PaletteIndex::CursorText,
+    });
+    m_cleanup.push_back(osc21.serialize(features));
 
     // Setup - kitty key mode.
     if (!!(features & Feature::KittyKeyProtocol)) {
@@ -555,6 +567,23 @@ auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor_in) -
         di::writer_print<di::String::Encoding>(buffer, "\033[{} q"_sv, i32(cursor.style));
     }
 
+    auto osc21 = terminal::OSC21 {};
+    if (m_current_cursor.transform(&RenderedCursor::color) != cursor.color) {
+        osc21.requests.push_back(terminal::OSC21::Request {
+            .palette = terminal::PaletteIndex::Cursor,
+            .color = cursor.color,
+        });
+    }
+    if (m_current_cursor.transform(&RenderedCursor::text_color) != cursor.text_color) {
+        osc21.requests.push_back(terminal::OSC21::Request {
+            .palette = terminal::PaletteIndex::CursorText,
+            .color = cursor.text_color,
+        });
+    }
+    if (!osc21.requests.empty()) {
+        di::writer_print<di::String::Encoding>(buffer, "{}"_sv, osc21.serialize(m_features));
+    }
+
     if (!cursor.hidden) {
         di::writer_print<di::String::Encoding>(buffer, "\033[?25h"_sv);
     }
@@ -577,8 +606,9 @@ void Renderer::put_text(di::StringView text, u32 row, u32 col, terminal::Graphic
     row += m_row_offset;
     col += m_col_offset;
 
+    auto gfx = resolve_rendition(rendition);
+    m_desired_screen.set_current_graphics_rendition(gfx);
     m_desired_screen.set_cursor(row, col);
-    m_desired_screen.set_current_graphics_rendition(rendition);
     m_desired_screen.set_current_hyperlink(hyperlink);
     for (auto ch : text) {
         m_desired_screen.put_code_point(ch, terminal::AutoWrapMode::Disabled);
@@ -603,6 +633,9 @@ void Renderer::put_cell(di::StringView text, u32 row, u32 col, terminal::Graphic
         return;
     }
 
+    auto gfx = resolve_rendition(rendition);
+    m_desired_screen.set_current_graphics_rendition(gfx);
+
     // If the entire multi-cell doesn't fit, replace it with blanks.
     if (col + multi_cell_info.compute_width() > m_bound_width) {
         m_desired_screen.set_cursor(row + m_row_offset, col + m_col_offset);
@@ -614,7 +647,6 @@ void Renderer::put_cell(di::StringView text, u32 row, u32 col, terminal::Graphic
     col += m_col_offset;
 
     m_desired_screen.set_cursor(row, col);
-    m_desired_screen.set_current_graphics_rendition(rendition);
     m_desired_screen.set_current_hyperlink(hyperlink);
     m_desired_screen.put_cell(text, multi_cell_info, terminal::AutoWrapMode::Disabled, explicitly_sized,
                               complex_grapheme_cluster);
@@ -626,8 +658,9 @@ void Renderer::clear_row(u32 row, terminal::GraphicsRendition const& rendition,
         return;
     }
 
+    auto gfx = resolve_rendition(rendition);
     for (auto c : di::range(m_bound_width)) {
-        put_text(U' ', row, c, rendition, hyperlink);
+        put_text(U' ', row, c, gfx, hyperlink);
     }
 }
 
@@ -636,5 +669,36 @@ void Renderer::set_bound(u32 row, u32 col, u32 width, u32 height) {
     m_col_offset = col;
     m_bound_width = width;
     m_bound_height = height;
+}
+
+auto Renderer::resolve_rendition(terminal::GraphicsRendition const& rendition) const -> terminal::GraphicsRendition {
+    auto result = rendition;
+    if (m_palette) {
+        result.fg = resolve_foreground(result.fg);
+        result.bg = resolve_background(result.bg);
+        result.underline_color = resolve_color(result.underline_color);
+    }
+    return result;
+}
+
+auto Renderer::resolve_color(terminal::Color color) const -> terminal::Color {
+    if (m_palette) {
+        return m_palette.value().resolve(color);
+    }
+    return color;
+}
+
+auto Renderer::resolve_foreground(terminal::Color color) const -> terminal::Color {
+    if (m_palette) {
+        return m_palette.value().resolve_foreground(color);
+    }
+    return color;
+}
+
+auto Renderer::resolve_background(terminal::Color color) const -> terminal::Color {
+    if (m_palette) {
+        return m_palette.value().resolve_background(color);
+    }
+    return color;
 }
 }

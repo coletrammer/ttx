@@ -8,6 +8,7 @@
 #include "ttx/terminal/escapes/device_attributes.h"
 #include "ttx/terminal/escapes/device_status.h"
 #include "ttx/terminal/escapes/mode.h"
+#include "ttx/terminal/escapes/osc_21.h"
 #include "ttx/terminal/escapes/osc_52.h"
 #include "ttx/terminal/escapes/osc_66.h"
 #include "ttx/terminal/escapes/osc_8671.h"
@@ -121,6 +122,8 @@ public:
         }
     }
 
+    void handle_event(terminal::OSC21 const&) { m_result |= Feature::DynamicPaletteKitty; }
+
     void handle_event(terminal::OSC52 const&) {}
 
     void handle_event(terminal::OSC8671 const&) { m_result |= Feature::SeamlessNavigation; }
@@ -158,6 +161,11 @@ auto detect_features(dius::SyncFile& terminal) -> di::Result<Feature> {
 
     // Kitty keyboard protocol query
     di::writer_print<di::String::Encoding>(request_buffer, "\033[?u"_sv);
+
+    // OSC 21 query
+    auto osc21 = terminal::OSC21 {};
+    osc21.requests.push_back(terminal::OSC21::Request { .query = true, .palette = terminal::PaletteIndex(0) });
+    di::writer_print<di::String::Encoding>(request_buffer, "{}"_sv, osc21.serialize(Feature::DynamicPaletteKitty));
 
     // OSC 8671 query
     di::writer_print<di::String::Encoding>(

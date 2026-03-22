@@ -60,6 +60,7 @@ private:
     void handle_event(terminal::KittyKeyReport&&) {}
     void handle_event(terminal::StatusStringResponse&&) {}
     void handle_event(terminal::TerminfoString&&) {}
+    void handle_event(terminal::OSC21&&) {}
     void handle_event(terminal::OSC52&& event);
     auto handle_event(terminal::OSC8671& event, bool did_timeout) -> bool;
 

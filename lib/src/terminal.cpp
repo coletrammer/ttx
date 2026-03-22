@@ -9,20 +9,22 @@
 #include "ttx/escape_sequence_parser.h"
 #include "ttx/features.h"
 #include "ttx/focus_event_io.h"
-#include "ttx/terminal/graphics_rendition.h"
 #include "ttx/key_event_io.h"
 #include "ttx/mouse_event_io.h"
+#include "ttx/palette.h"
 #include "ttx/params.h"
 #include "ttx/paste_event_io.h"
 #include "ttx/terminal/capability.h"
 #include "ttx/terminal/escapes/device_attributes.h"
 #include "ttx/terminal/escapes/device_status.h"
 #include "ttx/terminal/escapes/mode.h"
+#include "ttx/terminal/escapes/osc_21.h"
 #include "ttx/terminal/escapes/osc_52.h"
 #include "ttx/terminal/escapes/osc_66.h"
 #include "ttx/terminal/escapes/osc_8.h"
 #include "ttx/terminal/escapes/osc_8671.h"
 #include "ttx/terminal/escapes/size_report.h"
+#include "ttx/terminal/graphics_rendition.h"
 #include "ttx/terminal/screen.h"
 
 // #define LOG_UNKNOWN_ESCAPES
@@ -77,6 +79,10 @@ void Terminal::on_parser_result(OSC&& osc) {
         osc_8(osc.data.substr(ps_end.end()));
         return;
     }
+    if (auto number = di::parse_partial<u32>(osc.data); terminal::OSC21::is_valid_osc_number(number.value())) {
+        osc_21(osc.data);
+        return;
+    }
     if (ps == "52"_sv) {
         osc_52(osc.data.substr(ps_end.end()));
         return;
@@ -93,6 +99,7 @@ void Terminal::on_parser_result(OSC&& osc) {
         osc_8671(osc.data.substr(ps_end.end()));
         return;
     }
+
 #ifdef LOG_UNKNOWN_ESCAPES
     dius::eprintln("unknown OSC: {}"_sv, osc);
 #endif
@@ -598,6 +605,45 @@ void Terminal::osc_8(di::StringView data) {
         return di::format("{}i-{}"_sv, m_id, m_next_hyperlink_id++);
     });
     active_screen().screen.set_current_hyperlink(hyperlink.transform(di::cref));
+}
+
+// OSC 21 (and OSC 4,5,10-19,104,105,110-119) - https://sw.kovidgoyal.net/kitty/color-stack
+void Terminal::osc_21(di::StringView data) {
+    auto result = terminal::OSC21::parse(data);
+    if (!result) {
+        return;
+    }
+
+    auto queries = terminal::OSC21 {};
+    auto palette_did_change = false;
+    for (auto& request : result.value().requests) {
+        if (request.query) {
+            auto& query = queries.requests.emplace_back(di::move(request));
+            if (query.palette != terminal::PaletteIndex::Unknown) {
+                query.color = m_palette.get(query.palette);
+                query.query = false;
+            }
+            continue;
+        }
+        if (request.color.is_dynamic() && !terminal::Palette::supports_dynamic(request.palette)) {
+            continue;
+        }
+        m_palette.set(request.palette, request.color);
+        palette_did_change = true;
+    }
+
+    if (palette_did_change) {
+        invalidate_all();
+        m_palette.maybe_clear_modifed();
+    }
+
+    // TODO: forward to outer terminal to check our palette followed by the outer terminal
+    // for queries we cannot immediately answer.
+    if (!queries.requests.empty()) {
+        auto const is_kitty = data.starts_with("21"_sv);
+        m_outgoing_events.push_back(
+            WritePtyString(queries.serialize(is_kitty ? Feature::DynamicPaletteKitty : Feature::None)));
+    }
 }
 
 // OSC 52 - https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Operating-System-Commands
@@ -1265,6 +1311,7 @@ void Terminal::soft_reset() {
     cursor.origin_mode = terminal::OriginMode::Disabled;
     screen.restore_cursor(cursor);
     screen.invalidate_all();
+    m_palette.reset();
 
     m_allow_80_132_col_mode = false;
     m_allow_force_terminal_size = false;
@@ -1444,6 +1491,22 @@ auto Terminal::state_as_escape_sequences() const -> di::String {
         for (auto const& cwd : m_cwd) {
             di::writer_print<di::String::Encoding>(writer, "{}"_sv, cwd.serialize());
         }
+    }
+
+    // 5. Color palette
+    for (auto const palette_int : di::range(u32(terminal::PaletteIndex::Count))) {
+        auto const palette = terminal::PaletteIndex(palette_int);
+        auto color = m_palette.get(palette);
+        if (color.is_default()) {
+            continue;
+        }
+
+        auto osc21 = terminal::OSC21 {};
+        osc21.requests.push_back(terminal::OSC21::Request {
+            .palette = palette,
+            .color = color,
+        });
+        di::writer_print<di::String::Encoding>(writer, "{}"_sv, osc21.serialize(Feature::DynamicPaletteKitty));
     }
 
     // Return the resulting string.

@@ -8,6 +8,7 @@
 #include "ttx/focus_event_io.h"
 #include "ttx/key_event_io.h"
 #include "ttx/mouse_event_io.h"
+#include "ttx/palette.h"
 #include "ttx/params.h"
 #include "ttx/paste_event_io.h"
 #include "ttx/size.h"
@@ -125,6 +126,8 @@ public:
                active_screen().m_seamless_navigate_protocol_hide_cursor_on_enter;
     }
 
+    auto palette() const -> terminal::Palette const& { return m_palette; }
+
 private:
     template<auto>
     friend auto make_mode_handler() -> ModeHandler;
@@ -173,6 +176,7 @@ private:
 
     void osc_7(di::StringView data);
     void osc_8(di::StringView data);
+    void osc_21(di::StringView data);
     void osc_52(di::StringView data);
     void osc_66(di::StringView data);
     void osc_133(di::StringView data);
@@ -244,6 +248,7 @@ private:
     terminal::AutoWrapMode m_auto_wrap_mode { terminal::AutoWrapMode::Enabled };
     bool m_reverse_video { false };
     di::Optional<c32> m_last_graphics_charcter { 0 };
+    terminal::Palette m_palette {};
 
     ApplicationCursorKeysMode m_application_cursor_keys_mode { ApplicationCursorKeysMode::Disabled };
 

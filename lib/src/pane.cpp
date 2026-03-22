@@ -5,6 +5,7 @@
 #include "di/function/container/function.h"
 #include "di/sync/atomic.h"
 #include "di/sync/memory_order.h"
+#include "di/util/scope_exit.h"
 #include "di/vocab/pointer/box.h"
 #include "dius/print.h"
 #include "dius/sync_file.h"
@@ -13,6 +14,7 @@
 #include "ttx/modifiers.h"
 #include "ttx/mouse.h"
 #include "ttx/mouse_event.h"
+#include "ttx/palette.h"
 #include "ttx/paste_event.h"
 #include "ttx/renderer.h"
 #include "ttx/size.h"
@@ -276,6 +278,9 @@ Pane::~Pane() {
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 auto Pane::draw(Renderer& renderer) -> RenderedCursor {
     auto rendered_cursor = m_terminal.with_lock([&](Terminal& terminal) {
+        auto const& palette = terminal.palette();
+        auto _ = palette.modified() ? renderer.set_palette(palette) : di::ScopeExit(di::make_function<void()>([] {}));
+
         auto visible_size = m_desired_visible_size.value_or(terminal.visible_size());
         auto& screen = terminal.active_screen().screen;
         if (terminal.allowed_to_draw()) {
@@ -310,10 +315,17 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
                             gfx.inverted = !gfx.inverted;
                         }
                         if (selected) {
-                            // Taken from catpuccin mocha
-                            gfx.fg = terminal::Color(0xcd, 0xd6, 0xf4);
-                            gfx.bg = terminal::Color(0x58, 0x5b, 0x70);
-                            gfx.inverted = false;
+                            // Taken from catpuccin mocha (TODO: global palette)
+                            auto fg = palette.get(terminal::PaletteIndex::SelectionForeground)
+                                          .value_or(terminal::Color(0xcd, 0xd6, 0xf4));
+                            auto bg = palette.get(terminal::PaletteIndex::SelectionBackground)
+                                          .value_or(terminal::Color(0x58, 0x5b, 0x70));
+                            if (fg.is_dynamic() || bg.is_dynamic()) {
+                                gfx.inverted = !gfx.inverted;
+                            } else {
+                                gfx.fg = fg;
+                                gfx.bg = bg;
+                            }
                         }
                         renderer.put_cell(text, r - m_vertical_scroll_offset, c - m_horizontal_scroll_offset, gfx,
                                           hyperlink, multi_cell_info, cell.explicitly_sized,
@@ -344,10 +356,20 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
 
         auto absolute_cursor_position = screen.absolute_row_screen_start() + terminal.cursor_row();
         auto relative_cursor_offset = u32(screen.absolute_row_screen_start() - screen.visual_scroll_offset());
+        auto cursor_color = palette.get(terminal::PaletteIndex::Cursor);
+        if (cursor_color.is_dynamic()) {
+            cursor_color = palette.get(terminal::PaletteIndex::Foreground).value_or(cursor_color);
+        }
+        auto cursor_text_color = palette.get(terminal::PaletteIndex::CursorText);
+        if (cursor_text_color.is_dynamic()) {
+            cursor_text_color = palette.get(terminal::PaletteIndex::Background).value_or(cursor_text_color);
+        }
         return RenderedCursor {
             .cursor_row = terminal.cursor_row() - m_vertical_scroll_offset + relative_cursor_offset,
             .cursor_col = terminal.cursor_col() - m_horizontal_scroll_offset,
             .style = terminal.cursor_style(),
+            .color = cursor_color,
+            .text_color = cursor_text_color,
             .hidden = terminal.cursor_hidden() || !terminal.allowed_to_draw() ||
                       terminal.cursor_row() < m_vertical_scroll_offset ||
                       terminal.cursor_row() - m_vertical_scroll_offset >= visible_size.rows ||

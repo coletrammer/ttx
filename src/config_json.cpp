@@ -234,6 +234,9 @@ static auto load_config_recursively(di::Span<di::Path const> search_paths, di::T
 }
 
 auto resolve_profile(di::TransparentStringView profile, Config&& cli_config) -> di::Result<ttx::Config> {
+    if (profile.empty()) {
+        return convert(""_tsv, di::move(cli_config));
+    }
     auto const profile_name = di::PathView(profile).stem().value();
     auto const search_paths = TRY(get_search_paths());
     auto visited = di::TreeSet<di::TransparentString> {};

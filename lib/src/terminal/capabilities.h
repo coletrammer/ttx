@@ -32,15 +32,12 @@ constexpr auto ttx_capabilities = di::Array {
         .long_name = "Modifiable palette"_sv,
         .short_name = "ccc"_tsv,
         .description = "Terminal allows modifying the color palette dynamically"_sv,
-        // TODO: enable after support this xterm escape (and the kitty version)
-        // https://sw.kovidgoyal.net/kitty/color-stack/
-        .enabled = false,
     },
     Capability {
         .long_name = "Has status line"_sv,
         .short_name = "hs"_tsv,
         .description = "Has status line (for displaying window title)"_sv,
-        .enabled = false, // TODO: enable after implementing OSC 1 (set window title)
+        .enabled = false, // TODO: enable after implementing OSC 2 (set window title)
     },
     Capability {
         .long_name = "Has meta key"_sv,
@@ -292,7 +289,7 @@ constexpr auto ttx_capabilities = di::Array {
         .short_name = "dsl"_tsv,
         .value = R"(\E]2;\E\\)"_tsv,
         .description = "Disable window title via blank OSC 2"_sv,
-        // TODO: enable once we support OSC 1/2
+        // TODO: enable once we support OSC 2
         .enabled = false,
     },
     Capability {
@@ -399,8 +396,6 @@ constexpr auto ttx_capabilities = di::Array {
         .value =
             R"(\E]4;%p1%d;rgb:%p2%{255}%*%{1000}%/%2.2X/%p3%{255}%*%{1000}%/%2.2X/%p4%{255}%*%{1000}%/%2.2X\E\\)"_tsv,
         .description = "Initialize color value via OSC 4"_sv,
-        // TODO: enable once we support setting color palette via OSC 4
-        .enabled = false,
     },
     Capability {
         .long_name = "Invisible"_sv,
@@ -784,16 +779,12 @@ constexpr auto ttx_capabilities = di::Array {
         .short_name = "Cr"_tsv,
         .value = "\\E]112\\007"_tsv, // Copied from kitty
         .description = "Reset cursor palette color via OSC 112"_sv,
-        // TODO: enable after support dynamic palette (OSC 12+112)
-        .enabled = false,
     },
     Capability {
         .long_name = "Set cursor color"_sv,
         .short_name = "Cs"_tsv,
         .value = "\\E]12;%p1%s\\007"_tsv, // Copied from kitty
         .description = "Set cursor palette color via OSC 12"_sv,
-        // TODO: enable after support dynamic palette (OSC 12+112)
-        .enabled = false,
     },
     Capability {
         .long_name = "Disable horizontal margins"_sv,

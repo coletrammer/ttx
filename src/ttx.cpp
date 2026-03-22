@@ -309,6 +309,9 @@ static auto maybe_get_terminfo_dir(di::TransparentStringView term, bool force_lo
 
 static auto do_new(Args&, NewBase& args) -> di::Result<> {
     auto const replay_mode = !args.replay_paths.empty();
+    if (args.headless || replay_mode) {
+        args.profile = ""_tsv;
+    }
 
     if (args.profile.ends_with('/')) {
         return di::Unexpected(di::format_error("--profile cannot be a directory"_sv));
@@ -337,12 +340,10 @@ static auto do_new(Args&, NewBase& args) -> di::Result<> {
             .force_local_terminfo = args.force_local_terminfo ? di::Optional(true) : di::nullopt,
         },
     };
-    auto config = args.profile.empty() ? Config()
-                                       : TRY(config_json::v1::resolve_profile(args.profile, di::clone(config_from_args))
-                                                 .transform_error([&](auto&& error) {
-                                                     return di::format_error("Failed to resolve profile '{}': {}"_sv,
-                                                                             args.profile, error);
-                                                 }));
+    auto config = TRY(
+        config_json::v1::resolve_profile(args.profile, di::clone(config_from_args)).transform_error([&](auto&& error) {
+            return di::format_error("Failed to resolve profile '{}': {}"_sv, args.profile, error);
+        }));
 
     auto features = Feature::All;
     if (!args.headless) {
@@ -364,6 +365,12 @@ static auto do_new(Args&, NewBase& args) -> di::Result<> {
         .terminfo_dir = di::move(maybe_terminfo_dir),
         .term = config.terminfo.term.clone(),
     };
+    if (replay_mode) {
+        base_create_pane_args.replay_path = di::PathView(args.replay_paths[0]).to_owned();
+        if (!args.save_state_path) {
+            base_create_pane_args.save_state_path = {};
+        }
+    }
 
     // Setup - in headless mode there is no terminal. Ensure stdin is not valid.
     if (args.headless) {

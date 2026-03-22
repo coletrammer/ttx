@@ -22,6 +22,7 @@ enum class Feature : u64 {
     DynamicPalette = 1 << 12,           ///< Supports changing the color palette dynamically.
     BackgroundCharacterErase = 1 << 13, ///< Clearing the screen sets the current SGR background color.
     SeamlessNavigation = 1 << 14,       ///< Supports seamless navigation protocol (OSC 8671).
+    DynamicPaletteKitty = 1 << 15,      ///< Supports kitty color protocol (OSC 21).
     All = u64(-1),
 };
 
@@ -40,7 +41,8 @@ constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<Feature>) {
         di::enumerator<"TextSizingPresentation", TextSizingPresentation>, di::enumerator<"Clipboard", Clipboard>,
         di::enumerator<"DynamicPalette", DynamicPalette>,
         di::enumerator<"BackgroundCharacterErase", BackgroundCharacterErase>,
-        di::enumerator<"SeamlessNavigation", SeamlessNavigation>);
+        di::enumerator<"SeamlessNavigation", SeamlessNavigation>,
+        di::enumerator<"DynamicPaletteKitty", DynamicPaletteKitty>);
 }
 
 auto detect_features(dius::SyncFile& terminal) -> di::Result<Feature>;

@@ -141,7 +141,11 @@ auto LayoutState::add_session(CreatePaneArgs args, RenderThread& render_thread, 
     auto id = m_next_session_id++;
     auto name = di::to_string(id);
     auto& session = m_sessions.push_back(di::make_box<Session>(this, di::move(name), id));
-    return add_tab(*session, di::move(args), render_thread, input_thread);
+    auto result = add_tab(*session, di::move(args), render_thread, input_thread);
+    if (!result) {
+        remove_session(*session);
+    }
+    return result;
 }
 
 auto LayoutState::pane_by_id(u64 session_id, u64 tab_id, u64 pane_id) -> di::Optional<Pane&> {
