@@ -12,6 +12,7 @@
             "type": "object"
         },
         "ClipboardMode": {
+            "description": "This mode controls how ttx interacts with applications which request to read or write to the clipboard",
             "enum": [
                 "system",
                 "system-write-local-read",
@@ -43,6 +44,7 @@
             "type": "object"
         },
         "Key": {
+            "description": "Represents a supported key for specifying key bindings",
             "enum": [
                 "None",
                 "A",
@@ -171,7 +173,7 @@
     },
     "$id": "https://github.com/coletrammer/ttx/raw/refs/heads/main/meta/schema/config.json",
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "description": "JSON configuration for ttx",
+    "description": "Top-level JSON configuration for ttx",
     "examples": [
         {
             "$schema": "https://github.com/coletrammer/ttx/raw/refs/heads/main/meta/schema/config.json",

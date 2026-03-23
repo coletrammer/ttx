@@ -3,6 +3,7 @@ preset := env("PRESET", "dev")
 alias c := configure
 alias b := build
 alias t := test
+alias g := generate
 alias ut := unit_test
 alias uta := unit_test_app
 alias tt := terminal_test
@@ -33,6 +34,28 @@ build *args="": ensure_configured
 # Run tests
 test *args="": ensure_configured
     ctest --preset {{ preset }} {{ args }}
+
+# Generate auto-generated files
+generate:
+    @just preset={{ preset }} generate_docs
+    @just preset={{ preset }} generate_nix
+    @just preset={{ preset }} generate_schema
+    @just format
+
+# Generate markdown docs
+generate_docs:
+    @just preset={{ preset }} build -t ttx
+    ./build/ttx config docs > ./docs/pages/configuration.md
+
+# Generate nix files
+generate_nix:
+    @just preset={{ preset }} build -t ttx
+    ./build/ttx config nix > ./meta/nix/homeoptions.nix
+
+# Generate JSON schema
+generate_schema:
+    @just preset={{ preset }} build -t ttx
+    ./build/ttx config schema > ./meta/schema/config.json
 
 # Run unit tests (library)
 unit_test *args="": ensure_configured
