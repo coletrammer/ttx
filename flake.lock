@@ -10,11 +10,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1772343782,
-        "narHash": "sha256-X3n+GdNt8zgnwtdVB8+RC9pvY9qSfCduWnDfl8phB5U=",
+        "lastModified": 1774149616,
+        "narHash": "sha256-7Eq2FRDhs4ujSaa+UCLmZH+E/kdpI/W2aCgIQHFVYf8=",
         "owner": "coletrammer",
         "repo": "di",
-        "rev": "1582f3b2eaac5695f1f919332dbacff4c501ad7a",
+        "rev": "37f8ba8634f0d57e3aa6f05a88125d6ce7b20cc1",
         "type": "github"
       },
       "original": {
@@ -56,11 +56,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1762980239,
-        "narHash": "sha256-8oNVE8TrD19ulHinjaqONf9QWCKK+w4url56cdStMpM=",
+        "lastModified": 1772408722,
+        "narHash": "sha256-rHuJtdcOjK7rAHpHphUb1iCvgkU3GpfvicLMwwnfMT0=",
         "owner": "hercules-ci",
         "repo": "flake-parts",
-        "rev": "52a2caecc898d0b46b2b905f058ccc5081f842da",
+        "rev": "f20dc5d9b8027381c474144ecabc9034d6a839a3",
         "type": "github"
       },
       "original": {
@@ -69,13 +69,29 @@
         "type": "github"
       }
     },
+    "iterm2-color-schemes": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1774275956,
+        "narHash": "sha256-OyIxDnVw19uhlpyA+AwNtmQjNnQO06CFUOgY76PKBLg=",
+        "owner": "mbadolato",
+        "repo": "iTerm2-Color-Schemes",
+        "rev": "a2c7b60293a81d82767893d89bc7599342c04cbf",
+        "type": "github"
+      },
+      "original": {
+        "owner": "mbadolato",
+        "repo": "iTerm2-Color-Schemes",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1763191728,
-        "narHash": "sha256-esRhOS0APE6k40Hs/jjReXg+rx+J5LkWw7cuWFKlwYA=",
+        "lastModified": 1774243609,
+        "narHash": "sha256-6sB2IYqXYwoQS11Ev0u3b0lpAleTpvNv5iv4iqiCCR8=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "1d4c88323ac36805d09657d13a5273aea1b34f0c",
+        "rev": "4724d5647207377bede08da3212f809cbd94a648",
         "type": "github"
       },
       "original": {
@@ -90,6 +106,7 @@
         "di": "di",
         "dius": "dius",
         "flake-parts": "flake-parts",
+        "iterm2-color-schemes": "iterm2-color-schemes",
         "nixpkgs": "nixpkgs"
       }
     }

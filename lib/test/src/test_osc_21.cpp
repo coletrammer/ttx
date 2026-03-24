@@ -1,7 +1,7 @@
 #include "di/test/prelude.h"
 #include "ttx/features.h"
-#include "ttx/palette.h"
 #include "ttx/terminal/escapes/osc_21.h"
+#include "ttx/terminal/palette.h"
 
 namespace osc_21 {
 using namespace ttx;

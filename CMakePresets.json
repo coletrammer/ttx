@@ -38,6 +38,13 @@
             }
         },
         {
+            "name": "built-in-themes",
+            "hidden": true,
+            "cacheVariables": {
+                "ttx_BUILT_IN_THEMES": "On"
+            }
+        },
+        {
             "name": "clang",
             "hidden": true,
             "cacheVariables": {

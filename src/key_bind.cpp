@@ -211,6 +211,11 @@ auto make_key_binds(InputConfig const& config, bool replay_mode) -> di::Vector<K
             .action = hard_reset(),
         });
         result.push_back({
+            .key = Key::T,
+            .mode = InputMode::Normal,
+            .action = switch_theme(),
+        });
+        result.push_back({
             .key = Key::I,
             .modifiers = Modifiers::Shift,
             .mode = InputMode::Normal,

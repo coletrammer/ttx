@@ -14,7 +14,6 @@
 #include "ttx/modifiers.h"
 #include "ttx/mouse.h"
 #include "ttx/mouse_event.h"
-#include "ttx/palette.h"
 #include "ttx/paste_event.h"
 #include "ttx/renderer.h"
 #include "ttx/size.h"
@@ -22,12 +21,14 @@
 #include "ttx/terminal/escapes/osc_52.h"
 #include "ttx/terminal/escapes/osc_8671.h"
 #include "ttx/terminal/multi_cell_info.h"
+#include "ttx/terminal/palette.h"
 #include "ttx/terminal/screen.h"
 #include "ttx/utf8_stream_decoder.h"
 
 namespace ttx {
 static auto spawn_child(CreatePaneArgs& args, dius::SyncFile& pty, Size const& size, i32 stdin_fd, i32 stdout_fd,
-                        di::Vector<i32> const& close_fds) -> di::Result<dius::system::ProcessHandle> {
+                        di::Optional<i32> extra_read_fd, di::Vector<i32> const& close_fds)
+    -> di::Result<dius::system::ProcessHandle> {
     auto tty_path = TRY(pty.get_psuedo_terminal_path());
 
 #ifdef __linux__
@@ -59,6 +60,9 @@ static auto spawn_child(CreatePaneArgs& args, dius::SyncFile& pty, Size const& s
                  .with_controlling_tty(2)
 #endif
         ;
+    if (extra_read_fd) {
+        result = di::move(result).with_file_dup(extra_read_fd.value(), 3);
+    }
     for (auto close_fd : close_fds) {
         result = di::move(result).with_file_close(close_fd);
     }
@@ -72,8 +76,8 @@ auto Pane::create_from_replay(u64 id, di::Optional<di::Path> cwd, di::PathView r
     auto replay_file = TRY(dius::open_sync(replay_path, dius::OpenMode::Readonly));
 
     // When replaying content, there is no need for any threads, a psudeo terminal or a sub-process.
-    auto pane =
-        di::make_box<Pane>(id, di::move(cwd), dius::SyncFile(), size, dius::system::ProcessHandle(), di::move(hooks));
+    auto pane = di::make_box<Pane>(id, di::move(cwd), dius::SyncFile(), size, dius::system::ProcessHandle(),
+                                   terminal::Palette {}, di::move(hooks));
 
     // Allow the terminal to use CSI 8; height; width; t. Normally this would be ignored since application
     // shouldn't control this.
@@ -145,9 +149,11 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
     // This logic allows piping input and output from the shell command. This ends up being very complicated...
     auto stdin_fd = 2;
     auto stdout_fd = 2;
+    auto extra_fd = di::Optional<i32> {};
     auto close_fds = di::Vector<i32> {};
     auto write_pipes = di::Optional<di::Tuple<dius::SyncFile, dius::SyncFile>> {};
     auto read_pipes = di::Optional<di::Tuple<dius::SyncFile, dius::SyncFile>> {};
+    auto read_extra_pipes = di::Optional<di::Tuple<dius::SyncFile, dius::SyncFile>> {};
     if (args.pipe_input) {
         write_pipes = TRY(dius::open_pipe(dius::OpenFlags::KeepAfterExec));
         stdin_fd = di::get<0>(write_pipes.value()).file_descriptor();
@@ -160,10 +166,16 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
         close_fds.push_back(di::get<0>(read_pipes.value()).file_descriptor());
         close_fds.push_back(di::get<1>(read_pipes.value()).file_descriptor());
     }
+    if (args.pipe_extra_output) {
+        read_extra_pipes = TRY(dius::open_pipe(dius::OpenFlags::KeepAfterExec));
+        extra_fd = di::get<1>(read_extra_pipes.value()).file_descriptor();
+        close_fds.push_back(di::get<0>(read_extra_pipes.value()).file_descriptor());
+        close_fds.push_back(di::get<1>(read_extra_pipes.value()).file_descriptor());
+    }
 
-    auto process = TRY(spawn_child(args, pty_controller, size, stdin_fd, stdout_fd, close_fds));
-    auto pane =
-        di::make_box<Pane>(id, di::move(args.cwd), di::move(pty_controller), size, process, di::move(args.hooks));
+    auto process = TRY(spawn_child(args, pty_controller, size, stdin_fd, stdout_fd, extra_fd, close_fds));
+    auto pane = di::make_box<Pane>(id, di::move(args.cwd), di::move(pty_controller), size, process, args.palette,
+                                   di::move(args.hooks));
 #ifdef __linux__
     pane->m_restore_termios = di::move(restore_termios);
 #endif
@@ -257,6 +269,40 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
                 }
             }));
     }
+    if (args.pipe_extra_output) {
+        pane->m_pipe_extra_reader_thread =
+            TRY(dius::Thread::create([&pane = *pane, pipe = di::move(read_extra_pipes).value()] mutable {
+                auto& [read, write] = pipe;
+                (void) write.close();
+
+                auto utf8_decoder = Utf8StreamDecoder {};
+
+                auto buffer = di::Vector<byte> {};
+                buffer.resize(16384);
+
+                auto contents = di::String {};
+                while (!pane.m_done.load(di::MemoryOrder::Acquire)) {
+                    auto nread = read.read_some(buffer.span());
+                    if (!nread.has_value()) {
+                        break;
+                    }
+
+                    auto utf8_string = utf8_decoder.decode(buffer | di::take(*nread));
+                    for (auto ch : utf8_string) {
+                        if (ch == U'\n') {
+                            if (pane.m_hooks.did_get_extra_output) {
+                                pane.m_hooks.did_get_extra_output(contents.view());
+                            }
+                            contents = {};
+                            continue;
+                        }
+                        contents.push_back(ch);
+                    }
+                }
+
+                (void) read.close();
+            }));
+    }
 
     return pane;
 }
@@ -264,7 +310,7 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
 auto Pane::create_mock(u64 id, di::Optional<di::Path> cwd) -> di::Box<Pane> {
     auto fake_psuedo_terminal = dius::SyncFile();
     return di::make_box<Pane>(id, di::move(cwd), di::move(fake_psuedo_terminal), Size(1, 1),
-                              dius::system::ProcessHandle(), PaneHooks {});
+                              dius::system::ProcessHandle(), terminal::Palette {}, PaneHooks {});
 }
 
 Pane::~Pane() {
@@ -272,6 +318,7 @@ Pane::~Pane() {
     (void) m_process.signal(dius::Signal::Hangup);
     (void) m_pipe_reader_thread.join();
     (void) m_pipe_writer_thread.join();
+    (void) m_pipe_extra_reader_thread.join();
     (void) m_reader_thread.join();
     (void) m_process_thread.join();
 }
@@ -280,7 +327,8 @@ Pane::~Pane() {
 auto Pane::draw(Renderer& renderer) -> RenderedCursor {
     auto rendered_cursor = m_terminal.with_lock([&](Terminal& terminal) {
         auto const& palette = terminal.palette();
-        auto _ = palette.modified() ? renderer.set_palette(palette) : di::ScopeExit(di::make_function<void()>([] {}));
+        auto _ =
+            palette.modified() ? renderer.set_local_palette(palette) : di::ScopeExit(di::make_function<void()>([] {}));
 
         auto visible_size = m_desired_visible_size.value_or(terminal.visible_size());
         auto& screen = terminal.active_screen().screen;
@@ -316,11 +364,8 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
                             gfx.inverted = !gfx.inverted;
                         }
                         if (selected) {
-                            // Taken from catpuccin mocha (TODO: global palette)
-                            auto fg = palette.get(terminal::PaletteIndex::SelectionForeground)
-                                          .value_or(terminal::Color(0xcd, 0xd6, 0xf4));
-                            auto bg = palette.get(terminal::PaletteIndex::SelectionBackground)
-                                          .value_or(terminal::Color(0x58, 0x5b, 0x70));
+                            auto fg = renderer.resolve_color(terminal::PaletteIndex::SelectionForeground);
+                            auto bg = renderer.resolve_color(terminal::PaletteIndex::SelectionBackground);
                             if (fg.is_dynamic() || bg.is_dynamic()) {
                                 gfx.inverted = !gfx.inverted;
                             } else {
@@ -357,20 +402,12 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
 
         auto absolute_cursor_position = screen.absolute_row_screen_start() + terminal.cursor_row();
         auto relative_cursor_offset = u32(screen.absolute_row_screen_start() - screen.visual_scroll_offset());
-        auto cursor_color = palette.get(terminal::PaletteIndex::Cursor);
-        if (cursor_color.is_dynamic()) {
-            cursor_color = palette.get(terminal::PaletteIndex::Foreground).value_or(cursor_color);
-        }
-        auto cursor_text_color = palette.get(terminal::PaletteIndex::CursorText);
-        if (cursor_text_color.is_dynamic()) {
-            cursor_text_color = palette.get(terminal::PaletteIndex::Background).value_or(cursor_text_color);
-        }
         return RenderedCursor {
             .cursor_row = terminal.cursor_row() - m_vertical_scroll_offset + relative_cursor_offset,
             .cursor_col = terminal.cursor_col() - m_horizontal_scroll_offset,
             .style = terminal.cursor_style(),
-            .color = cursor_color,
-            .text_color = cursor_text_color,
+            .color = renderer.resolve_cursor_color(),
+            .text_color = renderer.resolve_cursor_text_color(),
             .hidden = terminal.cursor_hidden() || !terminal.allowed_to_draw() ||
                       terminal.cursor_row() < m_vertical_scroll_offset ||
                       terminal.cursor_row() - m_vertical_scroll_offset >= visible_size.rows ||
@@ -378,7 +415,6 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
                       absolute_cursor_position >= screen.visual_scroll_offset() + visible_size.rows ||
                       terminal.cursor_col() < m_horizontal_scroll_offset ||
                       terminal.cursor_col() - m_horizontal_scroll_offset >= visible_size.cols,
-
         };
     });
 
@@ -824,5 +860,13 @@ auto Pane::seamless_navigate(terminal::OSC8671&& osc_8671) -> bool {
         write_pty_string(message);
     }
     return result;
+}
+
+void Pane::update_palette(di::FunctionRef<void(terminal::Palette&)> update) {
+    m_terminal.with_lock([&](Terminal& terminal) {
+        auto palette = terminal.palette();
+        update(palette);
+        terminal.set_palette(palette);
+    });
 }
 }

@@ -1,8 +1,10 @@
 #pragma once
 
+#include "colors.h"
 #include "di/reflect/prelude.h"
 #include "ttx/clipboard.h"
 #include "ttx/key.h"
+#include "ttx/terminal/palette.h"
 
 namespace ttx {
 struct InputConfig {
@@ -17,16 +19,6 @@ struct InputConfig {
             di::field<"prefix", &InputConfig::prefix>,
             di::field<"disable_default_keybinds", &InputConfig::disable_default_keybinds>,
             di::field<"save_state_path", &InputConfig::save_state_path>);
-    }
-};
-
-struct LayoutConfig {
-    bool hide_status_bar { false };
-
-    auto operator==(LayoutConfig const&) const -> bool = default;
-
-    constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<LayoutConfig>) {
-        return di::make_fields<"LayoutConfig">(di::field<"hide_status_bar", &LayoutConfig::hide_status_bar>);
     }
 };
 
@@ -77,21 +69,58 @@ struct TerminfoConfig {
     }
 };
 
+struct ThemeConfig {
+    di::TransparentString name { "ansi"_ts };
+
+    auto operator==(ThemeConfig const&) const -> bool = default;
+
+    constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<ThemeConfig>) {
+        return di::make_fields<"Theme">(di::field<"name", &ThemeConfig::name>);
+    }
+};
+
+struct FzfConfig {
+    FzfColors colors {};
+
+    auto operator==(FzfConfig const&) const -> bool = default;
+
+    constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<FzfConfig>) {
+        return di::make_fields<"Fzf">(di::field<"colors", &FzfConfig::colors>);
+    }
+};
+
+struct StatusBarConfig {
+    bool hide { false };
+    StatusBarColors colors {};
+
+    auto operator==(StatusBarConfig const&) const -> bool = default;
+
+    constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<StatusBarConfig>) {
+        return di::make_fields<"StatusBar">(di::field<"hide", &StatusBarConfig::hide>,
+                                            di::field<"colors", &StatusBarConfig::colors>);
+    }
+};
+
 struct Config {
-    InputConfig input;
-    LayoutConfig layout;
-    ClipboardConfig clipboard;
-    SessionConfig session;
-    ShellConfig shell;
-    TerminfoConfig terminfo;
+    InputConfig input {};
+    ThemeConfig theme {};
+    terminal::Palette colors { terminal::Palette::default_global() };
+    ClipboardConfig clipboard {};
+    SessionConfig session {};
+    ShellConfig shell {};
+    StatusBarConfig status_bar {};
+    FzfConfig fzf {};
+    TerminfoConfig terminfo {};
 
     auto operator==(Config const&) const -> bool = default;
 
     constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<Config>) {
-        return di::make_fields<"Config">(di::field<"input", &Config::input>, di::field<"layout", &Config::layout>,
+        return di::make_fields<"Config">(di::field<"input", &Config::input>, di::field<"theme", &Config::theme>,
+                                         di::field<"colors", &Config::colors>,
                                          di::field<"clipboard", &Config::clipboard>,
                                          di::field<"session", &Config::session>, di::field<"shell", &Config::shell>,
-                                         di::field<"terminfo", &Config::terminfo>);
+                                         di::field<"terminfo", &Config::terminfo>, di::field<"fzf", &Config::fzf>,
+                                         di::field<"status_bar", &Config::status_bar>);
     }
 };
 }

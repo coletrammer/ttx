@@ -24,16 +24,19 @@ default:
     @just --list
 
 # Configure
-configure *args="":
-    cmake --preset {{ preset }} {{ args }}
+[positional-arguments]
+configure *args:
+    cmake --preset {{ preset }} "$@"
 
 # Build
-build *args="": ensure_configured
-    cmake --build --preset {{ preset }} {{ args }}
+[positional-arguments]
+build *args: ensure_configured
+    cmake --build --preset {{ preset }} "$@"
 
 # Run tests
-test *args="": ensure_configured
-    ctest --preset {{ preset }} {{ args }}
+[positional-arguments]
+test *args: ensure_configured
+    ctest --preset {{ preset }} "$@"
 
 # Generate auto-generated files
 generate:
@@ -58,7 +61,8 @@ generate_schema:
     ./build/ttx config schema > ./meta/schema/config.json
 
 # Run unit tests (library)
-unit_test *args="": ensure_configured
+[positional-arguments]
+unit_test *args: ensure_configured
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -67,10 +71,11 @@ unit_test *args="": ensure_configured
             sed s/\${sourceDir}/./g
     )
 
-    $build_directory/lib/test/libttx_test {{ args }}
+    $build_directory/lib/test/libttx_test "$@"
 
 # Run unit tests (application)
-unit_test_app *args="": ensure_configured
+[positional-arguments]
+unit_test_app *args: ensure_configured
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -79,11 +84,12 @@ unit_test_app *args="": ensure_configured
             sed s/\${sourceDir}/./g
     )
 
-    $build_directory/test/ttx_test {{ args }}
+    $build_directory/test/ttx_test "$@"
 
 # Run terminal tests
-terminal_test *args="": ensure_configured
-    ctest --preset {{ preset }} -R "^terminal:" {{ args }}
+[positional-arguments]
+terminal_test *args: ensure_configured
+    ctest --preset {{ preset }} -R "^terminal:" "$@"
 
 # Generate expected result terminal test
 generate_terminal_test name: ensure_configured
@@ -94,7 +100,8 @@ generate_terminal_test name: ensure_configured
     cmake --build --preset {{ preset }} -t generate-terminal-test
 
 # Run ttx
-run *args="": ensure_configured
+[positional-arguments]
+run *args: ensure_configured
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -103,7 +110,7 @@ run *args="": ensure_configured
             sed s/\${sourceDir}/./g
     )
 
-    $build_directory/ttx {{ args }}
+    $build_directory/ttx "$@"
 
 # Simulate base CI
 ci:
@@ -120,32 +127,37 @@ configure_build:
     @just preset={{ preset }} build
 
 # Build and test
-build_test *args="":
+[positional-arguments]
+build_test *args:
     @just preset={{ preset }} build
-    @just preset={{ preset }} test {{ args }}
+    @just preset={{ preset }} test "$@"
 
 # Build and run unit tests (library)
-build_unit_test *args="":
+[positional-arguments]
+build_unit_test *args:
     @just preset={{ preset }} build -t libttx_test
-    @just preset={{ preset }} unit_test {{ args }}
+    @just preset={{ preset }} unit_test "$@"
 
 # Build and run unit tests (application)
-build_unit_test_app *args="":
+[positional-arguments]
+build_unit_test_app *args:
     @just preset={{ preset }} build -t ttx_test
-    @just preset={{ preset }} unit_test_app {{ args }}
+    @just preset={{ preset }} unit_test_app "$@"
 
 # Configure and build and test
-configure_build_test *args="":
+[positional-arguments]
+configure_build_test *args:
     @just preset={{ preset }} configure
-    @just preset={{ preset }} bt {{ args }}
+    @just preset={{ preset }} bt "$@"
 
 # Build and run
-build_run *args="":
+[positional-arguments]
+build_run *args:
     @just preset={{ preset }} build -t ttx
-    @just preset={{ preset }} run {{ args }}
+    @just preset={{ preset }} run "$@"
 
 # Configure and build and run
-configure_build_run *args="":
+configure_build_run *args:
     @just preset={{ preset }} configure
     @just preset={{ preset }} br {{ args }}
 
@@ -169,27 +181,30 @@ verify_headers:
     @just preset={{ preset }} build -t all_verify_interface_header_sets
 
 # Run clang-tidy and perform fixes
-tidy *args="": ensure_configured
+[positional-arguments]
+tidy *args: ensure_configured
     #!/usr/bin/env bash
     set -euo pipefail
 
-    export TTX_TIDY_ARGS="{{ args }}"
+    export TTX_TIDY_ARGS="$@"
     cmake --build --preset {{ preset }} -t tidy
 
 # Run static analysis
-analyze *args="": ensure_configured
+[positional-arguments]
+analyze *args: ensure_configured
     #!/usr/bin/env bash
     set -euo pipefail
 
-    export TTX_TIDY_ARGS="{{ args }}"
+    export TTX_TIDY_ARGS="$@"
     cmake --build --preset {{ preset }} -t analyze
 
 # Run clang-tidy and output failures
-check_tidy *args="": ensure_configured
+[positional-arguments]
+check_tidy *args: ensure_configured
     #!/usr/bin/env bash
     set -euo pipefail
 
-    export TTX_TIDY_ARGS="{{ args }}"
+    export TTX_TIDY_ARGS="$@"
     cmake --build --preset {{ preset }} -t check_tidy
 
 # Clean

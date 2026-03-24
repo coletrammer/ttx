@@ -4,5 +4,8 @@
     "extends": ["subsubconfig"],
     "shell": {
         "command": ["zsh"]
+    },
+    "colors": {
+        "palette": ["red", "default", "#abcdef"]
     }
 }

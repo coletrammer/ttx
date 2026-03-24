@@ -5,8 +5,8 @@
 #include <di/vocab/optional/optional_forward_declaration.h>
 
 #include "ttx/features.h"
-#include "ttx/palette.h"
 #include "ttx/terminal/color.h"
+#include "ttx/terminal/palette.h"
 
 namespace ttx::terminal {
 /// @brief Represents a color palette query or change

@@ -7,13 +7,13 @@
 #include "ttx/pane.h"
 
 namespace ttx {
-LayoutState::LayoutState(Size const& size, LayoutConfig config) : m_size(size), m_config(di::move(config)) {}
+LayoutState::LayoutState(Size const& size, Config config) : m_size(size), m_config(di::move(config)) {}
 
-void LayoutState::set_config(LayoutConfig config) {
+void LayoutState::set_config(Config config) {
     if (m_config == config) {
         return;
     }
-    m_config = config;
+    m_config = di::move(config);
     layout({});
 }
 
@@ -179,6 +179,15 @@ auto LayoutState::full_screen_pane() const -> di::Optional<Pane&> {
         return {};
     }
     return active_tab()->full_screen_pane();
+}
+
+auto LayoutState::active_popup() const -> di::Optional<Pane&> {
+    if (!active_tab()) {
+        return {};
+    }
+    return active_tab()->popup_layout().transform([&](LayoutEntry const& entry) {
+        return di::ref(*entry.pane);
+    });
 }
 
 void LayoutState::set_layout_did_update(di::Function<void()> layout_did_update) {

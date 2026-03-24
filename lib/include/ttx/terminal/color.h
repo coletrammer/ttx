@@ -1,10 +1,15 @@
 #pragma once
 
+#include <di/function/value.h>
+#include <di/parser/basic/match_zero_or_more.h>
+
 #include "di/reflect/prelude.h"
 #include "di/types/integers.h"
 
 namespace ttx::terminal {
 struct Color {
+    using IsAtom = void;
+
     enum class Type : u8 {
         Default, ///< Color is the default (unset SGR)
         Palette, ///< Color is a palette color (256 colors are available)
@@ -16,7 +21,7 @@ struct Color {
         Black,
         Red,
         Green,
-        Brown,
+        Yellow,
         Blue,
         Magenta,
         Cyan,
@@ -24,12 +29,15 @@ struct Color {
         DarkGrey,
         LightRed,
         LightGreen,
-        Yellow,
+        LightYellow,
         LightBlue,
         LightMagenta,
         LightCyan,
         White,
     };
+
+    static auto from_name(di::StringView color) -> di::Result<Color>;
+    static auto from_string(di::StringView color) -> di::Result<Color>;
 
     Color() = default;
     constexpr Color(Palette c) : type(Type::Palette), r(c) {}
@@ -48,12 +56,25 @@ struct Color {
 
     auto value_or(Color other) const { return is_default() ? other : *this; }
 
+    auto to_string() const -> di::String;
+
     auto operator==(Color const& other) const -> bool = default;
     auto operator<=>(Color const& other) const = default;
 
-    constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<Color>) {
-        return di::make_fields<"Color">(di::field<"type", &Color::type>, di::field<"r", &Color::r>,
-                                        di::field<"g", &Color::g>, di::field<"b", &Color::b>);
+    constexpr friend auto tag_invoke(di::Tag<di::parser::create_parser_in_place>, di::InPlaceType<Color>) {
+        return di::parser::match_zero_or_more(di::function::value(true))
+                   << []<typename Context>(Context& context,
+                                           di::concepts::CopyConstructible auto results) -> di::Result<Color> {
+            using Enc = di::meta::Encoding<Context>;
+            auto encoding = context.encoding();
+
+            auto const input = di::container::string::StringViewImpl<Enc> {
+                di::encoding::unicode_code_point_unwrap(encoding, results.begin()),
+                di::encoding::unicode_code_point_unwrap(encoding, results.end())
+            };
+
+            return Color::from_string(input);
+        };
     }
 };
 
@@ -67,10 +88,10 @@ constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<Color::Palette>)
     using enum Color::Palette;
     return di::make_enumerators<"Color::Palette">(
         di::enumerator<"Black", Black>, di::enumerator<"Red", Red>, di::enumerator<"Green", Green>,
-        di::enumerator<"Brown", Brown>, di::enumerator<"Blue", Blue>, di::enumerator<"Magenta", Magenta>,
+        di::enumerator<"Brown", Yellow>, di::enumerator<"Blue", Blue>, di::enumerator<"Magenta", Magenta>,
         di::enumerator<"Cyan", Cyan>, di::enumerator<"LightGrey", LightGrey>, di::enumerator<"DarkGrey", DarkGrey>,
         di::enumerator<"LightRed", LightRed>, di::enumerator<"LightGreen", LightGreen>,
-        di::enumerator<"Yellow", Yellow>, di::enumerator<"LightBlue", LightBlue>,
+        di::enumerator<"Yellow", LightYellow>, di::enumerator<"LightBlue", LightBlue>,
         di::enumerator<"LightMagenta", LightMagenta>, di::enumerator<"LightCyan", LightCyan>,
         di::enumerator<"White", White>);
 }

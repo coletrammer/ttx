@@ -2,12 +2,14 @@
 
 #include "action.h"
 #include "config_json.h"
+#include "di/container/string/conversion.h"
 #include "di/format/prelude.h"
 #include "di/util/construct.h"
 #include "fzf.h"
 #include "input.h"
 #include "render.h"
 #include "tab.h"
+#include "theme.h"
 #include "ttx/layout.h"
 
 namespace ttx {
@@ -97,12 +99,13 @@ auto rename_tab() -> Action {
                         }
                         auto& tab = session.active_tab().value();
 
-                        auto [create_pane_args, popup_layout] = Fzf()
-                                                                    .as_text_box()
-                                                                    .with_title("Rename Tab"_s)
-                                                                    .with_prompt("Name"_s)
-                                                                    .with_query(tab.name().to_owned())
-                                                                    .popup_args(context.create_pane_args.clone());
+                        auto [create_pane_args, popup_layout] =
+                            FzfCommand()
+                                .as_text_box()
+                                .with_title("Rename Tab"_s)
+                                .with_prompt("Name"_s)
+                                .with_query(tab.name().to_owned())
+                                .popup_args(context.create_pane_args.clone(), context.config.fzf);
                         create_pane_args.hooks.did_finish_output = di::make_function<void(di::StringView)>(
                             [&layout_state = context.layout_state, &tab,
                              &render_thread = context.render_thread](di::StringView contents) {
@@ -212,11 +215,12 @@ auto find_tab() -> Action {
                             tab_names.push_back(di::format("{} {}"_sv, i + 1, tab->name()));
                         }
 
-                        auto [create_pane_args, popup_layout] = Fzf()
-                                                                    .with_prompt("Switch to tab"_s)
-                                                                    .with_title("Tabs"_s)
-                                                                    .with_input(di::move(tab_names))
-                                                                    .popup_args(context.create_pane_args.clone());
+                        auto [create_pane_args, popup_layout] =
+                            FzfCommand()
+                                .with_prompt("Switch to tab"_s)
+                                .with_title("Tabs"_s)
+                                .with_input(di::move(tab_names))
+                                .popup_args(context.create_pane_args.clone(), context.config.fzf);
                         create_pane_args.hooks.did_finish_output = di::make_function<void(di::StringView)>(
                             [&layout_state = context.layout_state, &render_thread = context.render_thread,
                              &session](di::StringView contents) {
@@ -266,12 +270,13 @@ auto rename_session() -> Action {
             [](ActionContext const& context) {
                 context.layout_state.with_lock([&](LayoutState& state) {
                     for (auto& session : state.active_session()) {
-                        auto [create_pane_args, popup_layout] = Fzf()
-                                                                    .as_text_box()
-                                                                    .with_title("Rename Session"_s)
-                                                                    .with_prompt("Name"_s)
-                                                                    .with_query(session.name().to_owned())
-                                                                    .popup_args(context.create_pane_args.clone());
+                        auto [create_pane_args, popup_layout] =
+                            FzfCommand()
+                                .as_text_box()
+                                .with_title("Rename Session"_s)
+                                .with_prompt("Name"_s)
+                                .with_query(session.name().to_owned())
+                                .popup_args(context.create_pane_args.clone(), context.config.fzf);
                         create_pane_args.hooks.did_finish_output = di::make_function<void(di::StringView)>(
                             [&layout_state = context.layout_state, &session,
                              &render_thread = context.render_thread](di::StringView contents) {
@@ -362,11 +367,12 @@ auto find_session() -> Action {
                         session_names.push_back(di::format("{} {}"_sv, i + 1, session->name()));
                     }
 
-                    auto [create_pane_args, popup_layout] = Fzf()
-                                                                .with_prompt("Switch to session"_s)
-                                                                .with_title("Sessions"_s)
-                                                                .with_input(di::move(session_names))
-                                                                .popup_args(context.create_pane_args.clone());
+                    auto [create_pane_args, popup_layout] =
+                        FzfCommand()
+                            .with_prompt("Switch to session"_s)
+                            .with_title("Sessions"_s)
+                            .with_input(di::move(session_names))
+                            .popup_args(context.create_pane_args.clone(), context.config.fzf);
                     create_pane_args.hooks.did_finish_output = di::make_function<void(di::StringView)>(
                         [&layout_state = context.layout_state,
                          &render_thread = context.render_thread](di::StringView contents) {
@@ -430,11 +436,12 @@ auto save_layout() -> Action {
         .description = "Create a manual layout save"_s,
         .apply =
             [](ActionContext const& context) {
-                auto [create_pane_args, popup_layout] = Fzf()
-                                                            .as_text_box()
-                                                            .with_title("Save Layout To File"_s)
-                                                            .with_prompt("Name"_s)
-                                                            .popup_args(context.create_pane_args.clone());
+                auto [create_pane_args, popup_layout] =
+                    FzfCommand()
+                        .as_text_box()
+                        .with_title("Save Layout To File"_s)
+                        .with_prompt("Name"_s)
+                        .popup_args(context.create_pane_args.clone(), context.config.fzf);
                 create_pane_args.hooks.did_finish_output = di::make_function<void(di::StringView)>(
                     [&save_layout_thread = context.save_layout_thread](di::StringView contents) {
                         while (contents.ends_with(U'\n')) {
@@ -700,6 +707,109 @@ auto copy_last_command(bool include_command) -> Action {
                         pane->copy_last_command(include_command);
                     }
                 });
+            },
+    };
+}
+
+auto switch_theme() -> Action {
+    return {
+        .description = "Switch the current theme using fzf"_s,
+        .apply =
+            [](ActionContext const& context) {
+                auto themes = config_json::v1::list_themes(ThemeSource::All);
+                if (!themes) {
+                    context.render_thread.status_message(di::format("Failed to list themes: {}"_sv, themes.error()));
+                }
+                auto original_theme = di::clone(context.config.theme.name);
+                auto theme_names = di::Vector<di::String> {};
+                theme_names.push_back(di::format("{}"_sv, original_theme));
+                for (auto const& [name, source] : themes.value()) {
+                    if (name != context.config.theme.name) {
+                        theme_names.push_back(di::format("{}"_sv, name));
+                    }
+                }
+
+                context.layout_state.with_lock([&](LayoutState& state) {
+                    if (auto session = state.active_session()) {
+                        if (auto tab = state.active_tab()) {
+                            auto [create_pane_args, popup_layout] =
+                                FzfCommand()
+                                    .with_prompt("Switch to theme"_s)
+                                    .with_title("Themes"_s)
+                                    .with_input(di::move(theme_names))
+                                    .with_selection_as_extra_output()
+                                    .with_indirect_color_palette()
+                                    .with_preview_command(
+                                        "echo -e '\n\n\t\x1b[1mANSI Colors (0-7)\x1b[m\n\n\t\x1b[40m  \x1b[41m  "
+                                        "\x1b[42m  \x1b[43m  \x1b[44m  \x1b[45m  \x1b[46m  \x1b[47m  \x1b[m\n\n"
+                                        "\t\x1b[1mANSI Colors (8-15)\x1b[m\n\n\t\x1b[100m  \x1b[101m  \x1b[102m  \x1b[103m  \x1b[104m  \x1b[105m  \x1b[106m  \x1b[107m  \x1b[m\n\n'"_ts)
+                                    .popup_args(context.create_pane_args.clone(), context.config.fzf);
+                            create_pane_args.hooks.did_finish_output = di::make_function<void(di::StringView)>(
+                                [&input_thread = context.input_thread, &render_thread = context.render_thread,
+                                 original_theme = di::move(original_theme)](di::StringView name) {
+                                    auto name_ts = di::to_transparent_string(name);
+                                    while (name_ts.back() == '\n' || name_ts.back() == ' ') {
+                                        name_ts.pop_back();
+                                    }
+                                    if (name_ts.empty()) {
+                                        name_ts = original_theme.clone();
+                                    }
+                                    auto base_config = di::clone(input_thread.base_config());
+                                    base_config.theme.name = di::to_utf8_string_lossy(name_ts);
+                                    auto new_config =
+                                        config_json::v1::resolve_profile(input_thread.profile(), di::move(base_config));
+                                    if (!new_config) {
+                                        render_thread.status_message(
+                                            di::format("Failed to load configuration: {}"_sv, new_config.error()));
+                                        return;
+                                    }
+
+                                    input_thread.set_config(di::clone(new_config.value()));
+                                    render_thread.set_config(di::clone(new_config.value()));
+                                });
+                            create_pane_args.hooks.did_get_extra_output = di::make_function<void(di::StringView)>(
+                                [&input_thread = context.input_thread, &render_thread = context.render_thread,
+                                 original_theme = di::clone(context.config.theme.name),
+                                 &layout_state = context.layout_state](di::StringView name) {
+                                    auto name_ts = di::to_transparent_string(name);
+                                    if (name_ts.empty()) {
+                                        return;
+                                    }
+                                    auto base_config = di::clone(input_thread.base_config());
+                                    base_config.theme.name = di::to_utf8_string_lossy(name_ts);
+                                    auto new_config =
+                                        config_json::v1::resolve_profile(input_thread.profile(), di::move(base_config));
+                                    if (!new_config) {
+                                        render_thread.status_message(
+                                            di::format("Failed to load configuration: {}"_sv, new_config.error()));
+                                        return;
+                                    }
+
+                                    layout_state.with_lock([&](LayoutState& state) {
+                                        for (auto& pane : state.active_popup()) {
+                                            pane.update_palette([&](terminal::Palette& palette) {
+                                                palette = new_config.value().colors;
+                                                FzfCommand::update_palette_with_indirect_fzf_colors(
+                                                    palette, new_config.value().fzf.colors);
+                                            });
+                                        }
+                                    });
+
+                                    input_thread.set_config(di::clone(new_config.value()));
+                                    render_thread.set_config(di::clone(new_config.value()));
+                                });
+                            create_pane_args.palette = [&] {
+                                auto palette = context.config.colors;
+                                FzfCommand::update_palette_with_indirect_fzf_colors(palette, context.config.fzf.colors);
+                                return palette;
+                            }();
+                            (void) state.popup_pane(session.value(), tab.value(), popup_layout,
+                                                    di::move(create_pane_args), context.render_thread,
+                                                    context.input_thread);
+                        }
+                    }
+                });
+                context.render_thread.request_render();
             },
     };
 }

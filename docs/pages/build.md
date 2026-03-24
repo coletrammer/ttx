@@ -20,6 +20,7 @@ This package can be built either directly through [CMake](https://cmake.org/) or
   dependency is only needed for the `ttx` application and not the terminal emulation library itself.
 - The [dius](https://github.com/coletrammer/dius) library.
 - The [di](https://github.com/coletrammer/di) library (dependency of dius).
+- [iTerm2 Color Schemes](github.com/mbadolato/iTerm2-Color-Schemes) for built-in themes (optional)
 
 The dius library will be found using CMake `find_package` unless the source is available
 at the path specified by `ttx_dius_DIRECTORY`. By default, that CMake variable is set
@@ -38,14 +39,23 @@ ln -s "$(realpath ./di)" ./dius/di
 ln -s "$(realpath ./dius)" ./ttx/dius
 ```
 
+If you want a build that supports built-in themes (without using nix), you will have to manually
+download the color scheme repo.
+
+```sh
+git clone https://github.com/mbadolato/iTerm2-Color-Schemes
+ln -s "$(realpath ./iTerm2-Color-Schemes)" ./ttx/iTerm2-Color-Schemes
+```
+
 ### Manual Build Commands
 
 To manually build ttx and its library, use the following commands. Note that you should omit the
 `ttx_INSTALL_TERMINFO_DIR` option if you plan to do not plan to install `ttx` or are installing it
-with root permissions to system directories.
+with root permissions to system directories. Omit `-Dttx_BUILT_IN_THEMES` if you skipped checking
+out the color scheme repo.
 
 ```sh
-cmake -S . -B build -D CMAKE_BUILD_TYPE=Release -D ttx_INSTALL_TERMINFO_DIR=.terminfo
+cmake -S . -B build -D CMAKE_BUILD_TYPE=Release -D ttx_INSTALL_TERMINFO_DIR=.terminfo -Dttx_BUILT_IN_THEMES=ON
 cmake --build build
 ```
 
@@ -95,6 +105,10 @@ the project is configured as a top level project to avoid indirectly including
 other libraries when installed to a common prefix. Please review the
 [install-rules.cmake](cmake/install-rules.cmake) file for the full set of
 install rules.
+
+To package with built-in themes, set both `-Dttx_BUILT_IN_THEMES=ON` and `-Dttx_iterm2_color_schemes_SOURCE_DIR=<PATH>`
+where the latter option must be set a copy of the [iTerm2 Color Schemes](github.com/mbadolato/iTerm2-Color-Schemes)
+repo.
 
 ## Building with nix
 

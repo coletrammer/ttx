@@ -1,0 +1,19 @@
+{
+    "$schema": "../../../../meta/schema/config.json",
+    "version": 1,
+    "extends": [],
+    "shell": {
+        "command": ["zsh"]
+    },
+    "colors": {
+        "cursor": "green"
+    },
+    "fzf": {
+        "colors": {
+            "fg": "#000000"
+        }
+    },
+    "input": {
+        "prefix": "C"
+    }
+}

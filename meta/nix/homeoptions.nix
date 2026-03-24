@@ -19,6 +19,45 @@ let
     "local-write-no-read"
     "disabled"
   ];
+  colors = submodule {
+    options = {
+      "palette" = lib.mkOption {
+        type = nullOr (listOf (str));
+        description = "The terminal palette colors to use as an array. Up to 256 colors can be specified but typically only the first 16 are, which correspond the typical ANSI colors";
+        default = null;
+      };
+      "foreground" = lib.mkOption {
+        type = nullOr (str);
+        description = "The default foreground color to use in the terminal";
+        default = null;
+      };
+      "background" = lib.mkOption {
+        type = nullOr (str);
+        description = "The default background color to use in the terminal";
+        default = null;
+      };
+      "selection_background" = lib.mkOption {
+        type = nullOr (str);
+        description = "The background color to use when highlighting selection text. A value of dynamic will cause the foreground and background to be swapped for selected cells";
+        default = null;
+      };
+      "selection_foreground" = lib.mkOption {
+        type = nullOr (str);
+        description = "The foreground color to use when highlighting selection text. A value of dynamic will cause the foreground and foreground to be swapped for selected cells";
+        default = null;
+      };
+      "cursor" = lib.mkOption {
+        type = nullOr (str);
+        description = "The default color to use when displaying the cursor. A value of dynamic indicates the default foreground color will be used";
+        default = null;
+      };
+      "cursor_text" = lib.mkOption {
+        type = nullOr (str);
+        description = "The default color to use when displaying text under the cursor. A value of dynamic indicates the default background color will be used";
+        default = null;
+      };
+    };
+  };
   config = submodule {
     options = {
       "$schema" = lib.mkOption {
@@ -35,14 +74,19 @@ let
         description = "List of configuration files to extend. These can recursively extend more files. Priority is given to the last time the configuration option is specified";
         default = null;
       };
+      "theme" = lib.mkOption {
+        type = nullOr theme;
+        description = "Configure the theme used by ttx";
+        default = null;
+      };
       "input" = lib.mkOption {
         type = nullOr input;
         description = "Configuration relating the input processing of ttx (primarily key bindings)";
         default = null;
       };
-      "layout" = lib.mkOption {
-        type = nullOr layout;
-        description = "Configuration relating to the layout of panes in ttx, including the status bar and pane spacing";
+      "colors" = lib.mkOption {
+        type = nullOr colors;
+        description = "Terminal colors to use (main color palette)";
         default = null;
       };
       "clipboard" = lib.mkOption {
@@ -60,9 +104,117 @@ let
         description = "Configuration relating to the shell ttx starts in each pane";
         default = null;
       };
+      "fzf" = lib.mkOption {
+        type = nullOr fzf;
+        description = "Configuration for ttx built-in fzf popups";
+        default = null;
+      };
+      "status_bar" = lib.mkOption {
+        type = nullOr statusBar;
+        description = "Configuration for the status bar";
+        default = null;
+      };
       "terminfo" = lib.mkOption {
         type = nullOr terminfo;
         description = "Configuration relating to the terminfo ttx passes to inner applications";
+        default = null;
+      };
+    };
+  };
+  fzf = submodule {
+    options = {
+      "colors" = lib.mkOption {
+        type = nullOr fzfColors;
+        description = "Configure the theme used by fzf popups";
+        default = null;
+      };
+    };
+  };
+  fzfColors = submodule {
+    options = {
+      "fg" = lib.mkOption {
+        type = nullOr (str);
+        description = "Text color of unselected entries";
+        default = null;
+      };
+      "fg+" = lib.mkOption {
+        type = nullOr (str);
+        description = "Text color of selected entries";
+        default = null;
+      };
+      "bg" = lib.mkOption {
+        type = nullOr (str);
+        description = "Background color of unselected entries";
+        default = null;
+      };
+      "bg+" = lib.mkOption {
+        type = nullOr (str);
+        description = "Background color of selected entries";
+        default = null;
+      };
+      "border" = lib.mkOption {
+        type = nullOr (str);
+        description = "Outer border color";
+        default = null;
+      };
+      "header" = lib.mkOption {
+        type = nullOr (str);
+        description = "Text color of the fzf header";
+        default = null;
+      };
+      "hl" = lib.mkOption {
+        type = nullOr (str);
+        description = "Text color to show the matched parts of an entry";
+        default = null;
+      };
+      "hl+" = lib.mkOption {
+        type = nullOr (str);
+        description = "Text color to show the matched parts of selected entries";
+        default = null;
+      };
+      "info" = lib.mkOption {
+        type = nullOr (str);
+        description = "Text color for info (located on the right of the prompt line)";
+        default = null;
+      };
+      "label" = lib.mkOption {
+        type = nullOr (str);
+        description = "Text color for text placed in an fzf border";
+        default = null;
+      };
+      "marker" = lib.mkOption {
+        type = nullOr (str);
+        description = "Text color of multi-select indicator";
+        default = null;
+      };
+      "pointer" = lib.mkOption {
+        type = nullOr (str);
+        description = "Text color of current entry indicator";
+        default = null;
+      };
+      "preview-border" = lib.mkOption {
+        type = nullOr (str);
+        description = "Border color for the preview window";
+        default = null;
+      };
+      "prompt" = lib.mkOption {
+        type = nullOr (str);
+        description = "Text color of the query prompt";
+        default = null;
+      };
+      "selected-bg" = lib.mkOption {
+        type = nullOr (str);
+        description = "Background color of selected entries";
+        default = null;
+      };
+      "separator" = lib.mkOption {
+        type = nullOr (str);
+        description = "Color of line separator below the query text";
+        default = null;
+      };
+      "spinner" = lib.mkOption {
+        type = nullOr (str);
+        description = "Color of the loading spinner";
         default = null;
       };
     };
@@ -149,15 +301,6 @@ let
     "Up"
     "Down"
   ];
-  layout = submodule {
-    options = {
-      "hide_status_bar" = lib.mkOption {
-        type = nullOr (bool);
-        description = "Hide the status bar for an extremely minimal layout";
-        default = null;
-      };
-    };
-  };
   session = submodule {
     options = {
       "restore_layout" = lib.mkOption {
@@ -181,7 +324,85 @@ let
     options = {
       "command" = lib.mkOption {
         type = nullOr (listOf (str));
-        description = "The command to run inside is pane. This is a list of arguments passed directly to the OS. If shell expansion is desired, use a command like this: [\"sh\", \"-c\", \"<COMMAND>\"]";
+        description = "The command to run inside is pane. This is a list of arguments passed directly to the OS. If shell expansion is desired, use a command like this: [\"sh\", \"-c\", \"<COMMAND>\"]. By default '$SHELL' is started with no additional arguments";
+        default = null;
+      };
+    };
+  };
+  statusBar = submodule {
+    options = {
+      "hide" = lib.mkOption {
+        type = nullOr (bool);
+        description = "Hide the status bar. This is useful for minimal layouts or for testing";
+        default = null;
+      };
+      "colors" = lib.mkOption {
+        type = nullOr statusBarColors;
+        description = "Configure the colors used by the status bar";
+        default = null;
+      };
+    };
+  };
+  statusBarColors = submodule {
+    options = {
+      "badge_text_color" = lib.mkOption {
+        type = nullOr (str);
+        description = "The text color to use for colored badges (the left part of status bar components). A value of dynamic means use the default background color as the text color";
+        default = null;
+      };
+      "label_text_color" = lib.mkOption {
+        type = nullOr (str);
+        description = "The text color to use for the text label of tabs";
+        default = null;
+      };
+      "background_color" = lib.mkOption {
+        type = nullOr (str);
+        description = "The default background color to use for the status bar";
+        default = null;
+      };
+      "label_background_color" = lib.mkOption {
+        type = nullOr (str);
+        description = "The background color to use for tab labels";
+        default = null;
+      };
+      "active_tab_badge_color" = lib.mkOption {
+        type = nullOr (str);
+        description = "The color to use to signify a tab is active";
+        default = null;
+      };
+      "inactive_tab_badge_color" = lib.mkOption {
+        type = nullOr (str);
+        description = "The color to use to signify a tab is inactive";
+        default = null;
+      };
+      "session_badge_background_color" = lib.mkOption {
+        type = nullOr (str);
+        description = "The background color to use for the session name badge";
+        default = null;
+      };
+      "host_badge_background_color" = lib.mkOption {
+        type = nullOr (str);
+        description = "The background color to use for the host name badge";
+        default = null;
+      };
+      "switch_mode_color" = lib.mkOption {
+        type = nullOr (str);
+        description = "The color to use to signify you are in SWITCH mode";
+        default = null;
+      };
+      "insert_mode_color" = lib.mkOption {
+        type = nullOr (str);
+        description = "The color to use to signify you are in INSERT mode";
+        default = null;
+      };
+      "normal_mode_color" = lib.mkOption {
+        type = nullOr (str);
+        description = "The color to use to signify you are in NORMAL mode";
+        default = null;
+      };
+      "resize_mode_color" = lib.mkOption {
+        type = nullOr (str);
+        description = "The color to use to signify you are in RESIZE mode";
         default = null;
       };
     };
@@ -196,6 +417,15 @@ let
       "force_local_terminfo" = lib.mkOption {
         type = nullOr (bool);
         description = "Compile ttx's terminfo on startup and set TERMINFO_DIR, even if the terminfo is already installed. This shouldn't be necessary but can be used if the system's terminfo is broken or for testing";
+        default = null;
+      };
+    };
+  };
+  theme = submodule {
+    options = {
+      "name" = lib.mkOption {
+        type = nullOr (str);
+        description = "The named theme to use. When not set, ttx will try to auto-detect your terminal's color scheme against the list built-in theme, unless theme auto detection is disabled via config or `--detect-theme=disabled`. When auto detection fails, the standard 16 ANS colors will be used, with the theme name set to 'ansi'. When providing a named theme, ttx first searches the directory `$XDG_CONFIG_HOME/ttx/themes` for a JSON configuration file matching the name. The file's name should be the theme's name followed by `.json`. Custom themes use the same JSON schema as normal configuration files, and can include any property. However, built-in themes only configure colors. When no custom theme is found, ttx searches its set of built-in schemes. The built-in themes are taken from the [tinted terminal repository](https://github.com/tinted-theming/tinted-terminal). Configuration defined in a theme has lower precedence than any setting defined in a configuration file. If you want settings to be modifable by the theme you select you cannot specify the option your main configuration file";
         default = null;
       };
     };

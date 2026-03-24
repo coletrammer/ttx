@@ -11,7 +11,6 @@
 #include "ttx/focus_event_io.h"
 #include "ttx/key_event_io.h"
 #include "ttx/mouse_event_io.h"
-#include "ttx/palette.h"
 #include "ttx/params.h"
 #include "ttx/paste_event_io.h"
 #include "ttx/terminal/capability.h"
@@ -25,13 +24,17 @@
 #include "ttx/terminal/escapes/osc_8671.h"
 #include "ttx/terminal/escapes/size_report.h"
 #include "ttx/terminal/graphics_rendition.h"
+#include "ttx/terminal/palette.h"
 #include "ttx/terminal/screen.h"
 
 // #define LOG_UNKNOWN_ESCAPES
 
 namespace ttx {
-Terminal::Terminal(u64 id, Size const& size)
-    : m_id(id), m_primary_screen(size, terminal::Screen::ScrollBackEnabled::Yes), m_available_size(size) {}
+Terminal::Terminal(u64 id, Size const& size, terminal::Palette const& palette)
+    : m_id(id)
+    , m_primary_screen(size, terminal::Screen::ScrollBackEnabled::Yes)
+    , m_available_size(size)
+    , m_palette(palette) {}
 
 void Terminal::on_parser_results(di::Span<ParserResult> results) {
     for (auto& result : results) {

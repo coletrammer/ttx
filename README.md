@@ -50,6 +50,7 @@ details.
   - [ ] See remote and local on the same screen at the same time.
 - [ ] Extensibility
   - [x] Config
+  - [x] Themes
   - [ ] Plugins
 
 ## Installing
@@ -82,5 +83,6 @@ See [here](docs/pages/developing.md).
 ## Dependencies
 
 - [fzf](https://github.com/junegunn/fzf) program, for various popup memus
+- [iTerm2 Color Schemes](github.com/mbadolato/iTerm2-Color-Schemes) for built-in themes
 - [dius](https://github.com/coletrammer/dius) library, to use its cross-platform
   abstractions.

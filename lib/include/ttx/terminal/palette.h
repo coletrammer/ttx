@@ -58,10 +58,20 @@ constexpr static auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<PaletteIn
 /// default color in the outer terminal.
 class Palette {
 public:
+    static auto default_global() -> Palette {
+        auto result = Palette();
+        result.set(terminal::PaletteIndex::SelectionForeground, terminal::Color(terminal::Color::Type::Dynamic));
+        result.set(terminal::PaletteIndex::SelectionBackground, terminal::Color(terminal::Color::Type::Dynamic));
+        return result;
+    }
+
     auto operator==(Palette const&) const -> bool = default;
 
     auto get(PaletteIndex index) const -> Color { return m_colors[di::to_underlying(index)]; }
     void set(PaletteIndex index, Color value) {
+        if (value.is_dynamic() && !supports_dynamic(index)) {
+            return;
+        }
         if (!value.is_default()) {
             m_modified = true;
         }
@@ -110,6 +120,8 @@ public:
 
     auto modified() const -> bool { return m_modified; }
     void maybe_clear_modifed() { m_modified = di::any_of(m_colors, di::not_fn(&Color::is_default)); }
+
+    auto to_string() const -> di::String;
 
 private:
     di::Array<Color, di::to_underlying(PaletteIndex::Count)> m_colors;
