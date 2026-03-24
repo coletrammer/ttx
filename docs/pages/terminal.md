@@ -29,7 +29,7 @@ unicode text and certain terminal features.
    1. Clipboard (OSC 52) - this needs to be passed through to the outer application
    1. Shell prompt regions (OSC 133) - this is metadata associated with the terminal
    1. Desktop notifications (OSC 9,99) - pass through to outer application
-   1. Color scheme information (OSC 4,10,11) - probably metadata associated with the terminal, maybe this should be
+   1. theme information (OSC 4,10,11) - probably metadata associated with the terminal, maybe this should be
       global across all panes.
 
 ## Terminal Operations

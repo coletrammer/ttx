@@ -17,6 +17,7 @@
       devShells.default = pkgs.mkShell.override { inherit stdenv; } {
         shellHook = ''
           export TTX_DOXYGEN_AWESOME_DIR=${inputs.doxygen-awesome-css};
+          export TTX_ITERM2_COLOR_SCHEMES_DIR=${inputs.iterm2-color-schemes};
         '';
         packages = [
           # Compilers

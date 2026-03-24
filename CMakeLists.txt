@@ -64,9 +64,7 @@ if(NOT ttx_LIB_ONLY)
     add_library(ttx::ttx_app_lib ALIAS ttx_ttx_app_lib)
     set_property(TARGET ttx_ttx_app_lib PROPERTY EXPORT_NAME ttx_app_lib)
 
-    target_include_directories(
-        ttx_ttx_app_lib ${warning_guard} INTERFACE "\$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>"
-    )
+    target_include_directories(ttx_ttx_app_lib ${warning_guard} PUBLIC "\$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>")
     target_sources(
         ttx_ttx_app_lib
         INTERFACE FILE_SET
@@ -93,8 +91,14 @@ if(NOT ttx_LIB_ONLY)
     endif()
 
     # ---- Shell completions ----
+
     if(ttx_BUILD_SHELL_COMPLETIONS)
         include(meta/cmake/shell-completions.cmake)
+    endif()
+
+    # ---- Built-in themes
+    if(ttx_BUILT_IN_THEMES)
+        include(meta/cmake/built-in-themes.cmake)
     endif()
 endif()
 

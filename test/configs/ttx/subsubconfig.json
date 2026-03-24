@@ -1,8 +1,8 @@
 {
     "$schema": "../../../meta/schema/config.json",
     "version": 1,
-    "layout": {
-        "hide_status_bar": true
+    "status_bar": {
+        "hide": true
     },
     "session": {
         "restore_layout": false

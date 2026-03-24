@@ -22,6 +22,152 @@
                 "disabled"
             ]
         },
+        "Colors": {
+            "description": "The colors used for by terminals running inside ttx. This includes the default values for the color palette, cursor colors, and selection colors. When not specified ttx will use the default colors used by the outer terminal",
+            "properties": {
+                "background": {
+                    "default": "default",
+                    "description": "The default background color to use in the terminal",
+                    "type": "string"
+                },
+                "cursor": {
+                    "default": "default",
+                    "description": "The default color to use when displaying the cursor. A value of dynamic indicates the default foreground color will be used",
+                    "type": "string"
+                },
+                "cursor_text": {
+                    "default": "default",
+                    "description": "The default color to use when displaying text under the cursor. A value of dynamic indicates the default background color will be used",
+                    "type": "string"
+                },
+                "foreground": {
+                    "default": "default",
+                    "description": "The default foreground color to use in the terminal",
+                    "type": "string"
+                },
+                "palette": {
+                    "default": [],
+                    "description": "The terminal palette colors to use as an array. Up to 256 colors can be specified but typically only the first 16 are, which correspond the typical ANSI colors",
+                    "items": {
+                        "default": "default",
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
+                "selection_background": {
+                    "default": "default",
+                    "description": "The background color to use when highlighting selection text. A value of dynamic will cause the foreground and background to be swapped for selected cells",
+                    "type": "string"
+                },
+                "selection_foreground": {
+                    "default": "default",
+                    "description": "The foreground color to use when highlighting selection text. A value of dynamic will cause the foreground and foreground to be swapped for selected cells",
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
+        "Fzf": {
+            "description": "Configure the fzf popups used by the ttx UI",
+            "properties": {
+                "colors": {
+                    "$ref": "#/$defs/FzfColors",
+                    "description": "Configure the theme used by fzf popups"
+                }
+            },
+            "type": "object"
+        },
+        "FzfColors": {
+            "description": "theme for the fzf popups used in the ttx UI. The names of the fields match directly the cooresponding fzf color name, documented [here](https://man.archlinux.org/man/fzf.1.en#GLOBAL_STYLE), although only a subset of keys are available",
+            "properties": {
+                "bg": {
+                    "default": "default",
+                    "description": "Background color of unselected entries",
+                    "type": "string"
+                },
+                "bg+": {
+                    "default": "default",
+                    "description": "Background color of selected entries",
+                    "type": "string"
+                },
+                "border": {
+                    "default": "default",
+                    "description": "Outer border color",
+                    "type": "string"
+                },
+                "fg": {
+                    "default": "default",
+                    "description": "Text color of unselected entries",
+                    "type": "string"
+                },
+                "fg+": {
+                    "default": "default",
+                    "description": "Text color of selected entries",
+                    "type": "string"
+                },
+                "header": {
+                    "default": "default",
+                    "description": "Text color of the fzf header",
+                    "type": "string"
+                },
+                "hl": {
+                    "default": "default",
+                    "description": "Text color to show the matched parts of an entry",
+                    "type": "string"
+                },
+                "hl+": {
+                    "default": "default",
+                    "description": "Text color to show the matched parts of selected entries",
+                    "type": "string"
+                },
+                "info": {
+                    "default": "default",
+                    "description": "Text color for info (located on the right of the prompt line)",
+                    "type": "string"
+                },
+                "label": {
+                    "default": "default",
+                    "description": "Text color for text placed in an fzf border",
+                    "type": "string"
+                },
+                "marker": {
+                    "default": "default",
+                    "description": "Text color of multi-select indicator",
+                    "type": "string"
+                },
+                "pointer": {
+                    "default": "default",
+                    "description": "Text color of current entry indicator",
+                    "type": "string"
+                },
+                "preview-border": {
+                    "default": "default",
+                    "description": "Border color for the preview window",
+                    "type": "string"
+                },
+                "prompt": {
+                    "default": "default",
+                    "description": "Text color of the query prompt",
+                    "type": "string"
+                },
+                "selected-bg": {
+                    "default": "default",
+                    "description": "Background color of selected entries",
+                    "type": "string"
+                },
+                "separator": {
+                    "default": "default",
+                    "description": "Color of line separator below the query text",
+                    "type": "string"
+                },
+                "spinner": {
+                    "default": "default",
+                    "description": "Color of the loading spinner",
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
         "Input": {
             "description": "Configuration relating the input processing of ttx (primarily key bindings)",
             "properties": {
@@ -109,17 +255,6 @@
                 "Down"
             ]
         },
-        "Layout": {
-            "description": "Configuration relating to the layout of panes in ttx, including the status bar and pane spacing",
-            "properties": {
-                "hide_status_bar": {
-                    "default": false,
-                    "description": "Hide the status bar for an extremely minimal layout",
-                    "type": "boolean"
-                }
-            },
-            "type": "object"
-        },
         "Session": {
             "description": "Configuration relating the session management, such as automatically saving and restoring the current layout",
             "properties": {
@@ -145,11 +280,92 @@
             "properties": {
                 "command": {
                     "default": [],
-                    "description": "The command to run inside is pane. This is a list of arguments passed directly to the OS. If shell expansion is desired, use a command like this: [\"sh\", \"-c\", \"<COMMAND>\"]",
+                    "description": "The command to run inside is pane. This is a list of arguments passed directly to the OS. If shell expansion is desired, use a command like this: [\"sh\", \"-c\", \"<COMMAND>\"]. By default '$SHELL' is started with no additional arguments",
                     "items": {
                         "type": "string"
                     },
                     "type": "array"
+                }
+            },
+            "type": "object"
+        },
+        "StatusBar": {
+            "description": "Configuration for the ttx status bar, including colors and layout",
+            "properties": {
+                "colors": {
+                    "$ref": "#/$defs/StatusBarColors",
+                    "description": "Configure the colors used by the status bar"
+                },
+                "hide": {
+                    "default": false,
+                    "description": "Hide the status bar. This is useful for minimal layouts or for testing",
+                    "type": "boolean"
+                }
+            },
+            "type": "object"
+        },
+        "StatusBarColors": {
+            "description": "Configuration for the ttx status bar colors",
+            "properties": {
+                "active_tab_badge_color": {
+                    "default": "default",
+                    "description": "The color to use to signify a tab is active",
+                    "type": "string"
+                },
+                "background_color": {
+                    "default": "default",
+                    "description": "The default background color to use for the status bar",
+                    "type": "string"
+                },
+                "badge_text_color": {
+                    "default": "default",
+                    "description": "The text color to use for colored badges (the left part of status bar components). A value of dynamic means use the default background color as the text color",
+                    "type": "string"
+                },
+                "host_badge_background_color": {
+                    "default": "default",
+                    "description": "The background color to use for the host name badge",
+                    "type": "string"
+                },
+                "inactive_tab_badge_color": {
+                    "default": "default",
+                    "description": "The color to use to signify a tab is inactive",
+                    "type": "string"
+                },
+                "insert_mode_color": {
+                    "default": "default",
+                    "description": "The color to use to signify you are in INSERT mode",
+                    "type": "string"
+                },
+                "label_background_color": {
+                    "default": "default",
+                    "description": "The background color to use for tab labels",
+                    "type": "string"
+                },
+                "label_text_color": {
+                    "default": "default",
+                    "description": "The text color to use for the text label of tabs",
+                    "type": "string"
+                },
+                "normal_mode_color": {
+                    "default": "default",
+                    "description": "The color to use to signify you are in NORMAL mode",
+                    "type": "string"
+                },
+                "resize_mode_color": {
+                    "default": "default",
+                    "description": "The color to use to signify you are in RESIZE mode",
+                    "type": "string"
+                },
+                "session_badge_background_color": {
+                    "default": "default",
+                    "description": "The background color to use for the session name badge",
+                    "type": "string"
+                },
+                "switch_mode_color": {
+                    "default": "default",
+                    "description": "The color to use to signify you are in SWITCH mode",
+                    "type": "string"
                 }
             },
             "type": "object"
@@ -165,6 +381,17 @@
                 "term": {
                     "default": "xterm-ttx",
                     "description": "Value of the TERM enviornment variable to pass to inner applications. ttx automaticaly sets up the terminfo so the default value of 'xterm-ttx' will work locally. However, ttx's terminfo is not automaticaly available when using ssh or sudo. If this is causing issues, set this option to 'xterm-256color'",
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
+        "Theme": {
+            "description": "Configure the theme ttx will use",
+            "properties": {
+                "name": {
+                    "default": "ansi",
+                    "description": "The named theme to use. When not set, ttx will try to auto-detect your terminal's color scheme against the list built-in theme, unless theme auto detection is disabled via config or `--detect-theme=disabled`. When auto detection fails, the standard 16 ANS colors will be used, with the theme name set to 'ansi'. When providing a named theme, ttx first searches the directory `$XDG_CONFIG_HOME/ttx/themes` for a JSON configuration file matching the name. The file's name should be the theme's name followed by `.json`. Custom themes use the same JSON schema as normal configuration files, and can include any property. However, built-in themes only configure colors. When no custom theme is found, ttx searches its set of built-in schemes. The built-in themes are taken from the [tinted terminal repository](https://github.com/tinted-theming/tinted-terminal). Configuration defined in a theme has lower precedence than any setting defined in a configuration file. If you want settings to be modifable by the theme you select you cannot specify the option your main configuration file",
                     "type": "string"
                 }
             },
@@ -185,19 +412,19 @@
                 "prefix": "B",
                 "save_state_path": "/tmp/ttx-save-state.ansi"
             },
-            "layout": {
-                "hide_status_bar": false
-            },
             "session": {
                 "restore_layout": true,
                 "save_layout": true
             },
-            "shell": {
-                "command": []
+            "status_bar": {
+                "hide": false
             },
             "terminfo": {
                 "force_local_terminfo": false,
                 "term": "xterm-ttx"
+            },
+            "theme": {
+                "name": "ansi"
             },
             "version": 1
         }
@@ -207,6 +434,10 @@
             "$ref": "#/$defs/Clipboard",
             "description": "Configuration relating to the clipboard handling of ttx (OSC 52)"
         },
+        "colors": {
+            "$ref": "#/$defs/Colors",
+            "description": "Terminal colors to use (main color palette)"
+        },
         "extends": {
             "default": [],
             "description": "List of configuration files to extend. These can recursively extend more files. Priority is given to the last time the configuration option is specified",
@@ -215,13 +446,13 @@
             },
             "type": "array"
         },
+        "fzf": {
+            "$ref": "#/$defs/Fzf",
+            "description": "Configuration for ttx built-in fzf popups"
+        },
         "input": {
             "$ref": "#/$defs/Input",
             "description": "Configuration relating the input processing of ttx (primarily key bindings)"
-        },
-        "layout": {
-            "$ref": "#/$defs/Layout",
-            "description": "Configuration relating to the layout of panes in ttx, including the status bar and pane spacing"
         },
         "session": {
             "$ref": "#/$defs/Session",
@@ -231,9 +462,17 @@
             "$ref": "#/$defs/Shell",
             "description": "Configuration relating to the shell ttx starts in each pane"
         },
+        "status_bar": {
+            "$ref": "#/$defs/StatusBar",
+            "description": "Configuration for the status bar"
+        },
         "terminfo": {
             "$ref": "#/$defs/Terminfo",
             "description": "Configuration relating to the terminfo ttx passes to inner applications"
+        },
+        "theme": {
+            "$ref": "#/$defs/Theme",
+            "description": "Configure the theme used by ttx"
         },
         "version": {
             "const": 1,

@@ -8,7 +8,6 @@
 #include "ttx/focus_event_io.h"
 #include "ttx/key_event_io.h"
 #include "ttx/mouse_event_io.h"
-#include "ttx/palette.h"
 #include "ttx/params.h"
 #include "ttx/paste_event_io.h"
 #include "ttx/size.h"
@@ -16,6 +15,7 @@
 #include "ttx/terminal/escapes/osc_52.h"
 #include "ttx/terminal/escapes/osc_7.h"
 #include "ttx/terminal/escapes/osc_8671.h"
+#include "ttx/terminal/palette.h"
 #include "ttx/terminal/screen.h"
 
 namespace ttx {
@@ -61,7 +61,7 @@ class Terminal {
     };
 
 public:
-    explicit Terminal(u64 id, Size const& size);
+    explicit Terminal(u64 id, Size const& size, terminal::Palette const& palette);
 
     // Return a string which when replayed will result in the terminal
     // having state identical to the current state.
@@ -127,6 +127,10 @@ public:
     }
 
     auto palette() const -> terminal::Palette const& { return m_palette; }
+    auto set_palette(terminal::Palette const& palette) {
+        m_palette = palette;
+        invalidate_all();
+    }
 
 private:
     template<auto>

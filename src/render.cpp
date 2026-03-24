@@ -4,6 +4,7 @@
 #include "dius/system/process.h"
 #include "input_mode.h"
 #include "layout_state.h"
+#include "theme.h"
 #include "ttx/clipboard.h"
 #include "ttx/layout.h"
 #include "ttx/mouse.h"
@@ -30,6 +31,7 @@ RenderThread::RenderThread(di::Synchronized<LayoutState>& layout_state, di::Func
     : m_layout_state(layout_state)
     , m_did_exit(di::move(did_exit))
     , m_clipboard(config.clipboard.mode, features)
+    , m_config(di::move(config))
     , m_features(features) {}
 
 RenderThread::~RenderThread() {
@@ -155,10 +157,17 @@ void RenderThread::render_thread() {
                     }
                 }
             } else if (auto ev = di::get_if<UpdateConfig>(event)) {
+                auto palette_did_change = m_config.colors != ev->config.colors;
                 m_layout_state.with_lock([&](LayoutState& state) {
-                    state.set_config(ev->config.layout);
+                    state.set_config(di::clone(ev->config));
+                    if (palette_did_change) {
+                        for (auto& tab : state.active_tab()) {
+                            tab.invalidate_all();
+                        }
+                    }
                 });
                 m_clipboard.set_mode(ev->config.clipboard.mode);
+                m_config = di::move(ev->config);
             } else if (auto ev = di::get_if<DoRender>(event)) {
                 // Do nothing. This was just to wake us up.
             } else if (auto ev = di::get_if<Exit>(event)) {
@@ -284,38 +293,52 @@ struct Render {
     }
 };
 
-void RenderThread::render_status_bar(LayoutState const& state, Renderer& renderer) {
-    auto const dark_bg = terminal::Color(0x11, 0x11, 0x1b);
-    auto const light_bg = terminal::Color(0x31, 0x32, 0x44);
-    auto const dark_fg = terminal::Color(0x1e, 0x1e, 0x2e);
-    auto const active_color = terminal::Color(terminal::Color::Palette::Yellow);
-    auto const inactive_color = terminal::Color(terminal::Color::Palette::Blue);
+void RenderThread::render_status_bar(LayoutState const& state, Renderer& renderer, StatusBarConfig const& config) {
+    auto const& colors = config.colors;
+    auto const dark_bg = colors.background_color;
+    auto const label_bg = colors.label_background_color;
+    auto const label_fg = colors.label_text_color;
+    auto const badge_fg = colors.badge_text_color;
+    auto const active_color = colors.active_tab_badge_color;
+    auto const inactive_color = colors.inactive_tab_badge_color;
     auto const separator = U'█';
+
+    auto make_badge_sgr = [&](terminal::Color bg, bool bold = false) -> terminal::GraphicsRendition {
+        if (badge_fg.is_dynamic()) {
+            return terminal::GraphicsRendition {
+                .fg = bg,
+                .bg = {},
+                .font_weight = bold ? terminal::FontWeight::Bold : terminal::FontWeight::None,
+                .inverted = true,
+            };
+        }
+        return terminal::GraphicsRendition {
+            .fg = badge_fg,
+            .bg = bg,
+            .font_weight = bold ? terminal::FontWeight::Bold : terminal::FontWeight::None,
+        };
+    };
+
     for (auto& session : state.active_session()) {
         auto offset = 0u;
         renderer.clear_row(0, terminal::GraphicsRendition { .bg = dark_bg });
 
         {
-            auto color = [&] {
+            auto color = [&] -> terminal::Color {
                 switch (m_input_status.mode) {
                     case ttx::InputMode::Switch:
-                        return terminal::Color(terminal::Color::Palette::Yellow);
+                        return colors.switch_mode_color;
                     case ttx::InputMode::Insert:
-                        return terminal::Color(terminal::Color::Palette::Blue);
+                        return colors.insert_mode_color;
                     case ttx::InputMode::Normal:
-                        return terminal::Color(terminal::Color::Palette::Green);
+                        return colors.normal_mode_color;
                     case ttx::InputMode::Resize:
-                        return terminal::Color(terminal::Color::Palette::Red);
+                        return colors.resize_mode_color;
                 }
-                return terminal::Color(terminal::Color::Palette::Blue);
+                return {};
             }();
             renderer.put_text(separator, 0, offset++, { .fg = color, .bg = color });
-            renderer.put_text(di::to_string(m_input_status.mode).view(), 0, offset,
-                              terminal::GraphicsRendition {
-                                  .fg = dark_fg,
-                                  .bg = color,
-                                  .font_weight = terminal::FontWeight::Bold,
-                              });
+            renderer.put_text(di::to_string(m_input_status.mode).view(), 0, offset, make_badge_sgr(color, true));
             offset += 6;
             renderer.put_text(separator, 0, offset++, { .fg = color, .bg = color });
             offset += 1;
@@ -339,18 +362,18 @@ void RenderThread::render_status_bar(LayoutState const& state, Renderer& rendere
 
                 auto num_string = di::to_string(i + 1);
                 renderer.put_text(separator, 0, offset++, { .fg = color, .bg = color });
-                renderer.put_text(num_string.view(), 0, offset, { .fg = dark_fg, .bg = color });
+                renderer.put_text(num_string.view(), 0, offset, make_badge_sgr(color));
                 offset += num_string.size_bytes();
                 renderer.put_text(separator, 0, offset++, { .fg = color, .bg = color });
-                renderer.put_text(separator, 0, offset++, { .fg = light_bg, .bg = light_bg });
-                renderer.put_text(tab->name(), 0, offset, { .bg = light_bg });
+                renderer.put_text(separator, 0, offset++, { .fg = label_bg, .bg = label_bg });
+                renderer.put_text(tab->name(), 0, offset, { .fg = label_fg, .bg = label_bg });
                 offset += tab->name().size_bytes();
                 if (sign != ' ') {
-                    renderer.put_text(' ', 0, offset++, { .bg = light_bg });
-                    renderer.put_text(sign, 0, offset++, { .bg = light_bg });
-                    renderer.put_text(' ', 0, offset++, { .bg = light_bg });
+                    renderer.put_text(' ', 0, offset++, { .fg = label_fg, .bg = label_bg });
+                    renderer.put_text(sign, 0, offset++, { .fg = label_fg, .bg = label_bg });
+                    renderer.put_text(' ', 0, offset++, { .fg = label_fg, .bg = label_bg });
                 }
-                renderer.put_text(separator, 0, offset++, { .fg = light_bg, .bg = light_bg });
+                renderer.put_text(separator, 0, offset++, { .fg = label_bg, .bg = label_bg });
                 status_bar_entry.width = offset - status_bar_entry.start;
 
                 m_status_bar_layout.push_back(status_bar_entry);
@@ -358,7 +381,7 @@ void RenderThread::render_status_bar(LayoutState const& state, Renderer& rendere
             }
         } else {
             renderer.put_text(m_pending_status_message->message.view(), 0, offset,
-                              terminal::GraphicsRendition { .bg = dark_bg });
+                              terminal::GraphicsRendition { .fg = label_fg, .bg = dark_bg });
         }
 
         // TODO: horizontal scrolling on overflow
@@ -375,25 +398,25 @@ void RenderThread::render_status_bar(LayoutState const& state, Renderer& rendere
             offset = state.size().cols - rhs_size;
 
             {
-                auto color = terminal::Color(terminal::Color::Palette::Green);
+                auto color = colors.session_badge_background_color;
                 renderer.put_text(separator, 0, offset++, { .fg = color, .bg = color });
-                renderer.put_text(U'', 0, offset++, { .fg = dark_fg, .bg = color });
+                renderer.put_text(U'', 0, offset++, make_badge_sgr(color));
                 renderer.put_text(' ', 0, offset++, { .bg = color });
-                renderer.put_text(separator, 0, offset++, { .fg = light_bg, .bg = light_bg });
-                renderer.put_text(session.name().view(), 0, offset, { .bg = light_bg });
+                renderer.put_text(separator, 0, offset++, { .fg = label_bg, .bg = label_bg });
+                renderer.put_text(session.name().view(), 0, offset, { .fg = label_fg, .bg = label_bg });
                 offset += session.name().size_bytes();
-                renderer.put_text(separator, 0, offset++, { .fg = light_bg, .bg = light_bg });
+                renderer.put_text(separator, 0, offset++, { .fg = label_bg, .bg = label_bg });
             }
 
             {
-                auto color = terminal::Color(terminal::Color::Palette::Magenta);
+                auto color = colors.host_badge_background_color;
                 renderer.put_text(separator, 0, offset++, { .fg = color, .bg = color });
-                renderer.put_text(U'󰒋', 0, offset++, { .fg = dark_fg, .bg = color });
+                renderer.put_text(U'󰒋', 0, offset++, make_badge_sgr(color));
                 renderer.put_text(' ', 0, offset++, { .bg = color });
-                renderer.put_text(separator, 0, offset++, { .fg = light_bg, .bg = light_bg });
-                renderer.put_text(di::to_string(hostname).view(), 0, offset, { .bg = light_bg });
+                renderer.put_text(separator, 0, offset++, { .fg = label_bg, .bg = label_bg });
+                renderer.put_text(di::to_string(hostname).view(), 0, offset, { .fg = label_fg, .bg = label_bg });
                 offset += hostname.size_bytes();
-                renderer.put_text(separator, 0, offset++, { .fg = light_bg, .bg = light_bg });
+                renderer.put_text(separator, 0, offset++, { .fg = label_bg, .bg = label_bg });
             }
         }
     }
@@ -412,12 +435,15 @@ void RenderThread::do_render(Renderer& renderer) {
             return {};
         }
 
+        // Set global palette.
+        auto _ = renderer.set_global_palette(m_config.colors);
+
         // Do the render.
         renderer.start(state.size());
 
         // Status bar.
         if (!state.hide_status_bar()) {
-            render_status_bar(state, renderer);
+            render_status_bar(state, renderer, m_config.status_bar);
         }
 
         auto cursor = di::Optional<RenderedCursor> {};

@@ -31,12 +31,17 @@
           version = version;
           src = ../../.;
 
-          cmakeFlags = [ "-Dttx_APP_ONLY=ON" ];
+          cmakeFlags = [
+            "-Dttx_APP_ONLY=ON"
+            "-Dttx_BUILT_IN_THEMES=ON"
+            "-Dttx_iterm2_color_schemes_SOURCE_DIR=${inputs.iterm2-color-schemes}"
+          ];
 
           nativeBuildInputs = with pkgs; [
             cmake
             ninja
             ncurses
+            python3
           ];
 
           buildInputs = [ dep ];

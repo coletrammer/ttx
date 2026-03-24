@@ -6,6 +6,7 @@
 #include "input_mode.h"
 #include "layout_state.h"
 #include "tab.h"
+#include "theme.h"
 #include "ttx/clipboard.h"
 #include "ttx/features.h"
 #include "ttx/pane.h"
@@ -71,7 +72,7 @@ public:
 private:
     void render_thread();
     void do_render(Renderer& renderer);
-    void render_status_bar(LayoutState const& state, Renderer& renderer);
+    void render_status_bar(LayoutState const& state, Renderer& renderer, StatusBarConfig const& config);
 
     struct PendingStatusMessage {
         di::String message;
@@ -91,6 +92,7 @@ private:
     di::Synchronized<LayoutState>& m_layout_state;
     di::Function<void()> m_did_exit;
     Clipboard m_clipboard;
+    Config m_config;
     Feature m_features { Feature::None };
     dius::Thread m_thread;
 };

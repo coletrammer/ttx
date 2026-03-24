@@ -1,16 +1,19 @@
 #include "config_json.h"
 
-#include <di/reflect/reflect.h>
-#include <di/serialization/json_serializer.h>
-
 #include "config.h"
 #include "di/container/string/conversion.h"
 #include "di/container/tree/tree_set.h"
+#include "di/reflect/reflect.h"
 #include "di/serialization/json_deserializer.h"
+#include "di/serialization/json_serializer.h"
 #include "di/util/construct.h"
 #include "di/vocab/error/string_error.h"
+#include "dius/filesystem/directory_iterator.h"
 #include "dius/print.h"
 #include "dius/system/process.h"
+#include "theme.h"
+#include "ttx/terminal/color.h"
+#include "ttx/terminal/palette.h"
 
 namespace ttx::config_json::v1 {
 static auto get_search_paths() -> di::Result<di::Vector<di::Path>> {
@@ -42,6 +45,14 @@ static auto get_search_paths() -> di::Result<di::Vector<di::Path>> {
         result /= "ttx"_tsv;
     }
     return results;
+}
+
+static auto get_theme_search_paths() -> di::Result<di::Vector<di::Path>> {
+    auto result = TRY(get_search_paths());
+    for (auto& path : result) {
+        path /= "themes"_pv;
+    }
+    return result;
 }
 
 static auto resolve_config_path(di::Span<di::Path const> search_paths, di::TransparentStringView config_path)
@@ -122,38 +133,74 @@ struct ConvertValue {
     static auto operator()(di::InPlaceType<di::String>, di::TransparentString&& value) {
         return di::to_utf8_string_lossy(value);
     }
+
+    static auto operator()(di::InPlaceType<terminal::Palette>, Colors&& value) -> terminal::Palette {
+        auto result = terminal::Palette::default_global();
+        if (value.palette.has_value()) {
+            for (auto [i, c] :
+                 di::enumerate(value.palette.value()) | di::take(u32(terminal::PaletteIndex::SpecialBegin))) {
+                result.set(terminal::PaletteIndex(i), c);
+            }
+        }
+        if (value.foreground.has_value()) {
+            result.set(terminal::PaletteIndex::Foreground, value.foreground.value());
+        }
+        if (value.background.has_value()) {
+            result.set(terminal::PaletteIndex::Background, value.background.value());
+        }
+        if (value.selection_foreground.has_value()) {
+            result.set(terminal::PaletteIndex::SelectionForeground, value.selection_foreground.value());
+        }
+        if (value.selection_background.has_value()) {
+            result.set(terminal::PaletteIndex::SelectionBackground, value.selection_background.value());
+        }
+        if (value.cursor.has_value()) {
+            result.set(terminal::PaletteIndex::Cursor, value.cursor.value());
+        }
+        if (value.cursor_text.has_value()) {
+            result.set(terminal::PaletteIndex::CursorText, value.cursor_text.value());
+        }
+        return result;
+    }
+
+    static auto operator()(di::InPlaceType<Colors>, terminal::Palette&& value) -> Colors {
+        auto result = Colors {};
+        {
+            result.palette.emplace();
+
+            auto required_entries = 0_u32;
+            for (auto i : di::range(u32(terminal::PaletteIndex::SpecialBegin))) {
+                if (!value.get(terminal::PaletteIndex(i)).is_default()) {
+                    required_entries = i + 1;
+                }
+            }
+            for (auto i : di::range(required_entries)) {
+                result.palette.value().push_back(value.get(terminal::PaletteIndex(i)));
+            }
+        }
+        if (auto color = value.get(terminal::PaletteIndex::Foreground); !color.is_default()) {
+            result.foreground = color;
+        }
+        if (auto color = value.get(terminal::PaletteIndex::Background); !color.is_default()) {
+            result.background = color;
+        }
+        if (auto color = value.get(terminal::PaletteIndex::SelectionForeground); !color.is_default()) {
+            result.selection_foreground = color;
+        }
+        if (auto color = value.get(terminal::PaletteIndex::SelectionBackground); !color.is_default()) {
+            result.selection_background = color;
+        }
+        if (auto color = value.get(terminal::PaletteIndex::Cursor); !color.is_default()) {
+            result.cursor = color;
+        }
+        if (auto color = value.get(terminal::PaletteIndex::CursorText); !color.is_default()) {
+            result.cursor_text = color;
+        }
+        return result;
+    }
 };
 
 constexpr inline auto convert_value = ConvertValue {};
-
-struct DoUnconvert {
-    template<di::concepts::ReflectableToFields JsonConfig, di::concepts::ReflectableToFields Config>
-    static auto operator()(JsonConfig& json_config, Config&& config) {
-        di::tuple_for_each(
-            [&](auto json_field) {
-                di::tuple_for_each(
-                    [&](auto field) {
-                        if constexpr (json_field.name == field.name) {
-                            DoUnconvert::operator()(json_field.get(json_config), di::move(field.get(config)));
-                        }
-                    },
-                    di::reflect(config));
-            },
-            di::reflect(json_config));
-    }
-
-    template<di::concepts::Optional T, typename U>
-    static auto operator()(T& maybe_json_value, U&& value) {
-        if constexpr (di::concepts::SameAs<di::TransparentString, di::meta::RemoveCVRef<U>>) {
-            if (value.empty()) {
-                return;
-            }
-        }
-        maybe_json_value = convert_value(di::in_place_type<di::meta::OptionalValue<T>>, di::forward<U>(value));
-    }
-};
-
-constexpr inline auto do_unconvert = DoUnconvert {};
 
 struct DoConvert {
     template<di::concepts::ReflectableToFields Config, di::concepts::ReflectableToFields JsonConfig>
@@ -169,6 +216,10 @@ struct DoConvert {
                     di::reflect(json_config));
             },
             di::reflect(config));
+    }
+
+    static auto operator()(terminal::Palette& palette, Colors&& terminal_theme) {
+        palette = convert_value(di::in_place_type<terminal::Palette>, di::move(terminal_theme));
     }
 
     template<typename T, di::concepts::Optional U>
@@ -194,9 +245,7 @@ static auto convert(di::TransparentStringView profile, Config&& json_config) -> 
     if (!json_config.session.layout_name) {
         json_config.session.layout_name = di::to_utf8_string_lossy(profile);
     }
-    auto result = ttx::Config {};
-    do_convert(result, di::move(json_config));
-    return result;
+    return convert_to_config(di::move(json_config));
 }
 
 static auto load_config_recursively(di::Span<di::Path const> search_paths, di::TreeSet<di::TransparentString>& visited,
@@ -233,22 +282,194 @@ static auto load_config_recursively(di::Span<di::Path const> search_paths, di::T
     return config_json;
 }
 
-auto resolve_profile(di::TransparentStringView profile, Config&& cli_config) -> di::Result<ttx::Config> {
-    if (profile.empty()) {
-        return convert(""_tsv, di::move(cli_config));
+auto list_custom_themes() -> di::Result<di::Vector<ListedTheme>> {
+    auto result = di::TreeSet<di::TransparentString> {};
+    auto const search_paths = TRY(get_theme_search_paths());
+    for (auto const& path : search_paths) {
+        auto iterator = dius::filesystem::DirectoryIterator::create(
+            path.clone(), dius::filesystem::DirectoryOptions::FollowDirectorySymlink);
+        if (!iterator && iterator.error() == dius::PosixError::NoSuchFileOrDirectory) {
+            continue;
+        }
+        if (!iterator) {
+            return di::Unexpected(
+                di::format_error("Failed to list directory contents of '{}': {}"_sv, path, iterator.error()));
+        }
+        for (auto&& entry : iterator.value()) {
+            if (!entry) {
+                return di::Unexpected(
+                    di::format_error("Failed to list directory contents of '{}': {}"_sv, path, iterator.error()));
+            }
+            result.insert(entry->filename().value().stem().value().to_owned());
+        }
     }
-    auto const profile_name = di::PathView(profile).stem().value();
-    auto const search_paths = TRY(get_search_paths());
-    auto visited = di::TreeSet<di::TransparentString> {};
-    auto config_json = TRY(load_config_recursively(search_paths.span(), visited, profile));
-    merge(config_json, di::move(cli_config));
+    return result | di::as_rvalue | di::transform([&](di::TransparentString&& name) {
+               return ListedTheme(di::move(name), ThemeSource::Custom);
+           }) |
+           di::to<di::Vector>();
+}
+
+auto resolve_custom_theme(di::TransparentStringView name) -> di::Result<Config> {
+    if (name.empty()) {
+        return di::Unexpected(di::format_error("Failed to find theme with name '{}'"_sv, name));
+    }
+    auto const search_paths = TRY(get_theme_search_paths());
+    auto maybe_theme = resolve_config_path(search_paths.span(), name);
+    if (!maybe_theme.has_value()) {
+        return di::Unexpected(di::format_error("Failed to find theme with name '{}'"_sv, name));
+    }
+
+    return di::from_json_string<Config>(maybe_theme.value().view()).transform_error([&](auto&& error) -> di::Error {
+        return di::format_error("Failed to parse JSON for theme '{}': {}"_sv, name, error);
+    });
+}
+
+auto convert_to_config(Config&& config) -> ttx::Config {
+    auto result = ttx::Config {};
+    do_convert(result, di::move(config));
+    return result;
+}
+
+#ifndef TTX_BUILT_IN_THEMES
+auto built_in_themes() -> di::TreeMap<di::TransparentString, config_json::v1::Config> const& {
+    static auto map = di::TreeMap<di::TransparentString, config_json::v1::Config> {};
+    return map;
+}
+#endif
+
+auto list_themes(ThemeSource source) -> di::Result<di::Vector<ListedTheme>> {
+    auto result = di::Vector<ListedTheme> {};
+    if (source == ThemeSource::Custom || source == ThemeSource::All) {
+        result.append_container(TRY(list_custom_themes()) | di::as_rvalue);
+    }
+    if (source == ThemeSource::BuiltIn || source == ThemeSource::All) {
+        result.push_back(ListedTheme {
+            .name = "ansi"_ts,
+            .source = ThemeSource::BuiltIn,
+        });
+        for (auto const& [name, _] : built_in_themes()) {
+            result.push_back(ListedTheme {
+                .name = name.clone(),
+                .source = ThemeSource::BuiltIn,
+            });
+        }
+    }
+    return result;
+}
+
+struct ApplyThemeDefaults {
+    template<typename T, typename U>
+    static auto operator()(di::Optional<T>&, U&&) {}
+
+    static auto operator()(Colors& json_value, terminal::Palette&& value) {
+        json_value = convert_value(di::in_place_type<Colors>, di::forward<terminal::Palette>(value));
+    }
+
+    static auto operator()(di::Optional<terminal::Color>& json_value, terminal::Color&& value) {
+        json_value = convert_value(di::in_place_type<terminal::Color>, di::forward<terminal::Color>(value));
+    }
+
+    template<di::concepts::ReflectableToFields JsonConfig, di::concepts::ReflectableToFields Config>
+    static auto operator()(JsonConfig&& json_config, Config&& config) {
+        di::tuple_for_each(
+            [&](auto field) {
+                di::tuple_for_each(
+                    [&](auto json_field) {
+                        if constexpr (field.name == json_field.name) {
+                            ApplyThemeDefaults::operator()(json_field.get(json_config), di::move(field.get(config)));
+                        }
+                    },
+                    di::reflect(json_config));
+            },
+            di::reflect(config));
+    }
+};
+
+constexpr inline auto apply_theme_defaults = ApplyThemeDefaults {};
+
+auto resolve_theme(di::TransparentStringView name) -> di::Result<Config> {
+    auto result = resolve_custom_theme(name);
+    if (!result) {
+        if (name.empty() || name == "ansi"_tsv) {
+            auto result = Config {};
+            auto defaults = ttx::Config {};
+            apply_theme_defaults(result, di::move(defaults));
+            return result;
+        }
+        for (auto const& config : built_in_themes().at(name)) {
+            return di::clone(config);
+        }
+    }
+    return result;
+}
+
+auto resolve_profile_to_json(di::TransparentStringView profile, Config&& cli_config, bool should_resolve_theme)
+    -> di::Result<Config> {
+    auto profile_json = TRY([&] -> di::Result<Config> {
+        if (profile.empty()) {
+            return {};
+        }
+        auto const search_paths = TRY(get_search_paths());
+        auto visited = di::TreeSet<di::TransparentString> {};
+        return load_config_recursively(search_paths.span(), visited, profile);
+    }());
+    merge(profile_json, di::move(cli_config));
+
+    if (!should_resolve_theme) {
+        return profile_json;
+    }
+
+    auto theme_name_utf8 = profile_json.theme.name.transform(&di::String::view).value_or("ansi"_sv);
+    auto theme_name = di::to_transparent_string(theme_name_utf8);
+    auto theme = TRY(resolve_theme(theme_name));
+    merge(theme, di::move(profile_json));
+    return theme;
+}
+
+auto resolve_profile(di::TransparentStringView profile, Config&& cli_config, bool resolve_theme)
+    -> di::Result<ttx::Config> {
+    auto config_json = TRY(resolve_profile_to_json(profile, di::move(cli_config), resolve_theme));
+    auto const profile_name = di::PathView(profile).stem().value_or(""_tsv);
     return convert(profile_name, di::move(config_json));
 }
 
-auto to_config_json(ttx::Config&& config) -> Config {
-    auto result = Config {};
-    do_unconvert(result, di::move(config));
-    return result;
+struct ApplyDefaults {
+    template<typename T, typename U>
+    static auto operator()(di::Optional<T>& json_value, U&& value) {
+        if constexpr (di::concepts::SameAs<di::String, T> || di::concepts::InstanceOf<T, di::Vector>) {
+            if (value.empty()) {
+                return;
+            }
+        }
+        json_value = convert_value(di::in_place_type<T>, di::forward<U>(value));
+    }
+
+    static auto operator()(Colors&, terminal::Palette&&) {}
+
+    static auto operator()(di::Optional<terminal::Color>&, terminal::Color&&) {}
+
+    template<di::concepts::ReflectableToFields JsonConfig, di::concepts::ReflectableToFields Config>
+    static auto operator()(JsonConfig&& json_config, Config&& config) {
+        di::tuple_for_each(
+            [&](auto field) {
+                di::tuple_for_each(
+                    [&](auto json_field) {
+                        if constexpr (field.name == json_field.name) {
+                            ApplyDefaults::operator()(json_field.get(json_config), di::move(field.get(config)));
+                        }
+                    },
+                    di::reflect(json_config));
+            },
+            di::reflect(config));
+    }
+};
+
+constexpr inline auto apply_defaults = ApplyDefaults {};
+
+auto config_with_defaults(Config&& config) -> Config {
+    auto defaults = ttx::Config {};
+    apply_defaults(config, di::move(defaults));
+    return di::move(config);
 }
 
 struct BuildJsonSchemaDefinitions {
@@ -267,6 +488,14 @@ struct BuildJsonSchemaDefinitions {
         if (!defaults.empty()) {
             response["default"_sv] = defaults.clone();
         }
+        return response;
+    }
+
+    static auto operator()(di::InPlaceType<terminal::Color>, di::TreeMap<di::String, di::json::Object>&,
+                           terminal::Color const& defaults) -> di::json::Object {
+        auto response = di::json::Object {};
+        response["type"_sv] = "string"_s;
+        response["default"_sv] = di::to_string(defaults);
         return response;
     }
 
@@ -368,7 +597,7 @@ constexpr inline auto build_json_schema_definitions = BuildJsonSchemaDefinitions
 
 auto json_schema() -> di::json::Object {
     auto definitions = di::TreeMap<di::String, di::json::Object> {};
-    auto const defaults = to_config_json(ttx::Config {});
+    auto const defaults = config_with_defaults(Config {});
     build_json_schema_definitions(di::in_place_type<Config>, definitions, defaults);
 
     auto& o = definitions["Config"_sv];
@@ -388,7 +617,9 @@ auto json_schema() -> di::json::Object {
 
     auto examples = di::json::Array {};
     auto default_as_json_string = *di::to_json_string(defaults);
-    examples.emplace_back(*di::from_json_string<di::json::Object>(default_as_json_string.view()));
+    auto example_object = *di::from_json_string<di::json::Object>(default_as_json_string.view());
+    strip_empty_objects(example_object);
+    examples.emplace_back(di::move(example_object));
     o["examples"_sv] = di::move(examples);
 
     return di::move(o);
@@ -434,6 +665,10 @@ struct BuildNixOptions {
     }
 
     static auto operator()(di::InPlaceType<di::String>, di::TreeMap<di::String, NixValue>&) -> di::String {
+        return "str"_s;
+    }
+
+    static auto operator()(di::InPlaceType<terminal::Color>, di::TreeMap<di::String, NixValue>&) -> di::String {
         return "str"_s;
     }
 
@@ -575,6 +810,11 @@ struct MarkdownType {
 
     static auto operator()(di::InPlaceType<di::String>) -> di::String { return "string"_s; }
 
+    static auto operator()(di::InPlaceType<terminal::Color>) -> di::String {
+        auto const type_name = "Color"_sv;
+        return di::format("[{}](#{})"_sv, type_name, type_name);
+    }
+
     template<typename T>
     static auto operator()(di::InPlaceType<di::Vector<T>>) -> di::String {
         return di::format("list of {}"_sv, MarkdownType::operator()(di::in_place_type<T>));
@@ -605,6 +845,8 @@ struct MarkdownDefault {
     static auto operator()(T const& value) -> di::String {
         return di::format("{}"_sv, value);
     }
+
+    static auto operator()(terminal::Color value) -> di::String { return di::format("\"{}\""_sv, value); }
 
     static auto operator()(di::String const& value) -> di::String { return di::format("{:?}"_sv, value); }
 
@@ -652,6 +894,27 @@ struct BuildMarkdownTable {
                            di::Optional<T> const&) -> di::String {
         BuildMarkdownTable::operator()(di::in_place_type<T>, result, T());
         return markdown_type(di::in_place_type<di::Optional<T>>);
+    }
+
+    static auto operator()(di::InPlaceType<terminal::Color>, di::Vector<di::Tuple<di::String, di::String>>& result,
+                           terminal::Color const&) -> di::String {
+        auto response = markdown_type(di::in_place_type<terminal::Color>);
+        constexpr auto type_name = "Color"_sv;
+        if (di::contains(result | di::keys, type_name)) {
+            return response;
+        }
+        auto section_content = di::format("### {}\n"_sv, type_name);
+        section_content += R"md(
+A color in ttx can be defined in one of four ways:
+
+- A named special color ("default" or "dynamic"). Default has the special meaning of using the outer terminal's default color. Dynamic has the special depending on the specific color entry being specified and is not normally valid.
+- A normal named color (such as "red" or "blue") as defined in the kitty color stack [docs](https://sw.kovidgoyal.net/kitty/color-stack).
+- An 8 bit hex color (such as "#ff0000").
+- A palette color via palette:N (such as "palette:0"). This is only valid when specifying colors not in already a palette color. For example, you can set the status bar's background to a palette color but not palette color 0 itself.
+
+)md"_sv;
+        result.push_back(di::Tuple { type_name.to_owned(), di::move(section_content) });
+        return response;
     }
 
     template<di::concepts::ReflectableToEnumerators T, typename M = di::Reflect<T>>
@@ -706,7 +969,7 @@ struct BuildMarkdownTable {
                     constexpr auto description = di::container::fixed_string_to_utf8_string_view<F::description>();
                     auto type = BuildMarkdownTable::operator()(di::in_place_type<typename F::Type>, result,
                                                                field.get(defaults));
-                    section_content += di::format("| {} | {} | {} | {} |\n"_sv, field_name, type,
+                    section_content += di::format("| {} | {} | {} | {}. |\n"_sv, field_name, type,
                                                   markdown_default(field.get(defaults)), description);
                 }
             },
@@ -766,7 +1029,7 @@ sub-object.
 )md"_s;
 
     auto sections = di::Vector<di::Tuple<di::String, di::String>> {};
-    auto defaults = to_config_json(ttx::Config {});
+    auto defaults = config_with_defaults(Config {});
     defaults.extends.emplace();
     build_markdown_table(di::in_place_type<Config>, sections, defaults);
     for (auto const& [_, content] : sections) {
@@ -779,8 +1042,26 @@ This JSON block contains the default JSON configuration used by ttx:
 
 ```json
 )md"_sv;
-    result += *di::to_json_string(defaults, di::JsonSerializerConfig().pretty().indent_width(4));
+    auto string = *di::to_json_string(defaults);
+    auto json = *di::from_json_string<di::json::Object>(string);
+    strip_empty_objects(json);
+    result += *di::to_json_string(json, di::JsonSerializerConfig().pretty().indent_width(4));
     result += "\n```\n"_sv;
     return result;
+}
+
+void strip_empty_objects(di::json::Object& object) {
+    auto keys_to_remove = di::Vector<di::String> {};
+    for (auto& [key, value] : object) {
+        for (auto& o : value.as_object()) {
+            strip_empty_objects(o);
+            if (o.empty()) {
+                keys_to_remove.push_back(key.clone());
+            }
+        }
+    }
+    for (auto const& key : keys_to_remove) {
+        object.erase(key);
+    }
 }
 }

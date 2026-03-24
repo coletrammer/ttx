@@ -42,6 +42,9 @@ public:
     void request_exit();
     void request_navigate(terminal::NavigateDirection direction);
     void set_config(Config config);
+    auto config() const -> Config const& { return m_config; };
+    auto profile() const -> di::TransparentStringView { return m_profile; }
+    auto base_config() const -> config_json::v1::Config const& { return m_base_config; }
 
     void notify_osc_8671(terminal::OSC8671&& osc_8671);
 

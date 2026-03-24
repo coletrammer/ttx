@@ -37,11 +37,11 @@ static void parse() {
     ASSERT_EQ(auto(rendition.underline_mode), UnderlineMode::Curly);
 
     rendition.update_with_csi_params({ { 33 }, { 44 } });
-    ASSERT_EQ(auto(rendition.fg.r), Color::Palette::Brown);
+    ASSERT_EQ(auto(rendition.fg.r), Color::Palette::Yellow);
     ASSERT_EQ(auto(rendition.bg.r), Color::Palette::Blue);
 
     rendition.update_with_csi_params({ { 93 }, { 104 } });
-    ASSERT_EQ(auto(rendition.fg.r), Color::Palette::Yellow);
+    ASSERT_EQ(auto(rendition.fg.r), Color::Palette::LightYellow);
     ASSERT_EQ(auto(rendition.bg.r), Color::Palette::LightBlue);
 
     // legacy 256 color

@@ -23,6 +23,7 @@
 #include "ttx/terminal/escapes/osc_7.h"
 #include "ttx/terminal/escapes/osc_8671.h"
 #include "ttx/terminal/navigation_direction.h"
+#include "ttx/terminal/palette.h"
 
 namespace ttx {
 class Pane;
@@ -46,6 +47,9 @@ struct PaneHooks {
     /// @brief Callback with the results on reading from the output pipe.
     di::Function<void(di::StringView)> did_finish_output;
 
+    /// @brief Callback when a line of "extra output" is read.
+    di::Function<void(di::StringView)> did_get_extra_output;
+
     /// @brief Callback when the pane's current working directory changes.
     di::Function<void()> did_update_cwd;
 };
@@ -61,7 +65,9 @@ struct CreatePaneArgs {
                  cwd.clone(),
                  terminfo_dir.clone(),
                  term.clone(),
+                 palette,
                  pipe_output,
+                 pipe_extra_output,
                  mock,
                  {} };
     }
@@ -80,7 +86,9 @@ struct CreatePaneArgs {
     di::Optional<di::Path> cwd {};
     di::Optional<di::Path> terminfo_dir {};
     di::TransparentString term { "xterm-ttx"_ts };
+    terminal::Palette palette {};
     bool pipe_output { false };
+    bool pipe_extra_output { false }; ///< Create a pipe on fd 3 and read from it
     bool mock { false };
     PaneHooks hooks {};
 };
@@ -96,10 +104,10 @@ public:
     static auto create_mock(u64 id = 0, di::Optional<di::Path> cwd = {}) -> di::Box<Pane>;
 
     explicit Pane(u64 id, di::Optional<di::Path> cwd, dius::SyncFile pty_controller, Size const& size,
-                  dius::system::ProcessHandle process, PaneHooks hooks)
+                  dius::system::ProcessHandle process, terminal::Palette const& palette, PaneHooks hooks)
         : m_id(id)
         , m_pty_controller(di::move(pty_controller))
-        , m_terminal(di::in_place, id, size)
+        , m_terminal(di::in_place, id, size, palette)
         , m_process(process)
         , m_cwd(di::move(cwd))
         , m_hooks(di::move(hooks)) {}
@@ -145,6 +153,8 @@ public:
     /// reports, which require shell integration to work.
     auto current_working_directory() const -> di::Optional<di::PathView> { return m_cwd.transform(&di::Path::view); }
 
+    void update_palette(di::FunctionRef<void(terminal::Palette&)> update);
+
 private:
     void handle_terminal_event(TerminalEvent&& event);
     void write_pty_string(di::StringView data);
@@ -177,5 +187,6 @@ private:
     dius::Thread m_reader_thread;
     dius::Thread m_pipe_writer_thread;
     dius::Thread m_pipe_reader_thread;
+    dius::Thread m_pipe_extra_reader_thread;
 };
 }

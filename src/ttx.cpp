@@ -16,6 +16,7 @@
 #include "save_layout.h"
 #include "ttx/features.h"
 #include "ttx/terminal/capability.h"
+#include "ttx/terminal/escapes/osc_21.h"
 
 namespace ttx {
 struct NewBase {
@@ -34,6 +35,7 @@ struct NewBase {
     bool force_local_terminfo { false };
     di::Vector<di::TransparentStringView> command;
     di::TransparentStringView profile { "main"_tsv };
+    di::Optional<di::TransparentStringView> theme;
 
     // Replay
     di::Vector<di::PathView> replay_paths;
@@ -54,6 +56,7 @@ struct New : NewBase {
                                            "Layout name for save/restore (default: profile name)"_sv)
             .option<&NewBase::profile>('p', "profile"_tsv,
                                        "Profile name to use for this session (empty string loads no configuration)"_sv)
+            .option<&NewBase::theme>({}, "theme"_tsv, "Theme to use (overrides configuration if specified)"_sv)
             .option<&NewBase::hide_status_bar>('s', "hide-status-bar"_tsv, "Hide the status bar"_sv)
             .option<&NewBase::capture_command_output_path>('c', "capture-command-output-path"_tsv,
                                                            "Capture command output to a file"_sv)
@@ -126,8 +129,56 @@ struct Features {
     }
 };
 
+struct ThemeList {
+    ThemeSource source { ThemeSource::All };
+    bool help { false };
+
+    constexpr static auto get_cli_parser() {
+        return di::cli_parser<ThemeList>("list"_tsv, "List the names of the available themes"_sv)
+            .argument<&ThemeList::source>("SOURCE"_sv, "Show themes specific to this source"_sv)
+            .help();
+    }
+};
+
+struct ThemeApplyLocalPalette {
+    di::TransparentStringView name { "ansi"_tsv };
+    bool help { false };
+
+    constexpr static auto get_cli_parser() {
+        return di::cli_parser<ThemeApplyLocalPalette>(
+                   "apply-local-palette"_tsv,
+                   "Apply the specified theme to the current terminal's palette. This only affects the current terminal and only configures terminal specific colors"_sv)
+            .argument<&ThemeApplyLocalPalette::name>("NAME"_sv, "The theme to apply"_sv)
+            .help();
+    }
+};
+
+struct ThemeShow {
+    di::TransparentStringView name;
+    bool help { false };
+
+    constexpr static auto get_cli_parser() {
+        return di::cli_parser<ThemeShow>("show"_tsv, "Print the JSON configuration for ttx theme"_sv)
+            .argument<&ThemeShow::name>("NAME"_sv, "The theme to show"_sv, true)
+            .help();
+    }
+};
+
+struct ThemeCommand {
+    di::Variant<di::Void, ThemeList, ThemeApplyLocalPalette, ThemeShow> subcommand;
+    bool help { false };
+
+    constexpr static auto get_cli_parser() {
+        return di::cli_parser<ThemeCommand>("theme"_tsv, "Act on the available ttx themes"_sv)
+            .subcommands<&ThemeCommand::subcommand>()
+            .help();
+    }
+};
+
 struct ConfigShow {
     di::TransparentStringView profile { "main"_tsv };
+    di::Optional<di::TransparentStringView> theme;
+    bool resolve_theme { false };
     bool help { false };
 
     constexpr static auto get_cli_parser() {
@@ -135,6 +186,9 @@ struct ConfigShow {
                    "show"_tsv, "Print the resolved configuration for the profile as a valid JSON configuration file"_sv)
             .option<&ConfigShow::profile>(
                 'p', "profile"_tsv, "Profile name to use for this session (empty string loads no configuration)"_sv)
+            .option<&ConfigShow::resolve_theme>(
+                {}, "resolve-theme"_tsv, "Resolve the theme and include the results in the displayed configuration"_sv)
+            .option<&ConfigShow::theme>({}, "theme"_tsv, "Theme to use (overrides configuration if specified)"_sv)
             .help();
     }
 };
@@ -165,7 +219,7 @@ struct ConfigSchema {
 };
 
 struct ConfigCommand {
-    di::Variant<ConfigShow, ConfigDocs, ConfigNix, ConfigSchema> subcommand;
+    di::Variant<di::Void, ConfigShow, ConfigDocs, ConfigNix, ConfigSchema> subcommand;
     bool help { false };
 
     constexpr static auto get_cli_parser() {
@@ -200,7 +254,7 @@ struct Terminfo {
 };
 
 struct Args {
-    di::Variant<New, ConfigCommand, Completions, Replay, Keybinds, Features, Terminfo> subcommand;
+    di::Variant<New, ConfigCommand, ThemeCommand, Completions, Replay, Keybinds, Features, Terminfo> subcommand;
     bool help { false };
 
     constexpr static auto get_cli_parser() {
@@ -248,6 +302,13 @@ static auto get_local_terminfo_dir() -> di::Result<di::Path> {
     result /= "ttx"_tsv;
     result /= "terminfo"_tsv;
     return di::move(result);
+}
+
+static auto to_json_string_without_empty_objects(config_json::v1::Config const& config) -> di::String {
+    auto initial_string = *di::to_json_string(config);
+    auto json = *di::from_json_string<di::json::Object>(initial_string.view());
+    config_json::v1::strip_empty_objects(json);
+    return *di::to_json_string(json, di::JsonSerializerConfig().pretty().indent_width(4));
 }
 
 static auto maybe_get_terminfo_dir(di::TransparentStringView term, bool force_local_terminfo)
@@ -330,12 +391,12 @@ static auto do_new(Args&, NewBase& args) -> di::Result<> {
         return di::Unexpected(di::format_error("--profile cannot be a directory"_sv));
     }
     auto config_from_args = config_json::v1::Config {
+        .theme = {
+            .name = args.theme.transform(di::to_utf8_string_lossy),
+        },
         .input = {
             .prefix = args.prefix,
             .save_state_path = args.save_state_path.transform([](di::PathView path) { return di::to_utf8_string_lossy(path.data()); }),
-        },
-        .layout = {
-            .hide_status_bar = args.hide_status_bar ? di::Optional(true) : di::nullopt,
         },
         .clipboard = {
             .mode = args.clipboard_mode,
@@ -347,6 +408,9 @@ static auto do_new(Args&, NewBase& args) -> di::Result<> {
         },
         .shell = {
             .command = !args.command.empty () ? di::Optional(args.command | di::transform(di::to_utf8_string_lossy) | di::to<di::Vector>()) : di::nullopt,
+        },
+        .status_bar = {
+            .hide = args.hide_status_bar,
         },
         .terminfo = {
             .term = args.term.transform(di::to_utf8_string_lossy),
@@ -393,7 +457,7 @@ static auto do_new(Args&, NewBase& args) -> di::Result<> {
     // Setup - initial state and terminal size.
     auto initial_size = args.headless ? Size { 24, 80, 24 * 16, 80 * 16 }
                                       : Size::from_window_size(TRY(dius::std_in.get_tty_window_size()));
-    auto layout_state = di::Synchronized(LayoutState(initial_size, config.layout));
+    auto layout_state = di::Synchronized(LayoutState(initial_size, di::clone(config)));
 
     // Setup - raw mode
     auto _ = args.headless ? di::ScopeExit(di::Function<void()>([] {})) : TRY(dius::std_in.enter_raw_mode());
@@ -579,11 +643,9 @@ static auto main(Args&, Completions& args) -> di::Result<> {
 }
 
 static auto main(Args&, Keybinds& args) -> di::Result<> {
-    auto config = args.profile.empty()
-                      ? Config()
-                      : TRY(config_json::v1::resolve_profile(args.profile, {}).transform_error([&](auto&& error) {
-                            return di::format_error("Failed to resolve profile '{}': {}"_sv, args.profile, error);
-                        }));
+    auto config = TRY(config_json::v1::resolve_profile(args.profile, {}).transform_error([&](auto&& error) {
+        return di::format_error("Failed to resolve profile '{}': {}"_sv, args.profile, error);
+    }));
     auto key_binds = make_key_binds(config.input, args.replay_mode);
     for (auto const& bind : key_binds) {
         dius::println("{}"_sv, bind);
@@ -643,13 +705,17 @@ static auto main(Args&, ConfigCommand&, ConfigShow& args) -> di::Result<> {
     if (args.profile.ends_with('/')) {
         return di::Unexpected(di::format_error("--profile cannot be a directory"_sv));
     }
-    auto config = args.profile.empty()
-                      ? Config()
-                      : TRY(config_json::v1::resolve_profile(args.profile).transform_error([&](auto&& error) {
-                            return di::format_error("Failed to resolve profile '{}': {}"_sv, args.profile, error);
-                        }));
-    auto string = *di::to_json_string(config_json::v1::to_config_json(di::move(config)),
-                                      di::JsonSerializerConfig().pretty().indent_width(4));
+    auto config_from_args = config_json::v1::Config {
+        .theme = {
+            .name = args.theme.transform(di::to_utf8_string_lossy),
+        },
+    };
+    auto config =
+        TRY(config_json::v1::resolve_profile_to_json(args.profile, di::move(config_from_args), args.resolve_theme)
+                .transform_error([&](auto&& error) {
+                    return di::format_error("Failed to resolve profile '{}': {}"_sv, args.profile, error);
+                }));
+    auto string = to_json_string_without_empty_objects(config_json::v1::config_with_defaults(di::move(config)));
     dius::println("{}"_sv, string);
     return {};
 }
@@ -674,6 +740,60 @@ static auto main(Args&, ConfigCommand&, ConfigSchema&) -> di::Result<> {
 }
 
 static auto main(Args& base_args, ConfigCommand& args) -> di::Result<> {
+    return di::visit(
+        [&](auto& subcommand) -> di::Result<> {
+            if constexpr (di::SameAs<di::Void, di::meta::RemoveCVRef<decltype(subcommand)>>) {
+                ASSERT(false);
+                return {};
+            } else {
+                return main(base_args, args, subcommand);
+            }
+        },
+        args.subcommand);
+}
+
+static auto main(Args&, ThemeCommand&, ThemeList& args) -> di::Result<> {
+    auto themes = TRY(config_json::v1::list_themes(args.source));
+
+    dius::println("{: <50}{: <20}"_sv, di::Styled("Name"_sv, di::FormatEffect::Bold),
+                  di::Styled("Source"_sv, di::FormatEffect::Bold));
+    dius::println("{:=<70}"_sv, ""_sv);
+    for (auto const& [name, source] : themes) {
+        dius::println("{: <50}{: <20}"_sv, di::Styled(name, di::FormatEffect::Bold), di::to_string(source));
+    }
+    return {};
+}
+
+static auto main(Args&, ThemeCommand&, ThemeApplyLocalPalette& args) -> di::Result<> {
+    auto theme_json = TRY(config_json::v1::resolve_theme(args.name));
+    auto theme = config_json::v1::convert_to_config(di::move(theme_json));
+    auto features = TRY(detect_features(dius::std_in));
+    if (!(features & Feature::DynamicPalette) && !(features & Feature::DynamicPaletteKitty)) {
+        return di::Unexpected(di::format_error("Terminal does not support setting the local color palette"_sv));
+    }
+    auto string = ""_s;
+    for (auto index_number : di::range(u32(terminal::PaletteIndex::Count))) {
+        auto const index = terminal::PaletteIndex(index_number);
+        auto osc21 = terminal::OSC21();
+        osc21.requests.push_back(terminal::OSC21::Request {
+            .palette = index,
+            .color = theme.colors.get(index),
+        });
+        string += osc21.serialize(features);
+    }
+    dius::print("{}"_sv, string);
+    (void) dius::std_out.flush();
+    return {};
+}
+
+static auto main(Args&, ThemeCommand&, ThemeShow& args) -> di::Result<> {
+    auto theme = TRY(config_json::v1::resolve_theme(args.name));
+    auto string = to_json_string_without_empty_objects(theme);
+    dius::println("{}"_sv, string);
+    return {};
+}
+
+static auto main(Args& base_args, ThemeCommand& args) -> di::Result<> {
     return di::visit(
         [&](auto& subcommand) -> di::Result<> {
             if constexpr (di::SameAs<di::Void, di::meta::RemoveCVRef<decltype(subcommand)>>) {

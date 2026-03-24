@@ -38,5 +38,6 @@ auto scroll_to_bottom() -> Action;
 auto scroll_prev_command() -> Action;
 auto scroll_next_command() -> Action;
 auto copy_last_command(bool include_command) -> Action;
+auto switch_theme() -> Action;
 auto send_to_pane() -> Action;
 }

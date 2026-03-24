@@ -5,8 +5,14 @@
     "input": {
         "prefix": "A"
     },
-    "layout": {
-        "hide_status_bar": false
+    "status_bar": {
+        "hide": false
+    },
+    "theme": {
+        "name": "test"
+    },
+    "colors": {
+        "cursor_text": "dynamic"
     },
     "session": {
         "save_layout": false,

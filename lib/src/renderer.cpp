@@ -14,6 +14,7 @@
 #include "ttx/features.h"
 #include "ttx/params.h"
 #include "ttx/size.h"
+#include "ttx/terminal/color.h"
 #include "ttx/terminal/cursor.h"
 #include "ttx/terminal/escapes/osc_21.h"
 #include "ttx/terminal/escapes/osc_52.h"
@@ -22,6 +23,7 @@
 #include "ttx/terminal/escapes/osc_8671.h"
 #include "ttx/terminal/graphics_rendition.h"
 #include "ttx/terminal/multi_cell_info.h"
+#include "ttx/terminal/palette.h"
 #include "ttx/terminal/screen.h"
 
 namespace ttx {
@@ -673,7 +675,7 @@ void Renderer::set_bound(u32 row, u32 col, u32 width, u32 height) {
 
 auto Renderer::resolve_rendition(terminal::GraphicsRendition const& rendition) const -> terminal::GraphicsRendition {
     auto result = rendition;
-    if (m_palette) {
+    if (m_global_palette || m_local_palette) {
         result.fg = resolve_foreground(result.fg);
         result.bg = resolve_background(result.bg);
         result.underline_color = resolve_color(result.underline_color);
@@ -681,23 +683,59 @@ auto Renderer::resolve_rendition(terminal::GraphicsRendition const& rendition) c
     return result;
 }
 
+auto Renderer::resolve_color(terminal::PaletteIndex index) const -> terminal::Color {
+    auto color = terminal::Color();
+    if (m_local_palette) {
+        color = color.value_or(m_local_palette.value().get(index));
+    }
+    if (m_global_palette) {
+        color = color.value_or(m_global_palette.value().get(index));
+    }
+    return resolve_color(color);
+}
+
 auto Renderer::resolve_color(terminal::Color color) const -> terminal::Color {
-    if (m_palette) {
-        return m_palette.value().resolve(color);
+    if (m_local_palette) {
+        color = m_local_palette.value().resolve(color);
+    }
+    if (m_global_palette) {
+        color = m_global_palette.value().resolve(color);
     }
     return color;
 }
 
 auto Renderer::resolve_foreground(terminal::Color color) const -> terminal::Color {
-    if (m_palette) {
-        return m_palette.value().resolve_foreground(color);
+    if (m_local_palette) {
+        color = m_local_palette.value().resolve_foreground(color);
+    }
+    if (m_global_palette) {
+        color = m_global_palette.value().resolve_foreground(color);
     }
     return color;
 }
 
 auto Renderer::resolve_background(terminal::Color color) const -> terminal::Color {
-    if (m_palette) {
-        return m_palette.value().resolve_background(color);
+    if (m_local_palette) {
+        color = m_local_palette.value().resolve_background(color);
+    }
+    if (m_global_palette) {
+        color = m_global_palette.value().resolve_background(color);
+    }
+    return color;
+}
+
+auto Renderer::resolve_cursor_color() const -> terminal::Color {
+    auto color = resolve_color(terminal::PaletteIndex::Cursor);
+    if (color.is_dynamic()) {
+        color = resolve_foreground(resolve_color(terminal::PaletteIndex::Foreground));
+    }
+    return color;
+}
+
+auto Renderer::resolve_cursor_text_color() const -> terminal::Color {
+    auto color = resolve_color(terminal::PaletteIndex::CursorText);
+    if (color.is_dynamic()) {
+        color = resolve_foreground(resolve_color(terminal::PaletteIndex::Background));
     }
     return color;
 }

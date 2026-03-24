@@ -12,9 +12,9 @@
 namespace ttx {
 class LayoutState {
 public:
-    explicit LayoutState(Size const& size, LayoutConfig config);
+    explicit LayoutState(Size const& size, Config config);
 
-    void set_config(LayoutConfig config);
+    void set_config(Config config);
     void layout(di::Optional<Size> size = {});
     auto set_active_tab(Session& session, Tab* tab) -> bool;
     void remove_tab(Session& session, Tab& tab);
@@ -40,9 +40,9 @@ public:
     auto active_pane() const -> di::Optional<Pane&>;
     auto full_screen_pane() const -> di::Optional<Pane&>;
     auto size() const -> Size { return m_size; }
-    auto hide_status_bar() const -> bool { return m_config.hide_status_bar; }
+    auto hide_status_bar() const -> bool { return m_config.status_bar.hide; }
 
-    auto active_popup() const -> di::Optional<Popup&>;
+    auto active_popup() const -> di::Optional<Pane&>;
 
     void set_layout_did_update(di::Function<void()> layout_did_update);
     void layout_did_update();
@@ -61,6 +61,6 @@ private:
     u64 m_next_pane_id { 1 };
     u64 m_next_tab_id { 1 };
     u64 m_next_session_id { 1 };
-    LayoutConfig m_config;
+    Config m_config;
 };
 }
