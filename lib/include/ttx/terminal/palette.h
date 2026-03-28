@@ -1,9 +1,8 @@
 #pragma once
 
-#include <di/types/byte.h>
-#include <di/util/to_underlying.h>
-#include <di/vocab/array/array.h>
-
+#include "di/types/byte.h"
+#include "di/util/to_underlying.h"
+#include "di/vocab/array/array.h"
 #include "ttx/terminal/color.h"
 
 namespace ttx::terminal {
@@ -131,6 +130,10 @@ public:
 
     auto modified() const -> bool { return m_modified; }
     void maybe_clear_modifed() { m_modified = di::any_of(m_colors, di::not_fn(&Color::is_default)); }
+
+    auto theme_mode() const -> ThemeMode {
+        return resolve_background(Color()).brightness() >= 0.5 ? ThemeMode::Light : ThemeMode::Dark;
+    }
 
     auto to_string() const -> di::String;
 

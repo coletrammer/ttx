@@ -84,8 +84,8 @@ void InputThread::set_config(Config config) {
     m_config = di::move(config);
     m_key_binds = make_key_binds(m_config.input, m_create_pane_args.replay_path.has_value());
     m_create_pane_args.command = m_config.shell.command.clone();
-    m_create_pane_args.save_state_path = config.input.save_state_path.clone();
-    m_create_pane_args.term = config.terminfo.term.clone();
+    m_create_pane_args.save_state_path = m_config.input.save_state_path.clone();
+    m_create_pane_args.term = m_config.terminfo.term.clone();
 
     if (palette_did_change) {
         auto global_palette = m_config.colors;

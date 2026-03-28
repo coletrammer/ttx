@@ -70,12 +70,15 @@ struct TerminfoConfig {
 };
 
 struct ThemeConfig {
-    di::TransparentString name { "ansi"_ts };
+    di::TransparentString name { "auto"_ts };
+    di::TransparentString dark {};
+    di::TransparentString light {};
 
     auto operator==(ThemeConfig const&) const -> bool = default;
 
     constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<ThemeConfig>) {
-        return di::make_fields<"Theme">(di::field<"name", &ThemeConfig::name>);
+        return di::make_fields<"Theme">(di::field<"name", &ThemeConfig::name>, di::field<"dark", &ThemeConfig::dark>,
+                                        di::field<"light", &ThemeConfig::light>);
     }
 };
 

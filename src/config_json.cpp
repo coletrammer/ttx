@@ -283,7 +283,7 @@ static auto load_config_recursively(di::Span<di::Path const> search_paths, di::T
 }
 
 auto list_custom_themes() -> di::Result<di::Vector<ListedTheme>> {
-    auto result = di::TreeSet<di::TransparentString> {};
+    auto result = di::TreeMap<di::TransparentString, ListedTheme> {};
     auto const search_paths = TRY(get_theme_search_paths());
     for (auto const& path : search_paths) {
         auto iterator = dius::filesystem::DirectoryIterator::create(
@@ -300,13 +300,18 @@ auto list_custom_themes() -> di::Result<di::Vector<ListedTheme>> {
                 return di::Unexpected(
                     di::format_error("Failed to list directory contents of '{}': {}"_sv, path, iterator.error()));
             }
-            result.insert(entry->filename().value().stem().value().to_owned());
+            auto name = entry->filename().value().stem().value().to_owned();
+            auto config = TRY(resolve_custom_theme(entry->path_view().data()));
+            auto palette = convert_value(di::in_place_type<terminal::Palette>, di::move(config.colors));
+            result.try_emplace(name, ListedTheme {
+                                         .name = name.clone(),
+                                         .source = ThemeSource::Custom,
+                                         .theme_mode = palette.theme_mode(),
+                                         .palette = palette,
+                                     });
         }
     }
-    return result | di::as_rvalue | di::transform([&](di::TransparentString&& name) {
-               return ListedTheme(di::move(name), ThemeSource::Custom);
-           }) |
-           di::to<di::Vector>();
+    return result | di::values | di::as_rvalue | di::to<di::Vector>();
 }
 
 auto resolve_custom_theme(di::TransparentStringView name) -> di::Result<Config> {
@@ -331,26 +336,49 @@ auto convert_to_config(Config&& config) -> ttx::Config {
 }
 
 #ifndef TTX_BUILT_IN_THEMES
-auto built_in_themes() -> di::TreeMap<di::TransparentString, config_json::v1::Config> const& {
+auto iterm2_themes() -> di::TreeMap<di::TransparentString, config_json::v1::Config> const& {
     static auto map = di::TreeMap<di::TransparentString, config_json::v1::Config> {};
     return map;
 }
 #endif
 
-auto list_themes(ThemeSource source) -> di::Result<di::Vector<ListedTheme>> {
+auto list_themes(ThemeSource source, terminal::Palette const& outer_terminal_palette)
+    -> di::Result<di::Vector<ListedTheme>> {
     auto result = di::Vector<ListedTheme> {};
     if (source == ThemeSource::Custom || source == ThemeSource::All) {
         result.append_container(TRY(list_custom_themes()) | di::as_rvalue);
     }
     if (source == ThemeSource::BuiltIn || source == ThemeSource::All) {
         result.push_back(ListedTheme {
+            .name = "auto"_ts,
+            .source = ThemeSource::BuiltIn,
+            .theme_mode = outer_terminal_palette.theme_mode(),
+            .palette = outer_terminal_palette,
+        });
+        result.push_back(ListedTheme {
             .name = "ansi"_ts,
             .source = ThemeSource::BuiltIn,
+            .theme_mode = outer_terminal_palette.theme_mode(),
+            .palette = outer_terminal_palette,
         });
-        for (auto const& [name, _] : built_in_themes()) {
+        for (auto const& [name, config] : built_in_themes()) {
+            auto palette = convert_value(di::in_place_type<terminal::Palette>, di::clone(config.colors));
             result.push_back(ListedTheme {
                 .name = name.clone(),
                 .source = ThemeSource::BuiltIn,
+                .theme_mode = palette.theme_mode(),
+                .palette = palette,
+
+            });
+        }
+        for (auto const& [name, config] : iterm2_themes()) {
+            auto palette = convert_value(di::in_place_type<terminal::Palette>, di::clone(config.colors));
+            result.push_back(ListedTheme {
+                .name = name.clone(),
+                .source = ThemeSource::Iterm2ColorSchemes,
+                .theme_mode = palette.theme_mode(),
+                .palette = palette,
+
             });
         }
     }
@@ -387,10 +415,33 @@ struct ApplyThemeDefaults {
 
 constexpr inline auto apply_theme_defaults = ApplyThemeDefaults {};
 
-auto resolve_theme(di::TransparentStringView name) -> di::Result<Config> {
+auto resolve_theme(di::TransparentStringView name, terminal::Palette const& outer_terminal_palette)
+    -> di::Result<Config> {
+    if (name.empty() || name == "auto"_tsv) {
+        // Theme auto detection. First list all candidate themes.
+        auto all_themes = TRY(list_themes(ThemeSource::All, outer_terminal_palette));
+
+        // This algorithm is sub-optimal but its not that bad with only ~500 built-in themes.
+        // Theme matching would be significantly more optimal by hashing the bottom 8 palette colors
+        // for every theme.
+        for (auto const& theme : all_themes) {
+            // Check for an exact match with the bottom 8 palette colors. If we match,
+            // then we override the name to theme we matched.
+            if (!theme.name.empty() && theme.name != "auto"_tsv && theme.name != "ansi"_tsv &&
+                di::all_of(di::range(8u), [&](u32 index_number) -> bool {
+                    auto index = terminal::PaletteIndex(index_number);
+                    return theme.palette.get(index) == outer_terminal_palette.get(index);
+                })) {
+                auto result = TRY(resolve_theme(theme.name.view(), outer_terminal_palette));
+                result.theme.name = di::to_utf8_string_lossy(theme.name.view());
+                return result;
+            }
+        }
+    }
+
     auto result = resolve_custom_theme(name);
     if (!result) {
-        if (name.empty() || name == "ansi"_tsv) {
+        if (name.empty() || name == "ansi"_tsv || name == "auto"_tsv) {
             auto result = Config {};
             auto defaults = ttx::Config {};
             apply_theme_defaults(result, di::move(defaults));
@@ -399,12 +450,16 @@ auto resolve_theme(di::TransparentStringView name) -> di::Result<Config> {
         for (auto const& config : built_in_themes().at(name)) {
             return di::clone(config);
         }
+        for (auto const& config : iterm2_themes().at(name)) {
+            return di::clone(config);
+        }
     }
     return result;
 }
 
-auto resolve_profile_to_json(di::TransparentStringView profile, Config&& cli_config, bool should_resolve_theme)
-    -> di::Result<Config> {
+auto resolve_profile_to_json(di::TransparentStringView profile, terminal::ThemeMode theme_preference,
+                             terminal::Palette const& outer_terminal_palette, Config&& cli_config,
+                             bool should_resolve_theme) -> di::Result<Config> {
     auto profile_json = TRY([&] -> di::Result<Config> {
         if (profile.empty()) {
             return {};
@@ -419,16 +474,26 @@ auto resolve_profile_to_json(di::TransparentStringView profile, Config&& cli_con
         return profile_json;
     }
 
-    auto theme_name_utf8 = profile_json.theme.name.transform(&di::String::view).value_or("ansi"_sv);
+    auto theme_name_utf8 = [&] -> di::StringView {
+        if (theme_preference == terminal::ThemeMode::Dark && profile_json.theme.dark.has_value()) {
+            return profile_json.theme.dark.value().view();
+        }
+        if (theme_preference == terminal::ThemeMode::Light && profile_json.theme.light.has_value()) {
+            return profile_json.theme.light.value().view();
+        }
+        return profile_json.theme.name.transform(&di::String::view).value_or("auto"_sv);
+    }();
     auto theme_name = di::to_transparent_string(theme_name_utf8);
-    auto theme = TRY(resolve_theme(theme_name));
+    auto theme = TRY(resolve_theme(theme_name, outer_terminal_palette));
     merge(theme, di::move(profile_json));
     return theme;
 }
 
-auto resolve_profile(di::TransparentStringView profile, Config&& cli_config, bool resolve_theme)
+auto resolve_profile(di::TransparentStringView profile, terminal::ThemeMode theme_preference,
+                     terminal::Palette const& outer_terminal_palette, Config&& cli_config, bool resolve_theme)
     -> di::Result<ttx::Config> {
-    auto config_json = TRY(resolve_profile_to_json(profile, di::move(cli_config), resolve_theme));
+    auto config_json = TRY(resolve_profile_to_json(profile, theme_preference, outer_terminal_palette,
+                                                   di::move(cli_config), resolve_theme));
     auto const profile_name = di::PathView(profile).stem().value_or(""_tsv);
     return convert(profile_name, di::move(config_json));
 }

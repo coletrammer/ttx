@@ -1,9 +1,8 @@
 #pragma once
 
-#include <di/container/string/string.h>
-#include <di/types/integers.h>
-#include <di/vocab/optional/optional_forward_declaration.h>
-
+#include "di/container/string/string.h"
+#include "di/types/integers.h"
+#include "di/vocab/optional/optional_forward_declaration.h"
 #include "ttx/features.h"
 #include "ttx/terminal/color.h"
 #include "ttx/terminal/palette.h"

@@ -174,12 +174,12 @@ struct ThemeDetectDarkLightMode {
 };
 
 struct ThemeShow {
-    di::TransparentStringView name;
+    di::TransparentStringView name { "auto"_tsv };
     bool help { false };
 
     constexpr static auto get_cli_parser() {
         return di::cli_parser<ThemeShow>("show"_tsv, "Print the JSON configuration for ttx theme"_sv)
-            .argument<&ThemeShow::name>("NAME"_sv, "The theme to show"_sv, true)
+            .argument<&ThemeShow::name>("NAME"_sv, "The theme to show"_sv)
             .help();
     }
 };
@@ -411,6 +411,10 @@ static auto do_new(Args&, NewBase& args) -> di::Result<> {
     if (args.profile.ends_with('/')) {
         return di::Unexpected(di::format_error("--profile cannot be a directory"_sv));
     }
+    auto features = FeatureResult { .features = Feature::All };
+    if (!args.headless) {
+        features = TRY(detect_features(dius::std_in));
+    }
     auto config_from_args = config_json::v1::Config {
         .theme = {
             .name = args.theme.transform(di::to_utf8_string_lossy),
@@ -438,15 +442,11 @@ static auto do_new(Args&, NewBase& args) -> di::Result<> {
             .force_local_terminfo = args.force_local_terminfo ? di::Optional(true) : di::nullopt,
         },
     };
-    auto config = TRY(
-        config_json::v1::resolve_profile(args.profile, di::clone(config_from_args)).transform_error([&](auto&& error) {
-            return di::format_error("Failed to resolve profile '{}': {}"_sv, args.profile, error);
-        }));
-
-    auto features = FeatureResult { .features = Feature::All };
-    if (!args.headless) {
-        features = TRY(detect_features(dius::std_in));
-    }
+    auto config = TRY(config_json::v1::resolve_profile(args.profile, features.theme_mode, features.palette,
+                                                       di::clone(config_from_args))
+                          .transform_error([&](auto&& error) {
+                              return di::format_error("Failed to resolve profile '{}': {}"_sv, args.profile, error);
+                          }));
 
     // Setup - log to file.
     [[maybe_unused]] auto& log = dius::std_err = TRY(dius::open_sync("/tmp/ttx.log"_pv, dius::OpenMode::WriteClobber));
@@ -673,7 +673,7 @@ static auto main(Args&, Completions& args) -> di::Result<> {
 }
 
 static auto main(Args&, Keybinds& args) -> di::Result<> {
-    auto config = TRY(config_json::v1::resolve_profile(args.profile, {}).transform_error([&](auto&& error) {
+    auto config = TRY(config_json::v1::resolve_profile(args.profile, {}, {}).transform_error([&](auto&& error) {
         return di::format_error("Failed to resolve profile '{}': {}"_sv, args.profile, error);
     }));
     auto key_binds = make_key_binds(config.input, args.replay_mode);
@@ -735,16 +735,20 @@ static auto main(Args&, ConfigCommand&, ConfigShow& args) -> di::Result<> {
     if (args.profile.ends_with('/')) {
         return di::Unexpected(di::format_error("--profile cannot be a directory"_sv));
     }
+
+    auto features = TRY(detect_features(dius::std_in).transform_error([](di::Error error) {
+        return di::format_error("Failed to detect terminal features: {}"_sv, error);
+    }));
     auto config_from_args = config_json::v1::Config {
         .theme = {
             .name = args.theme.transform(di::to_utf8_string_lossy),
         },
     };
-    auto config =
-        TRY(config_json::v1::resolve_profile_to_json(args.profile, di::move(config_from_args), args.resolve_theme)
-                .transform_error([&](auto&& error) {
-                    return di::format_error("Failed to resolve profile '{}': {}"_sv, args.profile, error);
-                }));
+    auto config = TRY(config_json::v1::resolve_profile_to_json(args.profile, features.theme_mode, features.palette,
+                                                               di::move(config_from_args), args.resolve_theme)
+                          .transform_error([&](auto&& error) {
+                              return di::format_error("Failed to resolve profile '{}': {}"_sv, args.profile, error);
+                          }));
     auto string = to_json_string_without_empty_objects(config_json::v1::config_with_defaults(di::move(config)));
     dius::println("{}"_sv, string);
     return {};
@@ -783,24 +787,28 @@ static auto main(Args& base_args, ConfigCommand& args) -> di::Result<> {
 }
 
 static auto main(Args&, ThemeCommand&, ThemeList& args) -> di::Result<> {
-    auto themes = TRY(config_json::v1::list_themes(args.source));
+    auto features = TRY(detect_features(dius::std_in).transform_error([](di::Error error) {
+        return di::format_error("Failed to detect terminal features: {}"_sv, error);
+    }));
+    auto themes = TRY(config_json::v1::list_themes(args.source, features.palette));
 
-    dius::println("{: <50}{: <20}"_sv, di::Styled("Name"_sv, di::FormatEffect::Bold),
-                  di::Styled("Source"_sv, di::FormatEffect::Bold));
-    dius::println("{:=<70}"_sv, ""_sv);
-    for (auto const& [name, source] : themes) {
-        dius::println("{: <50}{: <20}"_sv, di::Styled(name, di::FormatEffect::Bold), di::to_string(source));
+    dius::println("{: <50}{: <10}{: <20}"_sv, di::Styled("Name"_sv, di::FormatEffect::Bold),
+                  di::Styled("Mode"_sv, di::FormatEffect::Bold), di::Styled("Source"_sv, di::FormatEffect::Bold));
+    dius::println("{:=<80}"_sv, ""_sv);
+    for (auto const& [name, source, mode, _] : themes) {
+        dius::println("{: <50}{: <10}{: <20}"_sv, di::Styled(name, di::FormatEffect::Bold), di::to_string(mode),
+                      di::to_string(source));
     }
     return {};
 }
 
 static auto main(Args&, ThemeCommand&, ThemeApplyLocalPalette& args) -> di::Result<> {
-    auto theme_json = TRY(config_json::v1::resolve_theme(args.name));
-    auto theme = config_json::v1::convert_to_config(di::move(theme_json));
     auto features = TRY(detect_features(dius::std_in).transform_error([](di::Error error) {
-                        return di::format_error("Failed to detect terminal features: {}"_sv, error);
-                    })).features;
-    if (!(features & Feature::DynamicPalette) && !(features & Feature::DynamicPaletteKitty)) {
+        return di::format_error("Failed to detect terminal features: {}"_sv, error);
+    }));
+    auto theme_json = TRY(config_json::v1::resolve_theme(args.name, features.palette));
+    auto theme = config_json::v1::convert_to_config(di::move(theme_json));
+    if (!(features.features & Feature::DynamicPalette) && !(features.features & Feature::DynamicPaletteKitty)) {
         return di::Unexpected(di::format_error("Terminal does not support setting the local color palette"_sv));
     }
     auto string = ""_s;
@@ -811,7 +819,7 @@ static auto main(Args&, ThemeCommand&, ThemeApplyLocalPalette& args) -> di::Resu
             .palette = index,
             .color = theme.colors.get(index),
         });
-        string += osc21.serialize(features);
+        string += osc21.serialize(features.features);
     }
     dius::print("{}"_sv, string);
     (void) dius::std_out.flush();
@@ -843,7 +851,10 @@ static auto main(Args&, ThemeCommand&, ThemeDetectDarkLightMode&) -> di::Result<
 }
 
 static auto main(Args&, ThemeCommand&, ThemeShow& args) -> di::Result<> {
-    auto theme = TRY(config_json::v1::resolve_theme(args.name));
+    auto features = TRY(detect_features(dius::std_in).transform_error([](di::Error error) {
+        return di::format_error("Failed to detect terminal features: {}"_sv, error);
+    }));
+    auto theme = TRY(config_json::v1::resolve_theme(args.name, features.palette));
     auto string = to_json_string_without_empty_objects(theme);
     dius::println("{}"_sv, string);
     return {};

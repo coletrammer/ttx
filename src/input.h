@@ -46,6 +46,8 @@ public:
     auto config() const -> Config const& { return m_config; };
     auto profile() const -> di::TransparentStringView { return m_profile; }
     auto base_config() const -> config_json::v1::Config const& { return m_base_config; }
+    auto outer_terminal_palette() const -> terminal::Palette const& { return m_outer_terminal_palette; }
+    auto create_pane_args() const -> CreatePaneArgs const& { return m_create_pane_args; }
 
     void notify_osc_8671(terminal::OSC8671&& osc_8671);
 
