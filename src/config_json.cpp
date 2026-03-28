@@ -433,6 +433,12 @@ auto resolve_profile(di::TransparentStringView profile, Config&& cli_config, boo
     return convert(profile_name, di::move(config_json));
 }
 
+auto config_from_palette(terminal::Palette const& palette) -> config_json::v1::Config {
+    auto result = config_json::v1::Config {};
+    result.colors = convert_value(di::in_place_type<Colors>, auto(palette));
+    return result;
+}
+
 struct ApplyDefaults {
     template<typename T, typename U>
     static auto operator()(di::Optional<T>& json_value, U&& value) {

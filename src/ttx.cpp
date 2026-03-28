@@ -153,6 +153,26 @@ struct ThemeApplyLocalPalette {
     }
 };
 
+struct ThemeShowLocalPalette {
+    bool help { false };
+
+    constexpr static auto get_cli_parser() {
+        return di::cli_parser<ThemeShowLocalPalette>("show-local-palette"_tsv,
+                                                     "Show the terminal's local palette colors as a ttx theme"_sv)
+            .help();
+    }
+};
+
+struct ThemeDetectDarkLightMode {
+    bool help { false };
+
+    constexpr static auto get_cli_parser() {
+        return di::cli_parser<ThemeDetectDarkLightMode>("detect-dark-light-mode"_tsv,
+                                                        "Detect whether the whether dark or light mode is preferred"_sv)
+            .help();
+    }
+};
+
 struct ThemeShow {
     di::TransparentStringView name;
     bool help { false };
@@ -165,7 +185,8 @@ struct ThemeShow {
 };
 
 struct ThemeCommand {
-    di::Variant<di::Void, ThemeList, ThemeApplyLocalPalette, ThemeShow> subcommand;
+    di::Variant<di::Void, ThemeList, ThemeApplyLocalPalette, ThemeShowLocalPalette, ThemeDetectDarkLightMode, ThemeShow>
+        subcommand;
     bool help { false };
 
     constexpr static auto get_cli_parser() {
@@ -422,7 +443,7 @@ static auto do_new(Args&, NewBase& args) -> di::Result<> {
             return di::format_error("Failed to resolve profile '{}': {}"_sv, args.profile, error);
         }));
 
-    auto features = Feature::All;
+    auto features = FeatureResult { .features = Feature::All };
     if (!args.headless) {
         features = TRY(detect_features(dius::std_in));
     }
@@ -435,12 +456,21 @@ static auto do_new(Args&, NewBase& args) -> di::Result<> {
         TRY(maybe_get_terminfo_dir(config.terminfo.term.view(), config.terminfo.force_local_terminfo));
 
     // Setup - initialize pane arguments
+    auto global_palette = config.colors;
+    for (auto index_number : di::range(u32(terminal::PaletteIndex::Count))) {
+        auto index = terminal::PaletteIndex(index_number);
+        if (global_palette.get(index).is_default()) {
+            global_palette.set(index, features.palette.get(index));
+        }
+    }
     auto base_create_pane_args = CreatePaneArgs {
         .command = config.shell.command.clone(),
         .capture_command_output_path = args.capture_command_output_path.transform(di::to_owned),
         .save_state_path = config.input.save_state_path.clone(),
         .terminfo_dir = di::move(maybe_terminfo_dir),
         .term = config.terminfo.term.clone(),
+        .global_palette = global_palette,
+        .theme_mode = features.theme_mode,
     };
     if (replay_mode) {
         base_create_pane_args.replay_path = di::PathView(args.replay_paths[0]).to_owned();
@@ -494,7 +524,7 @@ static auto do_new(Args&, NewBase& args) -> di::Result<> {
     }
 
     // Setup - render thread.
-    auto render_thread = TRY(RenderThread::create(layout_state, set_done, di::clone(config), features));
+    auto render_thread = TRY(RenderThread::create(layout_state, set_done, di::clone(config), features.features));
     auto _ = di::ScopeExit([&] {
         render_thread->request_exit();
     });
@@ -654,9 +684,9 @@ static auto main(Args&, Keybinds& args) -> di::Result<> {
 }
 
 static auto main(Args&, Features& args) -> di::Result<> {
-    auto features = TRY(detect_features(dius::std_in).transform_error([](auto error) {
-        return di::format_error("Failed to detect terminal features: {}"_sv, error);
-    }));
+    auto features = TRY(detect_features(dius::std_in).transform_error([](di::Error error) {
+                        return di::format_error("Failed to detect terminal features: {}"_sv, error);
+                    })).features;
 
     dius::println("{: <30}{: <20}{: <90}"_sv, di::Styled("Feature"_sv, di::FormatEffect::Bold),
                   di::Styled("Is Supported"_sv, di::FormatEffect::Bold),
@@ -767,7 +797,9 @@ static auto main(Args&, ThemeCommand&, ThemeList& args) -> di::Result<> {
 static auto main(Args&, ThemeCommand&, ThemeApplyLocalPalette& args) -> di::Result<> {
     auto theme_json = TRY(config_json::v1::resolve_theme(args.name));
     auto theme = config_json::v1::convert_to_config(di::move(theme_json));
-    auto features = TRY(detect_features(dius::std_in));
+    auto features = TRY(detect_features(dius::std_in).transform_error([](di::Error error) {
+                        return di::format_error("Failed to detect terminal features: {}"_sv, error);
+                    })).features;
     if (!(features & Feature::DynamicPalette) && !(features & Feature::DynamicPaletteKitty)) {
         return di::Unexpected(di::format_error("Terminal does not support setting the local color palette"_sv));
     }
@@ -783,6 +815,30 @@ static auto main(Args&, ThemeCommand&, ThemeApplyLocalPalette& args) -> di::Resu
     }
     dius::print("{}"_sv, string);
     (void) dius::std_out.flush();
+    return {};
+}
+
+static auto main(Args&, ThemeCommand&, ThemeShowLocalPalette&) -> di::Result<> {
+    auto features = TRY(detect_features(dius::std_in).transform_error([](di::Error error) {
+        return di::format_error("Failed to detect terminal features: {}"_sv, error);
+    }));
+    if (!(features.features & Feature::DynamicPalette)) {
+        return di::Unexpected(di::format_error("Terminal does not support getting the local color palette"_sv));
+    }
+    auto theme = config_json::v1::config_from_palette(features.palette);
+    auto string = to_json_string_without_empty_objects(theme);
+    dius::println("{}"_sv, string);
+    return {};
+}
+
+static auto main(Args&, ThemeCommand&, ThemeDetectDarkLightMode&) -> di::Result<> {
+    auto features = TRY(detect_features(dius::std_in).transform_error([](di::Error error) {
+        return di::format_error("Failed to detect terminal features: {}"_sv, error);
+    }));
+    if (!(features.features & Feature::ThemeDetection)) {
+        return di::Unexpected(di::format_error("Terminal does not support theme detection"_sv));
+    }
+    dius::println("{}"_sv, features.theme_mode);
     return {};
 }
 

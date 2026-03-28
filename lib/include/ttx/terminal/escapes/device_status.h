@@ -3,6 +3,7 @@
 #include "di/reflect/prelude.h"
 #include "ttx/escape_sequence_parser.h"
 #include "ttx/key_event_io.h"
+#include "ttx/terminal/palette.h"
 
 namespace ttx::terminal {
 /// @brief Operating status report
@@ -61,6 +62,24 @@ struct KittyKeyReport {
 
     constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<KittyKeyReport>) {
         return di::make_fields<"KittyKeyReport">(di::field<"flags", &KittyKeyReport::flags>);
+    }
+};
+
+/// @brief Dark/Light mode detection report
+///
+/// This is requested via CSI ? 996 n, and indicates whether the user's color preference
+/// (light or dark mode). When unsolicited reports are enabled on palette changes (DEC private mode 2031),
+/// these reports are whenever the terminal's color scheme changes, or the color preference changes.
+struct DarkLightModeDetectionReport {
+    ThemeMode mode { ThemeMode::Dark };
+
+    static auto from_csi(CSI const& csi) -> di::Optional<DarkLightModeDetectionReport>;
+    auto serialize() const -> di::String;
+
+    auto operator==(DarkLightModeDetectionReport const& other) const -> bool = default;
+
+    constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<DarkLightModeDetectionReport>) {
+        return di::make_fields<"DarkLightModeDetectionReport">(di::field<"mode", &DarkLightModeDetectionReport::mode>);
     }
 };
 

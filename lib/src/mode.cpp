@@ -393,7 +393,17 @@ consteval auto make_mode_handler<DecMode::GraphemeClustering>() -> ModeHandler {
 }
 
 template<>
-auto make_mode_handler<DecMode::ThemeDetection>() -> ModeHandler = delete;
+consteval auto make_mode_handler<DecMode::ThemeDetection>() -> ModeHandler {
+    return {
+        .query_mode = [](Terminal& terminal) -> ModeSupport {
+            return terminal.m_send_theme_changes ? ModeSupport::Set : ModeSupport::Unset;
+        },
+        .set_mode =
+            [](Terminal& terminal, bool is_set) {
+                terminal.m_send_theme_changes = is_set;
+            },
+    };
+}
 
 template<>
 consteval auto make_mode_handler<DecMode::InBandSizeReports>() -> ModeHandler {

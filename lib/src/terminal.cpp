@@ -30,11 +30,14 @@
 // #define LOG_UNKNOWN_ESCAPES
 
 namespace ttx {
-Terminal::Terminal(u64 id, Size const& size, terminal::Palette const& palette)
+Terminal::Terminal(u64 id, Size const& size, terminal::Palette const& global_palette,
+                   terminal::Palette const& local_palette, terminal::ThemeMode theme_mode)
     : m_id(id)
     , m_primary_screen(size, terminal::Screen::ScrollBackEnabled::Yes)
     , m_available_size(size)
-    , m_palette(palette) {}
+    , m_theme_mode(theme_mode)
+    , m_local_palette(local_palette)
+    , m_global_palette(global_palette) {}
 
 void Terminal::on_parser_results(di::Span<ParserResult> results) {
     for (auto& result : results) {
@@ -225,6 +228,10 @@ void Terminal::on_parser_result(CSI&& csi) {
             }
             case 'l': {
                 csi_decrst(csi.params);
+                return;
+            }
+            case 'n': {
+                csi_dsr_dec(csi.params);
                 return;
             }
             case 'u': {
@@ -623,7 +630,7 @@ void Terminal::osc_21(di::StringView data) {
         if (request.query) {
             auto& query = queries.requests.emplace_back(di::move(request));
             if (query.palette != terminal::PaletteIndex::Unknown) {
-                query.color = m_palette.get(query.palette);
+                query.color = m_local_palette.get(query.palette).value_or(m_global_palette.get(query.palette));
                 query.query = false;
             }
             continue;
@@ -631,17 +638,15 @@ void Terminal::osc_21(di::StringView data) {
         if (request.color.is_dynamic() && !terminal::Palette::supports_dynamic(request.palette)) {
             continue;
         }
-        m_palette.set(request.palette, request.color);
+        m_local_palette.set(request.palette, request.color);
         palette_did_change = true;
     }
 
     if (palette_did_change) {
         invalidate_all();
-        m_palette.maybe_clear_modifed();
+        m_local_palette.maybe_clear_modifed();
     }
 
-    // TODO: forward to outer terminal to check our palette followed by the outer terminal
-    // for queries we cannot immediately answer.
     if (!queries.requests.empty()) {
         auto const is_kitty = data.starts_with("21"_sv);
         m_outgoing_events.push_back(
@@ -1014,7 +1019,7 @@ void Terminal::csi_sgr(Params const& params) {
     active_screen().screen.set_current_graphics_rendition(rendition);
 }
 
-// Device Status Report - https://vt100.net/docs/vt510-rm/DSR.html
+// Device Status Report (ANSI) - https://vt100.net/docs/vt510-rm/DSR.html
 void Terminal::csi_dsr(Params const& params) {
     switch (params.get(0, 0)) {
         case 5: {
@@ -1026,6 +1031,21 @@ void Terminal::csi_dsr(Params const& params) {
         case 6: {
             // Cursor Position Report - https://vt100.net/docs/vt510-rm/DSR-CPR.html
             auto response = terminal::CursorPositionReport(cursor_row(), cursor_col());
+            m_outgoing_events.push_back(WritePtyString(response.serialize()));
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+// Device Status Report (DEC) - https://vt100.net/docs/vt510-rm/DSR.html
+void Terminal::csi_dsr_dec(Params const& params) {
+    switch (params.get(0, 0)) {
+        case 996: {
+            // Dark/Light Mode Detection Report -
+            // https://contour-terminal.org/vt-extensions/color-palette-update-notifications/
+            auto response = terminal::DarkLightModeDetectionReport(m_theme_mode);
             m_outgoing_events.push_back(WritePtyString(response.serialize()));
             break;
         }
@@ -1262,6 +1282,39 @@ void Terminal::invalidate_all() {
     active_screen().screen.invalidate_all();
 }
 
+void Terminal::set_local_palette(terminal::Palette const& palette) {
+    if (m_local_palette == palette) {
+        return;
+    }
+    m_local_palette = palette;
+    invalidate_all();
+    send_theme_change();
+}
+
+void Terminal::set_global_palette(terminal::Palette const& palette) {
+    if (m_global_palette == palette) {
+        return;
+    }
+    m_global_palette = palette;
+    invalidate_all();
+    send_theme_change();
+}
+
+void Terminal::set_theme_mode(terminal::ThemeMode mode) {
+    if (m_theme_mode == mode) {
+        return;
+    }
+    m_theme_mode = mode;
+    send_theme_change();
+}
+
+void Terminal::send_theme_change() {
+    if (!m_send_theme_changes) {
+        return;
+    }
+    m_outgoing_events.push_back(WritePtyString(terminal::DarkLightModeDetectionReport { m_theme_mode }.serialize()));
+}
+
 void Terminal::clear() {
     active_screen().screen.clear();
 }
@@ -1314,10 +1367,11 @@ void Terminal::soft_reset() {
     cursor.origin_mode = terminal::OriginMode::Disabled;
     screen.restore_cursor(cursor);
     screen.invalidate_all();
-    m_palette.reset();
+    m_local_palette.reset();
 
     m_allow_80_132_col_mode = false;
     m_allow_force_terminal_size = false;
+    m_send_theme_changes = false;
     m_auto_wrap_mode = terminal::AutoWrapMode::Enabled;
     m_mouse_encoding = MouseEncoding::X10;
     m_mouse_protocol = MouseProtocol::None;
@@ -1485,6 +1539,11 @@ auto Terminal::state_as_escape_sequences() const -> di::String {
             di::writer_print<di::String::Encoding>(writer, "\033[>{}s"_sv, i32(m_shift_escape_options));
         }
 
+        // Send theme changes
+        if (m_send_theme_changes) {
+            di::writer_print<di::String::Encoding>(writer, "\033[?2031h"_sv);
+        }
+
         // In band size notifications
         if (m_in_band_size_reports) {
             di::writer_print<di::String::Encoding>(writer, "\033[?2048h"_sv);
@@ -1499,7 +1558,7 @@ auto Terminal::state_as_escape_sequences() const -> di::String {
     // 5. Color palette
     for (auto const palette_int : di::range(u32(terminal::PaletteIndex::Count))) {
         auto const palette = terminal::PaletteIndex(palette_int);
-        auto color = m_palette.get(palette);
+        auto color = m_local_palette.get(palette);
         if (color.is_default()) {
             continue;
         }

@@ -1,6 +1,7 @@
+#include "ttx/features.h"
+
 #include "di/io/vector_writer.h"
 #include "di/io/writer_print.h"
-#include "ttx/features.h"
 #include "ttx/focus_event.h"
 #include "ttx/key_event.h"
 #include "ttx/mouse_event.h"
@@ -44,7 +45,7 @@ constexpr static auto terminfo_queries = di::Array {
 class FeatureDetector {
 public:
     auto done() const -> bool { return m_done; }
-    auto result() const -> Feature { return m_result; }
+    auto result() const -> FeatureResult { return m_result; }
     auto need_to_disable_mode_2027() const { return m_need_to_restore_mode_2027; }
 
     void handle_event(KeyEvent const&) {}
@@ -66,7 +67,7 @@ public:
                     }
                 }
                 if (is_supported) {
-                    m_result |= feature;
+                    m_result.features |= feature;
                 }
             }
         }
@@ -78,7 +79,7 @@ public:
             // Basic grapheme cluster check. The ZWJ emoji sequence
             // should have width 2.
             if (report.col == 2) {
-                m_result |= Feature::BasicGraphemeClustering;
+                m_result.features |= Feature::BasicGraphemeClustering;
             }
             return;
         }
@@ -86,19 +87,19 @@ public:
             // The full grapheme cluster check expects width 1. See
             // below for a detailed explanation.
             if (report.col == 1) {
-                m_result |= Feature::FullGraphemeClustering;
+                m_result.features |= Feature::FullGraphemeClustering;
             }
             return;
         }
         if (report != m_prev_cursor) {
             // Upgrade kitty text sizing support
             if (m_prev_cursor) {
-                if (!(m_result & Feature::TextSizingWidth)) {
-                    m_result |= Feature::TextSizingWidth;
-                } else if (!(m_result & Feature::TextSizingPresentation)) {
-                    m_result |= Feature::TextSizingPresentation;
+                if (!(m_result.features & Feature::TextSizingWidth)) {
+                    m_result.features |= Feature::TextSizingWidth;
+                } else if (!(m_result.features & Feature::TextSizingPresentation)) {
+                    m_result.features |= Feature::TextSizingPresentation;
                 } else {
-                    m_result |= Feature::TextSizingFull;
+                    m_result.features |= Feature::TextSizingFull;
                 }
             }
 
@@ -106,39 +107,52 @@ public:
         }
     }
 
-    void handle_event(terminal::KittyKeyReport const&) { m_result |= Feature::KittyKeyProtocol; }
+    void handle_event(terminal::KittyKeyReport const&) { m_result.features |= Feature::KittyKeyProtocol; }
+
+    void handle_event(terminal::DarkLightModeDetectionReport const& report) { m_result.theme_mode = report.mode; }
 
     void handle_event(terminal::StatusStringResponse const& response) {
         if (response.response.has_value() && response.response.value().contains("4:3m"_sv)) {
-            m_result |= Feature::Undercurl;
+            m_result.features |= Feature::Undercurl;
         }
     }
 
     void handle_event(terminal::TerminfoString const& response) {
         for (auto const& [feature, name] : terminfo_queries) {
             if (response.name == name) {
-                m_result |= feature;
+                m_result.features |= feature;
             }
         }
     }
 
-    void handle_event(terminal::OSC21 const&) { m_result |= Feature::DynamicPaletteKitty; }
+    void handle_event(terminal::OSC21 const& osc) {
+        for (auto const& item : osc.requests) {
+            if (item.palette == terminal::PaletteIndex::Cursor) {
+                if (++m_cursor_color_reports == 2) {
+                    m_result.features |= Feature::DynamicPaletteKitty;
+                }
+            }
+            m_result.features |= Feature::DynamicPalette;
+            m_result.palette.set(item.palette, item.color);
+        }
+    }
 
     void handle_event(terminal::OSC52 const&) {}
 
-    void handle_event(terminal::OSC8671 const&) { m_result |= Feature::SeamlessNavigation; }
+    void handle_event(terminal::OSC8671 const&) { m_result.features |= Feature::SeamlessNavigation; }
 
 private:
-    Feature m_result = Feature::None;
-    bool m_done = false;
+    FeatureResult m_result;
+    bool m_done { false };
 
     // State for detecting text sizing protocol.
     di::Optional<terminal::CursorPositionReport> m_prev_cursor;
     u32 m_cursor_reports { 0 };
+    u32 m_cursor_color_reports { 0 };
     bool m_need_to_restore_mode_2027 { false };
 };
 
-auto detect_features(dius::SyncFile& terminal) -> di::Result<Feature> {
+auto detect_features(dius::SyncFile& terminal) -> di::Result<FeatureResult> {
     // For feature detection, the general strategy is to write a byte series to the host
     // terminal, ending with a query for device attributes. All terminals will respond to
     // the device attributes, so we can determine when a terminal igonres a specific request.
@@ -164,8 +178,24 @@ auto detect_features(dius::SyncFile& terminal) -> di::Result<Feature> {
 
     // OSC 21 query
     auto osc21 = terminal::OSC21 {};
-    osc21.requests.push_back(terminal::OSC21::Request { .query = true, .palette = terminal::PaletteIndex(0) });
+    osc21.requests.push_back(terminal::OSC21::Request { .query = true, .palette = terminal::PaletteIndex::Cursor });
+    osc21.requests.push_back(terminal::OSC21::Request { .query = true, .palette = terminal::PaletteIndex::CursorText });
+    osc21.requests.push_back(
+        terminal::OSC21::Request { .query = true, .palette = terminal::PaletteIndex::SelectionForeground });
+    osc21.requests.push_back(
+        terminal::OSC21::Request { .query = true, .palette = terminal::PaletteIndex::SelectionBackground });
     di::writer_print<di::String::Encoding>(request_buffer, "{}"_sv, osc21.serialize(Feature::DynamicPaletteKitty));
+
+    // Legacy queries to fetch the initial terminal palette.
+    auto legacy_osc21 = terminal::OSC21 {};
+    for (auto index : di::range(u32(terminal::PaletteIndex::Count))) {
+        legacy_osc21.requests.push_back(
+            terminal::OSC21::Request { .query = true, .palette = terminal::PaletteIndex(index) });
+    }
+    di::writer_print<di::String::Encoding>(request_buffer, "{}"_sv, legacy_osc21.serialize(Feature::DynamicPalette));
+
+    // Dark light mode query
+    di::writer_print<di::String::Encoding>(request_buffer, "\033[?996n"_sv);
 
     // OSC 8671 query
     di::writer_print<di::String::Encoding>(

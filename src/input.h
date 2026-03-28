@@ -20,6 +20,7 @@
 #include "ttx/terminal/escapes/osc_8671.h"
 #include "ttx/terminal/escapes/terminfo_string.h"
 #include "ttx/terminal/navigation_direction.h"
+#include "ttx/terminal/palette.h"
 #include "ttx/terminal_input.h"
 
 namespace ttx {
@@ -28,15 +29,15 @@ class RenderThread;
 class InputThread {
 public:
     static auto create(CreatePaneArgs create_pane_args, Config config, config_json::v1::Config base_config,
-                       di::TransparentStringView profile, di::Synchronized<LayoutState>& layout_state, Feature features,
-                       RenderThread& render_thread, SaveLayoutThread& save_layout_thread)
+                       di::TransparentStringView profile, di::Synchronized<LayoutState>& layout_state,
+                       FeatureResult features, RenderThread& render_thread, SaveLayoutThread& save_layout_thread)
         -> di::Result<di::Box<InputThread>>;
     static auto create_mock(di::Synchronized<LayoutState>& layout_state, RenderThread& render_thread,
                             SaveLayoutThread& save_layout_thread) -> di::Box<InputThread>;
 
     explicit InputThread(CreatePaneArgs create_pane_args, Config config, config_json::v1::Config base_config,
                          di::TransparentStringView profile, di::Synchronized<LayoutState>& layout_state,
-                         Feature features, RenderThread& render_thread, SaveLayoutThread& save_layout_thread);
+                         FeatureResult features, RenderThread& render_thread, SaveLayoutThread& save_layout_thread);
     ~InputThread();
 
     void request_exit();
@@ -61,9 +62,10 @@ private:
     void handle_event(terminal::ModeQueryReply&&) {}
     void handle_event(terminal::CursorPositionReport&&) {}
     void handle_event(terminal::KittyKeyReport&&) {}
+    void handle_event(terminal::DarkLightModeDetectionReport&&);
     void handle_event(terminal::StatusStringResponse&&) {}
     void handle_event(terminal::TerminfoString&&) {}
-    void handle_event(terminal::OSC21&&) {}
+    void handle_event(terminal::OSC21&&);
     void handle_event(terminal::OSC52&& event);
     auto handle_event(terminal::OSC8671& event, bool did_timeout) -> bool;
 
@@ -90,6 +92,7 @@ private:
     RenderThread& m_render_thread;
     SaveLayoutThread& m_save_layout_thread;
     Feature m_features { Feature::None };
+    terminal::Palette m_outer_terminal_palette;
     di::MinstdRand m_rng;
     dius::Thread m_thread;
 };

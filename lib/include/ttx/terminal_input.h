@@ -20,8 +20,8 @@
 namespace ttx {
 using Event = di::Variant<KeyEvent, MouseEvent, FocusEvent, PasteEvent, terminal::PrimaryDeviceAttributes,
                           terminal::ModeQueryReply, terminal::CursorPositionReport, terminal::KittyKeyReport,
-                          terminal::StatusStringResponse, terminal::TerminfoString, terminal::OSC21, terminal::OSC52,
-                          terminal::OSC8671>;
+                          terminal::DarkLightModeDetectionReport, terminal::StatusStringResponse,
+                          terminal::TerminfoString, terminal::OSC21, terminal::OSC52, terminal::OSC8671>;
 
 class TerminalInputParser {
 public:

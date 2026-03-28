@@ -3,6 +3,7 @@
 #include "di/format/prelude.h"
 #include "dius/print.h"
 #include "ttx/key_event_io.h"
+#include "ttx/terminal/palette.h"
 
 namespace ttx::terminal {
 auto OperatingStatusReport::from_csi(CSI const& csi) -> di::Optional<OperatingStatusReport> {
@@ -63,6 +64,31 @@ auto KittyKeyReport::from_csi(CSI const& csi) -> di::Optional<KittyKeyReport> {
 
 auto KittyKeyReport::serialize() const -> di::String {
     return di::format("\033[?{}u"_sv, u32(flags));
+}
+
+auto DarkLightModeDetectionReport::from_csi(const CSI& csi) -> di::Optional<DarkLightModeDetectionReport> {
+    if (csi.intermediate != "?"_sv || csi.terminator != 'n') {
+        return {};
+    }
+    if (csi.params.size() != 2) {
+        return {};
+    }
+    if (csi.params.get(0) != 997) {
+        return {};
+    }
+    auto mode = csi.params.get(1);
+    switch (mode) {
+        case 1:
+            return DarkLightModeDetectionReport { .mode = ThemeMode::Dark };
+        case 2:
+            return DarkLightModeDetectionReport { .mode = ThemeMode::Light };
+        default:
+            return {};
+    }
+}
+
+auto DarkLightModeDetectionReport::serialize() const -> di::String {
+    return di::format("\033[?997;{}n"_sv, mode == ThemeMode::Dark ? 1u : 2u);
 }
 
 auto StatusStringResponse::from_dcs(DCS const& dcs) -> di::Optional<StatusStringResponse> {
