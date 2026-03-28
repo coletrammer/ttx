@@ -61,7 +61,8 @@ class Terminal {
     };
 
 public:
-    explicit Terminal(u64 id, Size const& size, terminal::Palette const& palette);
+    explicit Terminal(u64 id, Size const& size, terminal::Palette const& global_palette,
+                      terminal::Palette const& local_palette, terminal::ThemeMode theme_mode);
 
     // Return a string which when replayed will result in the terminal
     // having state identical to the current state.
@@ -126,11 +127,14 @@ public:
                active_screen().m_seamless_navigate_protocol_hide_cursor_on_enter;
     }
 
-    auto palette() const -> terminal::Palette const& { return m_palette; }
-    auto set_palette(terminal::Palette const& palette) {
-        m_palette = palette;
-        invalidate_all();
-    }
+    auto local_palette() const -> terminal::Palette const& { return m_local_palette; }
+    void set_local_palette(terminal::Palette const& palette);
+
+    auto global_palette() const -> terminal::Palette const& { return m_global_palette; }
+    void set_global_palette(terminal::Palette const& palette);
+
+    void set_theme_mode(terminal::ThemeMode mode);
+    void send_theme_change();
 
 private:
     template<auto>
@@ -220,6 +224,7 @@ private:
     void csi_decscusr(Params const& params);
     void csi_sgr(Params const& params);
     void csi_dsr(Params const& params);
+    void csi_dsr_dec(Params const& params);
     void csi_decstbm(Params const& params);
     void csi_scosc(Params const& params);
     void csi_scorc(Params const& params);
@@ -246,13 +251,17 @@ private:
     bool m_force_terminal_size { false };
     bool m_allow_force_terminal_size { false };
 
+    terminal::ThemeMode m_theme_mode { terminal::ThemeMode::Dark };
+    bool m_send_theme_changes { false };
+
     di::Vector<u32> m_tab_stops;
     bool m_cursor_hidden { false };
     bool m_disable_drawing { false };
     terminal::AutoWrapMode m_auto_wrap_mode { terminal::AutoWrapMode::Enabled };
     bool m_reverse_video { false };
     di::Optional<c32> m_last_graphics_charcter { 0 };
-    terminal::Palette m_palette {};
+    terminal::Palette m_local_palette {};
+    terminal::Palette m_global_palette {};
 
     ApplicationCursorKeysMode m_application_cursor_keys_mode { ApplicationCursorKeysMode::Disabled };
 

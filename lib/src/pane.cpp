@@ -76,8 +76,9 @@ auto Pane::create_from_replay(u64 id, di::Optional<di::Path> cwd, di::PathView r
     auto replay_file = TRY(dius::open_sync(replay_path, dius::OpenMode::Readonly));
 
     // When replaying content, there is no need for any threads, a psudeo terminal or a sub-process.
-    auto pane = di::make_box<Pane>(id, di::move(cwd), dius::SyncFile(), size, dius::system::ProcessHandle(),
-                                   terminal::Palette {}, di::move(hooks));
+    auto pane =
+        di::make_box<Pane>(id, di::move(cwd), dius::SyncFile(), size, dius::system::ProcessHandle(),
+                           terminal::Palette {}, terminal::Palette {}, terminal::ThemeMode::Dark, di::move(hooks));
 
     // Allow the terminal to use CSI 8; height; width; t. Normally this would be ignored since application
     // shouldn't control this.
@@ -174,8 +175,8 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
     }
 
     auto process = TRY(spawn_child(args, pty_controller, size, stdin_fd, stdout_fd, extra_fd, close_fds));
-    auto pane = di::make_box<Pane>(id, di::move(args.cwd), di::move(pty_controller), size, process, args.palette,
-                                   di::move(args.hooks));
+    auto pane = di::make_box<Pane>(id, di::move(args.cwd), di::move(pty_controller), size, process, args.global_palette,
+                                   args.local_palette, args.theme_mode, di::move(args.hooks));
 #ifdef __linux__
     pane->m_restore_termios = di::move(restore_termios);
 #endif
@@ -310,7 +311,8 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
 auto Pane::create_mock(u64 id, di::Optional<di::Path> cwd) -> di::Box<Pane> {
     auto fake_psuedo_terminal = dius::SyncFile();
     return di::make_box<Pane>(id, di::move(cwd), di::move(fake_psuedo_terminal), Size(1, 1),
-                              dius::system::ProcessHandle(), terminal::Palette {}, PaneHooks {});
+                              dius::system::ProcessHandle(), terminal::Palette {}, terminal::Palette {},
+                              terminal::ThemeMode::Dark, PaneHooks {});
 }
 
 Pane::~Pane() {
@@ -326,7 +328,7 @@ Pane::~Pane() {
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 auto Pane::draw(Renderer& renderer) -> RenderedCursor {
     auto rendered_cursor = m_terminal.with_lock([&](Terminal& terminal) {
-        auto const& palette = terminal.palette();
+        auto const& palette = terminal.local_palette();
         auto _ =
             palette.modified() ? renderer.set_local_palette(palette) : di::ScopeExit(di::make_function<void()>([] {}));
 
@@ -862,11 +864,38 @@ auto Pane::seamless_navigate(terminal::OSC8671&& osc_8671) -> bool {
     return result;
 }
 
-void Pane::update_palette(di::FunctionRef<void(terminal::Palette&)> update) {
-    m_terminal.with_lock([&](Terminal& terminal) {
-        auto palette = terminal.palette();
+void Pane::update_local_palette(di::FunctionRef<void(terminal::Palette&)> update) {
+    auto events = m_terminal.with_lock([&](Terminal& terminal) {
+        auto palette = terminal.local_palette();
         update(palette);
-        terminal.set_palette(palette);
+        terminal.set_local_palette(palette);
+        return terminal.outgoing_events();
     });
+
+    for (auto&& event : events) {
+        handle_terminal_event(di::move(event));
+    }
+}
+
+void Pane::set_global_palette(terminal::Palette const& palette) {
+    auto events = m_terminal.with_lock([&](Terminal& terminal) {
+        terminal.set_global_palette(palette);
+        return terminal.outgoing_events();
+    });
+
+    for (auto&& event : events) {
+        handle_terminal_event(di::move(event));
+    }
+}
+
+void Pane::set_theme_mode(terminal::ThemeMode theme_mode) {
+    auto events = m_terminal.with_lock([&](Terminal& terminal) {
+        terminal.set_theme_mode(theme_mode);
+        return terminal.outgoing_events();
+    });
+
+    for (auto&& event : events) {
+        handle_terminal_event(di::move(event));
+    }
 }
 }

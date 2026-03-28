@@ -95,6 +95,12 @@ auto Renderer::setup(dius::SyncFile& output, Feature features, ClipboardMode cli
         m_cleanup.push_back("\033[?2027l"_s);
     }
 
+    // Setup - request theme change events
+    if (!!(features & Feature::ThemeDetection)) {
+        di::writer_print<di::String::Encoding>(buffer, "\033[?2031h"_sv);
+        m_cleanup.push_back("\033[?2031l"_s);
+    }
+
     // Setup - requests clipboard to initialize state and determine if the host terminal
     // supports OSC 52. This is gated by the feature flag and clipboard configuration.
     if (!!(features & Feature::Clipboard) && clipboard_mode == ClipboardMode::System) {

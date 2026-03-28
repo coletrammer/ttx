@@ -3,6 +3,7 @@
 #include "di/reflect/prelude.h"
 #include "di/util/bitwise_enum.h"
 #include "dius/sync_file.h"
+#include "ttx/terminal/palette.h"
 
 namespace ttx {
 enum class Feature : u64 {
@@ -62,5 +63,11 @@ constexpr auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<Feature>) {
                        "Supports setting the color palette via kitty color protocol (OSC 21)">);
 }
 
-auto detect_features(dius::SyncFile& terminal) -> di::Result<Feature>;
+struct FeatureResult {
+    Feature features { Feature::None };
+    terminal::Palette palette {};
+    terminal::ThemeMode theme_mode { terminal::ThemeMode::Dark };
+};
+
+auto detect_features(dius::SyncFile& terminal) -> di::Result<FeatureResult>;
 }

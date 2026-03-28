@@ -787,7 +787,7 @@ auto switch_theme() -> Action {
 
                                     layout_state.with_lock([&](LayoutState& state) {
                                         for (auto& pane : state.active_popup()) {
-                                            pane.update_palette([&](terminal::Palette& palette) {
+                                            pane.update_local_palette([&](terminal::Palette& palette) {
                                                 palette = new_config.value().colors;
                                                 FzfCommand::update_palette_with_indirect_fzf_colors(
                                                     palette, new_config.value().fzf.colors);
@@ -798,7 +798,7 @@ auto switch_theme() -> Action {
                                     input_thread.set_config(di::clone(new_config.value()));
                                     render_thread.set_config(di::clone(new_config.value()));
                                 });
-                            create_pane_args.palette = [&] {
+                            create_pane_args.local_palette = [&] {
                                 auto palette = context.config.colors;
                                 FzfCommand::update_palette_with_indirect_fzf_colors(palette, context.config.fzf.colors);
                                 return palette;

@@ -8,6 +8,7 @@
 #include "ttx/layout.h"
 #include "ttx/layout_json.h"
 #include "ttx/popup.h"
+#include "ttx/terminal/palette.h"
 
 namespace ttx {
 class LayoutState {
@@ -52,6 +53,8 @@ public:
                          InputThread& input_thread) -> di::Result<>;
     auto restore_json(json::Layout const& json, CreatePaneArgs args, RenderThread& render_thread,
                       InputThread& input_thread) -> di::Result<>;
+
+    void for_each_pane(di::FunctionRef<void(Pane&)>);
 
 private:
     di::Function<void()> m_layout_did_update;

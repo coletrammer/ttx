@@ -7,7 +7,18 @@
 #include "ttx/terminal/color.h"
 
 namespace ttx::terminal {
-///< @brief Extended palette index which includes dynamic colors
+/// @brief Theme mode (light or dark)
+enum class ThemeMode {
+    Light,
+    Dark,
+};
+
+constexpr static auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<ThemeMode>) {
+    using enum ThemeMode;
+    return di::make_enumerators<"ThemeMode">(di::enumerator<"light", Light>, di::enumerator<"dark", Dark>);
+}
+
+/// @brief Extended palette index which includes dynamic colors
 ///
 /// The first 256 indices correspond to traditional "palette" colors
 /// (Color::Palette), with the first 16 being traditional ansi colors.

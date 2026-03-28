@@ -200,6 +200,14 @@ void LayoutState::layout_did_update() {
     }
 }
 
+void LayoutState::for_each_pane(di::FunctionRef<void(Pane&)> action) {
+    for (auto const& session : m_sessions) {
+        for (auto const& tab : session->tabs()) {
+            tab->for_each_pane(action);
+        }
+    }
+}
+
 auto LayoutState::as_json_v1() const -> json::v1::LayoutState {
     auto json = json::v1::LayoutState {};
     if (m_active_session) {

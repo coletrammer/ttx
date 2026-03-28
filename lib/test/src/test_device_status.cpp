@@ -2,6 +2,7 @@
 #include "ttx/escape_sequence_parser.h"
 #include "ttx/key_event_io.h"
 #include "ttx/terminal/escapes/device_status.h"
+#include "ttx/terminal/palette.h"
 
 namespace device_status {
 using namespace ttx;
@@ -172,6 +173,69 @@ static void test_serialize_kitty_key_report() {
     }
 }
 
+static void test_parse_dark_light_mode_report() {
+    struct Case {
+        CSI input {};
+        di::Optional<DarkLightModeDetectionReport> expected {};
+    };
+
+    auto cases = di::Array {
+        // Valid.
+        Case {
+            CSI { .intermediate = "?"_s, .params = { { 997 }, { 1 } }, .terminator = 'n' },
+            DarkLightModeDetectionReport { ThemeMode::Dark },
+        },
+        Case {
+            CSI { .intermediate = "?"_s, .params = { { 997 }, { 2 } }, .terminator = 'n' },
+            DarkLightModeDetectionReport { ThemeMode::Light },
+        },
+        // Invalid.
+        Case {
+            CSI(),
+        },
+        Case {
+            CSI { .intermediate = "?"_s, .params = { { 997 }, { 1 }, { 0 } }, .terminator = 'u' },
+        },
+        Case {
+            CSI { .params = { { 991 }, { 1 } }, .terminator = 'u' },
+        },
+        Case {
+            CSI { .intermediate = "?"_s, .params = { { 997 } }, .terminator = 'u' },
+        },
+        Case {
+            CSI { .intermediate = "?"_s, .params = { { 997 }, { 2 } }, .terminator = 'm' },
+        },
+    };
+
+    for (auto const& [input, expected] : cases) {
+        auto result = DarkLightModeDetectionReport::from_csi(input);
+        ASSERT_EQ(expected, result);
+    }
+}
+
+static void test_serialize_dark_light_mode_report() {
+    struct Case {
+        DarkLightModeDetectionReport input {};
+        di::StringView expected {};
+    };
+
+    auto cases = di::Array {
+        Case {
+            DarkLightModeDetectionReport { ThemeMode::Dark },
+            "\033[?997;1n"_sv,
+        },
+        Case {
+            DarkLightModeDetectionReport { ThemeMode::Light },
+            "\033[?997;2n"_sv,
+        },
+    };
+
+    for (auto const& [input, expected] : cases) {
+        auto result = input.serialize();
+        ASSERT_EQ(expected, result);
+    }
+}
+
 static void test_parse_status_string_response() {
     struct Case {
         DCS input {};
@@ -229,6 +293,8 @@ TEST(device_status, test_parse_cursor_position_report)
 TEST(device_status, test_serialize_cursor_position_report)
 TEST(device_status, test_parse_kitty_key_report)
 TEST(device_status, test_serialize_kitty_key_report)
+TEST(device_status, test_parse_dark_light_mode_report)
+TEST(device_status, test_serialize_dark_light_mode_report)
 TEST(device_status, test_parse_status_string_response)
 TEST(device_status, test_serialize_status_string_response)
 }

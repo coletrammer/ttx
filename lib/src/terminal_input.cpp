@@ -101,6 +101,9 @@ void TerminalInputParser::handle(CSI const& csi) {
     if (auto kitty_key_report = terminal::KittyKeyReport::from_csi(csi)) {
         m_events.emplace_back(di::move(kitty_key_report).value());
     }
+    if (auto dark_light_mode_report = terminal::DarkLightModeDetectionReport::from_csi(csi)) {
+        m_events.emplace_back(di::move(dark_light_mode_report).value());
+    }
     if (is_bracketed_paste_begin(csi)) {
         m_in_bracketed_paste = true;
     }

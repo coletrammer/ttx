@@ -414,6 +414,12 @@ void Tab::layout_did_update() {
     m_session->layout_did_update();
 }
 
+void Tab::for_each_pane(di::FunctionRef<void(Pane&)> action) {
+    for (auto* pane : m_panes_ordered_by_recency) {
+        action(*pane);
+    }
+}
+
 auto Tab::as_json_v1() const -> json::v1::Tab {
     auto json = json::v1::Tab {};
     json.name = name().to_owned();

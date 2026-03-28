@@ -65,7 +65,9 @@ struct CreatePaneArgs {
                  cwd.clone(),
                  terminfo_dir.clone(),
                  term.clone(),
-                 palette,
+                 global_palette,
+                 local_palette,
+                 theme_mode,
                  pipe_output,
                  pipe_extra_output,
                  mock,
@@ -86,7 +88,9 @@ struct CreatePaneArgs {
     di::Optional<di::Path> cwd {};
     di::Optional<di::Path> terminfo_dir {};
     di::TransparentString term { "xterm-ttx"_ts };
-    terminal::Palette palette {};
+    terminal::Palette global_palette {};
+    terminal::Palette local_palette {};
+    terminal::ThemeMode theme_mode { terminal::ThemeMode::Dark };
     bool pipe_output { false };
     bool pipe_extra_output { false }; ///< Create a pipe on fd 3 and read from it
     bool mock { false };
@@ -104,10 +108,11 @@ public:
     static auto create_mock(u64 id = 0, di::Optional<di::Path> cwd = {}) -> di::Box<Pane>;
 
     explicit Pane(u64 id, di::Optional<di::Path> cwd, dius::SyncFile pty_controller, Size const& size,
-                  dius::system::ProcessHandle process, terminal::Palette const& palette, PaneHooks hooks)
+                  dius::system::ProcessHandle process, terminal::Palette const& global_palette,
+                  terminal::Palette const& local_palette, terminal::ThemeMode theme_mode, PaneHooks hooks)
         : m_id(id)
         , m_pty_controller(di::move(pty_controller))
-        , m_terminal(di::in_place, id, size, palette)
+        , m_terminal(di::in_place, id, size, global_palette, local_palette, theme_mode)
         , m_process(process)
         , m_cwd(di::move(cwd))
         , m_hooks(di::move(hooks)) {}
@@ -153,7 +158,10 @@ public:
     /// reports, which require shell integration to work.
     auto current_working_directory() const -> di::Optional<di::PathView> { return m_cwd.transform(&di::Path::view); }
 
-    void update_palette(di::FunctionRef<void(terminal::Palette&)> update);
+    void update_local_palette(di::FunctionRef<void(terminal::Palette&)> update);
+
+    void set_global_palette(terminal::Palette const& palette);
+    void set_theme_mode(terminal::ThemeMode theme_mode);
 
 private:
     void handle_terminal_event(TerminalEvent&& event);

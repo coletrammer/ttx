@@ -82,6 +82,8 @@ public:
 
     auto popup_layout() const -> di::Optional<LayoutEntry> { return m_popup_layout; }
 
+    void for_each_pane(di::FunctionRef<void(Pane&)> action);
+
     void layout_did_update();
     auto as_json_v1() const -> json::v1::Tab;
 

@@ -314,6 +314,7 @@ auto resolve_profile(di::TransparentStringView profile, Config&& cli_config = {}
     -> di::Result<ttx::Config>;
 auto config_with_defaults(Config&& config) -> Config;
 auto resolve_theme(di::TransparentStringView name) -> di::Result<config_json::v1::Config>;
+auto config_from_palette(terminal::Palette const& palette) -> config_json::v1::Config;
 void strip_empty_objects(di::json::Object& object);
 auto list_themes(ThemeSource source) -> di::Result<di::Vector<ListedTheme>>;
 auto built_in_themes() -> di::TreeMap<di::TransparentString, config_json::v1::Config> const&;

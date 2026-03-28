@@ -16,6 +16,7 @@
 #include "ttx/mouse_event.h"
 #include "ttx/pane.h"
 #include "ttx/paste_event.h"
+#include "ttx/terminal/escapes/device_status.h"
 #include "ttx/terminal/escapes/osc_52.h"
 #include "ttx/terminal/escapes/osc_8671.h"
 #include "ttx/terminal/navigation_direction.h"
@@ -25,7 +26,7 @@
 namespace ttx {
 auto InputThread::create(CreatePaneArgs create_pane_args, Config config, config_json::v1::Config base_config,
                          di::TransparentStringView profile, di::Synchronized<LayoutState>& layout_state,
-                         Feature features, RenderThread& render_thread, SaveLayoutThread& save_layout_thread)
+                         FeatureResult features, RenderThread& render_thread, SaveLayoutThread& save_layout_thread)
     -> di::Result<di::Box<InputThread>> {
     auto result = di::make_box<InputThread>(di::move(create_pane_args), di::move(config), di::move(base_config),
                                             profile, layout_state, features, render_thread, save_layout_thread);
@@ -38,12 +39,12 @@ auto InputThread::create(CreatePaneArgs create_pane_args, Config config, config_
 auto InputThread::create_mock(di::Synchronized<LayoutState>& layout_state, RenderThread& render_thread,
                               SaveLayoutThread& save_layout_thread) -> di::Box<InputThread> {
     return di::make_box<InputThread>(CreatePaneArgs {}, Config {}, config_json::v1::Config {}, ""_tsv, layout_state,
-                                     Feature::All, render_thread, save_layout_thread);
+                                     FeatureResult { Feature::All }, render_thread, save_layout_thread);
 }
 
 InputThread::InputThread(CreatePaneArgs create_pane_args, Config config, config_json::v1::Config base_config,
                          di::TransparentStringView profile, di::Synchronized<LayoutState>& layout_state,
-                         Feature features, RenderThread& render_thread, SaveLayoutThread& save_layout_thread)
+                         FeatureResult features, RenderThread& render_thread, SaveLayoutThread& save_layout_thread)
     : m_config(di::move(config))
     , m_base_config(di::move(base_config))
     , m_profile(profile)
@@ -52,7 +53,8 @@ InputThread::InputThread(CreatePaneArgs create_pane_args, Config config, config_
     , m_layout_state(layout_state)
     , m_render_thread(render_thread)
     , m_save_layout_thread(save_layout_thread)
-    , m_features(features)
+    , m_features(features.features)
+    , m_outer_terminal_palette(features.palette)
     , m_rng(u32(dius::SteadyClock::now().time_since_epoch().count())) {}
 
 InputThread::~InputThread() {
@@ -78,11 +80,29 @@ void InputThread::set_input_mode(InputMode mode) {
 }
 
 void InputThread::set_config(Config config) {
+    auto palette_did_change = config.colors != m_config.colors;
     m_config = di::move(config);
     m_key_binds = make_key_binds(m_config.input, m_create_pane_args.replay_path.has_value());
     m_create_pane_args.command = m_config.shell.command.clone();
     m_create_pane_args.save_state_path = config.input.save_state_path.clone();
     m_create_pane_args.term = config.terminfo.term.clone();
+
+    if (palette_did_change) {
+        auto global_palette = m_config.colors;
+        for (auto index_number : di::range(u32(terminal::PaletteIndex::Count))) {
+            auto index = terminal::PaletteIndex(index_number);
+            if (global_palette.get(index).is_default()) {
+                global_palette.set(index, m_outer_terminal_palette.get(index));
+            }
+        }
+
+        m_layout_state.with_lock([&](LayoutState& state) {
+            state.for_each_pane([&](Pane& pane) {
+                pane.set_global_palette(global_palette);
+            });
+        });
+        m_create_pane_args.global_palette = global_palette;
+    }
 }
 
 void InputThread::input_thread() {
@@ -289,6 +309,61 @@ void InputThread::handle_event(MouseEvent&& event) {
             m_drag_origin = ev.position().in_cells();
         }
     });
+}
+
+void InputThread::handle_event(terminal::DarkLightModeDetectionReport&& report) {
+    if (report.mode != m_create_pane_args.theme_mode) {
+        m_create_pane_args.theme_mode = report.mode;
+        m_layout_state.with_lock([&](LayoutState& state) {
+            state.for_each_pane([&](Pane& pane) {
+                pane.set_theme_mode(report.mode);
+            });
+        });
+    }
+
+    // Since the outer terminal's palette changed, we need to re-request all
+    // colors.
+    auto osc21 = terminal::OSC21 {};
+    for (auto index_number : di::range(u32(terminal::PaletteIndex::Count))) {
+        if (index_number >= u32(terminal::PaletteIndex::SpecialBegin) &&
+            index_number <= u32(terminal::PaletteIndex::SpecialEnd)) {
+            continue;
+        }
+        auto index = terminal::PaletteIndex(index_number);
+        osc21.requests.push_back(terminal::OSC21::Request { .query = true, .palette = index });
+    }
+    m_render_thread.push_event(WriteString { osc21.serialize(m_features) });
+}
+
+void InputThread::handle_event(terminal::OSC21&& osc21) {
+    auto did_change = false;
+    for (auto const& item : osc21.requests) {
+        if (m_create_pane_args.global_palette.get(item.palette) != item.color) {
+            m_outer_terminal_palette.set(item.palette, item.color);
+            did_change = true;
+        }
+    }
+    if (did_change) {
+        // The global palette, which is used for resolving palette queries, is determined
+        // by merging our configured palette with the outer terminal's actual colors. When
+        // rendering, we do not use the resolved palette colors, so this is only used for
+        // replying to application requests to fetch the value of terminal colors. This also
+        // forwards theme change events from the outer terminal to inner applications.
+        auto global_palette = m_config.colors;
+        for (auto index_number : di::range(u32(terminal::PaletteIndex::Count))) {
+            auto index = terminal::PaletteIndex(index_number);
+            if (global_palette.get(index).is_default()) {
+                global_palette.set(index, m_outer_terminal_palette.get(index));
+            }
+        }
+
+        m_layout_state.with_lock([&](LayoutState& state) {
+            state.for_each_pane([&](Pane& pane) {
+                pane.set_global_palette(global_palette);
+            });
+        });
+        m_create_pane_args.global_palette = global_palette;
+    }
 }
 
 void InputThread::handle_event(FocusEvent&& event) {
