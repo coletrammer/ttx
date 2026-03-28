@@ -821,4 +821,16 @@ auto Color::to_string() const -> di::String {
     }
     return di::format("#{:02x}{:02x}{:02x}"_sv, r, g, b);
 }
+
+auto Color::brightness() const -> f64 {
+    if (!is_custom()) {
+        return 0;
+    }
+
+    // Use this algorithm: https://www.w3.org/TR/AERT/#color-contrast
+    auto const red = r / 255.0;
+    auto const green = g / 255.0;
+    auto const blue = b / 255.0;
+    return (red * 299 + green * 587 + blue * 114) / 1000;
+}
 }

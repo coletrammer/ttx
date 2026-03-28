@@ -407,7 +407,9 @@ auto reload_config() -> Action {
         .description = "Reload configuration files"_s,
         .apply =
             [](ActionContext const& context) {
-                auto new_config = config_json::v1::resolve_profile(context.profile, di::clone(context.base_config));
+                auto new_config = config_json::v1::resolve_profile(context.profile, context.create_pane_args.theme_mode,
+                                                                   context.input_thread.outer_terminal_palette(),
+                                                                   di::clone(context.base_config));
                 if (!new_config) {
                     context.render_thread.status_message(
                         di::format("Failed to load configuration: {}"_sv, new_config.error()));
@@ -716,14 +718,15 @@ auto switch_theme() -> Action {
         .description = "Switch the current theme using fzf"_s,
         .apply =
             [](ActionContext const& context) {
-                auto themes = config_json::v1::list_themes(ThemeSource::All);
+                auto themes =
+                    config_json::v1::list_themes(ThemeSource::All, context.input_thread.outer_terminal_palette());
                 if (!themes) {
                     context.render_thread.status_message(di::format("Failed to list themes: {}"_sv, themes.error()));
                 }
                 auto original_theme = di::clone(context.config.theme.name);
                 auto theme_names = di::Vector<di::String> {};
                 theme_names.push_back(di::format("{}"_sv, original_theme));
-                for (auto const& [name, source] : themes.value()) {
+                for (auto const& [name, source, _, _] : themes.value()) {
                     if (name != context.config.theme.name) {
                         theme_names.push_back(di::format("{}"_sv, name));
                     }
@@ -756,8 +759,9 @@ auto switch_theme() -> Action {
                                     }
                                     auto base_config = di::clone(input_thread.base_config());
                                     base_config.theme.name = di::to_utf8_string_lossy(name_ts);
-                                    auto new_config =
-                                        config_json::v1::resolve_profile(input_thread.profile(), di::move(base_config));
+                                    auto new_config = config_json::v1::resolve_profile(
+                                        input_thread.profile(), input_thread.create_pane_args().theme_mode,
+                                        input_thread.outer_terminal_palette(), di::move(base_config));
                                     if (!new_config) {
                                         render_thread.status_message(
                                             di::format("Failed to load configuration: {}"_sv, new_config.error()));
@@ -777,29 +781,29 @@ auto switch_theme() -> Action {
                                     }
                                     auto base_config = di::clone(input_thread.base_config());
                                     base_config.theme.name = di::to_utf8_string_lossy(name_ts);
-                                    auto new_config =
-                                        config_json::v1::resolve_profile(input_thread.profile(), di::move(base_config));
+                                    auto new_config = config_json::v1::resolve_profile(
+                                        input_thread.profile(), input_thread.create_pane_args().theme_mode,
+                                        input_thread.outer_terminal_palette(), di::move(base_config));
                                     if (!new_config) {
                                         render_thread.status_message(
                                             di::format("Failed to load configuration: {}"_sv, new_config.error()));
                                         return;
                                     }
 
+                                    input_thread.set_config(di::clone(new_config.value()));
                                     layout_state.with_lock([&](LayoutState& state) {
                                         for (auto& pane : state.active_popup()) {
                                             pane.update_local_palette([&](terminal::Palette& palette) {
-                                                palette = new_config.value().colors;
+                                                palette = input_thread.create_pane_args().global_palette;
                                                 FzfCommand::update_palette_with_indirect_fzf_colors(
                                                     palette, new_config.value().fzf.colors);
                                             });
                                         }
                                     });
-
-                                    input_thread.set_config(di::clone(new_config.value()));
                                     render_thread.set_config(di::clone(new_config.value()));
                                 });
                             create_pane_args.local_palette = [&] {
-                                auto palette = context.config.colors;
+                                auto palette = context.create_pane_args.global_palette;
                                 FzfCommand::update_palette_with_indirect_fzf_colors(palette, context.config.fzf.colors);
                                 return palette;
                             }();

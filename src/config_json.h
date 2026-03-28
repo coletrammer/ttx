@@ -10,6 +10,7 @@
 #include "theme.h"
 #include "ttx/key.h"
 #include "ttx/terminal/color.h"
+#include "ttx/terminal/palette.h"
 
 namespace ttx::config_json::v1 {
 struct Input {
@@ -245,25 +246,34 @@ struct Terminfo {
 };
 
 struct Theme {
-    di::Optional<di::String> name;
+    di::Optional<di::String> name {};
+    di::Optional<di::String> dark {};
+    di::Optional<di::String> light {};
 
     constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<Theme>) {
-        return di::make_fields<"Theme", "Configure the theme ttx will use">(
+        return di::make_fields<"Theme",
+                               "Configure the theme ttx will use. You can specify dark/light preference aware "
+                               "themes by specifying both the 'dark' and 'light' fields instead of the 'name' field">(
             di::field<
                 "name", &Theme::name,
                 "The named theme to use. When not set, ttx will try to auto-detect your terminal's color "
-                "scheme against the list built-in theme, unless theme auto detection is disabled via "
-                "config or `--detect-theme=disabled`. When auto detection fails, the standard 16 ANS colors "
-                "will be used, with the theme name set to 'ansi'. When providing a named theme, "
+                "scheme against the list available themes. When auto detection fails, the standard 16 ANSI colors "
+                "will be used, with the theme name set to 'ansi'. You can disable theme detection by explicitly "
+                "setting the theme to a specific theme or to 'ansi'. When providing a named theme, "
                 "ttx first searches the directory `$XDG_CONFIG_HOME/ttx/themes` for a JSON configuration file "
                 "matching the name. The file's name should be the theme's name followed by `.json`. Custom "
-                "themes use the same JSON schema as normal configuration files, and can include any property. "
-                "However, built-in themes only configure colors. "
-                "When no custom theme is found, ttx searches its set of built-in schemes. The "
-                "built-in themes are taken from the [tinted terminal "
-                "repository](https://github.com/tinted-theming/tinted-terminal). Configuration defined in a theme "
+                "themes use the same JSON schema as normal configuration files, and can include any property (but "
+                "cannot extend other files). When no custom theme is found, ttx searches its set of built-in themes. "
+                "The built-in themes are taken from the [iTerm2 Color Schemes "
+                "repository](https://github.com/mbadolato/iTerm2-Color-Schemes). Configuration defined in a theme "
                 "has lower precedence than any setting defined in a configuration file. If you want settings to be "
-                "modifable by the theme you select you cannot specify the option your main configuration file">);
+                "modifable by the theme you select you cannot specify the option your main configuration file">,
+            di::field<"dark", &Theme::dark,
+                      "Theme to use when the color preference is 'dark'. When not specified the named theme will "
+                      "be used">,
+            di::field<
+                "light", &Theme::light,
+                "Theme to use when the color preference is 'light'. When not specified the named theme will be used">);
     }
 };
 
@@ -307,16 +317,21 @@ struct Config {
 
 auto list_custom_themes() -> di::Result<di::Vector<ListedTheme>>;
 auto resolve_custom_theme(di::TransparentStringView name) -> di::Result<Config>;
-auto resolve_profile_to_json(di::TransparentStringView profile, Config&& cli_config = {},
-                             bool should_resolve_theme = false) -> di::Result<Config>;
+auto resolve_profile_to_json(di::TransparentStringView profile, terminal::ThemeMode theme_preference,
+                             terminal::Palette const& palette, Config&& cli_config = {}, bool resolve_theme = true)
+    -> di::Result<Config>;
 auto convert_to_config(Config&& config) -> ttx::Config;
-auto resolve_profile(di::TransparentStringView profile, Config&& cli_config = {}, bool resolve_theme = true)
-    -> di::Result<ttx::Config>;
+auto resolve_profile(di::TransparentStringView profile, terminal::ThemeMode theme_preference,
+                     terminal::Palette const& outer_terminal_palette, Config&& cli_config = {},
+                     bool resolve_theme = true) -> di::Result<ttx::Config>;
 auto config_with_defaults(Config&& config) -> Config;
-auto resolve_theme(di::TransparentStringView name) -> di::Result<config_json::v1::Config>;
+auto resolve_theme(di::TransparentStringView name, terminal::Palette const& outer_terminal_palette)
+    -> di::Result<config_json::v1::Config>;
 auto config_from_palette(terminal::Palette const& palette) -> config_json::v1::Config;
 void strip_empty_objects(di::json::Object& object);
-auto list_themes(ThemeSource source) -> di::Result<di::Vector<ListedTheme>>;
+auto list_themes(ThemeSource source, terminal::Palette const& outer_terminal_palette)
+    -> di::Result<di::Vector<ListedTheme>>;
+auto iterm2_themes() -> di::TreeMap<di::TransparentString, config_json::v1::Config> const&;
 auto built_in_themes() -> di::TreeMap<di::TransparentString, config_json::v1::Config> const&;
 auto json_schema() -> di::json::Object;
 auto nix_options() -> di::String;

@@ -1,8 +1,7 @@
 #pragma once
 
-#include <di/util/scope_exit.h>
-
 #include "di/container/string/string_view.h"
+#include "di/util/scope_exit.h"
 #include "dius/sync_file.h"
 #include "ttx/clipboard.h"
 #include "ttx/cursor_style.h"

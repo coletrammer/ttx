@@ -10,7 +10,7 @@ static void resolution() {
     auto& env = const_cast<di::TreeMap<di::TransparentString, di::TransparentString>&>(dius::system::get_environment());
     env["XDG_CONFIG_HOME"_ts] = CONFIG_FILES ""_ts;
 
-    auto config = ttx::config_json::v1::resolve_profile("test-config"_tsv, {});
+    auto config = ttx::config_json::v1::resolve_profile("test-config"_tsv, {}, {});
     auto palette = ttx::terminal::Palette {};
     palette.set(ttx::terminal::PaletteIndex(0), ttx::terminal::Color(255, 0, 0));
     palette.set(ttx::terminal::PaletteIndex(1), ttx::terminal::Color());
@@ -64,7 +64,7 @@ static void resolution() {
 
     auto error = di::Optional<di::Error> {};
     if (!config) {
-        error = di::move(config).error();
+        error = di::move(config.error());
     }
     ASSERT_EQ(error, di::nullopt);
     di::tuple_for_each(

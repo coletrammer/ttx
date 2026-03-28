@@ -1,9 +1,9 @@
 #pragma once
 
-#include <di/function/value.h>
-#include <di/parser/basic/match_zero_or_more.h>
-
+#include "di/function/value.h"
+#include "di/parser/basic/match_zero_or_more.h"
 #include "di/reflect/prelude.h"
+#include "di/types/floats.h"
 #include "di/types/integers.h"
 
 namespace ttx::terminal {
@@ -53,6 +53,12 @@ struct Color {
     auto is_palette() const { return type == Type::Palette; }
     auto is_custom() const { return type == Type::Custom; }
     auto is_dynamic() const { return type == Type::Dynamic; }
+
+    ///< @brief Compute the perceived brightness of a color
+    ///
+    /// This is meant to determine if a color theme is "light" or "dark".
+    /// This will return 0.0 for non rgb color types.
+    auto brightness() const -> f64;
 
     auto value_or(Color other) const { return is_default() ? other : *this; }
 

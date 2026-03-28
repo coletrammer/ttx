@@ -76,6 +76,9 @@ def allowed(name: str) -> bool:
     # Apparently this is not supposed to be redistributed
     if name.startswith("Monokai Pro"):
         return False
+    # We have hand crafted catppuccin themes
+    if name.startswith("Catppuccin"):
+        return False
     return True
 
 
@@ -124,7 +127,7 @@ def main():
                 ],
                 "};\n",
                 "\n",
-                "auto build_map() -> di::TreeMap<di::TransparentString, Config> {\n"
+                "static auto build_map() -> di::TreeMap<di::TransparentString, Config> {\n"
                 "    auto result = di::TreeMap<di::TransparentString, Config> {};\n",
                 "    for (auto const& [name, theme] : entries) {\n"
                 "        result[name] = di::clone(theme);\n"
@@ -132,7 +135,7 @@ def main():
                 "    return result;\n",
                 "}\n",
                 "\n",
-                "auto built_in_themes() -> di::TreeMap<di::TransparentString, Config> const& {\n",
+                "auto iterm2_themes() -> di::TreeMap<di::TransparentString, Config> const& {\n",
                 "    static auto map = build_map();\n",
                 "    return map;\n",
                 "}\n",
