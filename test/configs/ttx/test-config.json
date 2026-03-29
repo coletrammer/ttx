@@ -3,7 +3,7 @@
     "version": 1,
     "extends": ["subconfig.json"],
     "input": {
-        "prefix": "A"
+        "prefix": "a"
     },
     "status_bar": {
         "hide": false

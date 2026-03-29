@@ -574,6 +574,7 @@ auto Pane::event(FocusEvent const& event) -> bool {
             terminal.active_screen().screen.clear_selection();
             m_pending_selection_start = {};
         }
+        terminal.invalidate_all();
         return di::Tuple { terminal.focus_event_mode() };
     });
 

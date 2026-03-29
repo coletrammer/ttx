@@ -35,7 +35,7 @@ public:
     auto setup(dius::SyncFile& output, Feature features, ClipboardMode clipboard_mode) -> di::Result<>;
     auto cleanup(dius::SyncFile& output) -> di::Result<>;
 
-    void start(Size const& size);
+    void start(Size const& size, terminal::Palette const& outer_terminal_palette);
     auto finish(dius::SyncFile& output, RenderedCursor const& cursor_in, di::Optional<di::String> window_title)
         -> di::Result<>;
 
@@ -69,12 +69,22 @@ public:
     }
     void reset_global_palette() { m_global_palette = {}; }
 
+    [[nodiscard]] auto set_dim_factor(u32 dim_factor) -> di::ScopeExit<di::Function<void()>> {
+        auto original_dim_factor = m_dim_factor;
+        m_dim_factor = dim_factor;
+        return di::ScopeExit(di::make_function<void()>([this, original_dim_factor] {
+            m_dim_factor = original_dim_factor;
+        }));
+    }
+    void reset_dim_factor() { m_dim_factor = 0; }
+
     auto resolve_color(terminal::PaletteIndex index) const -> terminal::Color;
     auto resolve_color(terminal::Color color) const -> terminal::Color;
     auto resolve_foreground(terminal::Color color) const -> terminal::Color;
     auto resolve_background(terminal::Color color) const -> terminal::Color;
     auto resolve_cursor_color() const -> terminal::Color;
     auto resolve_cursor_text_color() const -> terminal::Color;
+    auto dimmed(terminal::Color color) const -> terminal::Color;
 
 private:
     auto size() const -> Size { return m_current_screen.size(); }
@@ -89,11 +99,13 @@ private:
     Feature m_features { Feature::None };
     di::Optional<terminal::Palette const&> m_global_palette;
     di::Optional<terminal::Palette const&> m_local_palette;
+    di::Optional<terminal::Palette const&> m_outer_terminal_palette;
 
     u32 m_row_offset { 0 };
     u32 m_col_offset { 0 };
     u32 m_bound_width { 0 };
     u32 m_bound_height { 0 };
+    u32 m_dim_factor { 0 };
     bool m_size_changed { true };
 };
 }

@@ -833,4 +833,17 @@ auto Color::brightness() const -> f64 {
     auto const blue = b / 255.0;
     return (red * 299 + green * 587 + blue * 114) / 1000;
 }
+
+auto Color::dimmed(u32 dim_factor) const -> Color {
+    if (!is_custom()) {
+        return *this;
+    }
+
+    auto scaled_factor = 255 - dim_factor * 255 / 100;
+    return {
+        u8(r * scaled_factor / 255),
+        u8(g * scaled_factor / 255),
+        u8(b * scaled_factor / 255),
+    };
+}
 }

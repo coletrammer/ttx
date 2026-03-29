@@ -140,7 +140,7 @@ auto Renderer::cleanup(dius::SyncFile& output) -> di::Result<> {
     return output.write_exactly(di::as_bytes(text.span()));
 }
 
-void Renderer::start(Size const& size) {
+void Renderer::start(Size const& size, terminal::Palette const& outer_terminal_palette) {
     // If the size has changed, we need to flush all our state.
     if (m_size_changed || this->size() != size) {
         m_size_changed = true;
@@ -157,6 +157,8 @@ void Renderer::start(Size const& size) {
     m_col_offset = 0;
     m_bound_width = size.cols;
     m_bound_height = size.rows;
+
+    m_outer_terminal_palette = outer_terminal_palette;
 }
 
 // The pending changes are stored in the difference between the current and desired screens. We must translate only
@@ -379,6 +381,10 @@ static auto render_graphics_rendition(terminal::GraphicsRendition const& desired
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor_in, di::Optional<di::String> window_title)
     -> di::Result<> {
+    auto _ = di::ScopeExit([&] {
+        m_outer_terminal_palette = {};
+    });
+
     // List of changes which are used to determine what updates to the screen are needed. We
     // render changes in 2 phases to account for specific edge cases around cell sizing. Imagine
     // we have a terminal cell with text "🐈‍⬛". We will think this emoji has width 2, but its
@@ -720,7 +726,7 @@ auto Renderer::resolve_color(terminal::Color color) const -> terminal::Color {
     if (m_global_palette) {
         color = m_global_palette.value().resolve(color);
     }
-    return color;
+    return dimmed(color);
 }
 
 auto Renderer::resolve_foreground(terminal::Color color) const -> terminal::Color {
@@ -730,7 +736,7 @@ auto Renderer::resolve_foreground(terminal::Color color) const -> terminal::Colo
     if (m_global_palette) {
         color = m_global_palette.value().resolve_foreground(color);
     }
-    return color;
+    return dimmed(color);
 }
 
 auto Renderer::resolve_background(terminal::Color color) const -> terminal::Color {
@@ -740,7 +746,7 @@ auto Renderer::resolve_background(terminal::Color color) const -> terminal::Colo
     if (m_global_palette) {
         color = m_global_palette.value().resolve_background(color);
     }
-    return color;
+    return dimmed(color);
 }
 
 auto Renderer::resolve_cursor_color() const -> terminal::Color {
@@ -757,5 +763,12 @@ auto Renderer::resolve_cursor_text_color() const -> terminal::Color {
         color = resolve_foreground(resolve_color(terminal::PaletteIndex::Background));
     }
     return color;
+}
+
+auto Renderer::dimmed(terminal::Color color) const -> terminal::Color {
+    if (m_dim_factor == 0 || !m_outer_terminal_palette) {
+        return color;
+    }
+    return m_outer_terminal_palette.value().resolve(color).dimmed(m_dim_factor);
 }
 }

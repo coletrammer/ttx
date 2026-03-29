@@ -363,6 +363,7 @@ void InputThread::handle_event(terminal::OSC21&& osc21) {
             });
         });
         m_create_pane_args.global_palette = global_palette;
+        m_render_thread.push_event(UpdateOuterTerminalPalette(m_outer_terminal_palette));
     }
 }
 

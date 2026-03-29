@@ -60,6 +60,11 @@ struct Color {
     /// This will return 0.0 for non rgb color types.
     auto brightness() const -> f64;
 
+    ///< @brief Dim the given color by a percentage
+    ///
+    /// This has no affect on non rgb color types.
+    auto dimmed(u32 dim_factor) const -> Color;
+
     auto value_or(Color other) const { return is_default() ? other : *this; }
 
     auto to_string() const -> di::String;

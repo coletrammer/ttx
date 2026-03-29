@@ -563,6 +563,17 @@ struct BuildJsonSchemaDefinitions {
         return response;
     }
 
+    template<di::concepts::Integer T>
+    static auto operator()(di::InPlaceType<T>, di::TreeMap<di::String, di::json::Object>&, T const& defaults)
+        -> di::json::Object {
+        auto response = di::json::Object {};
+        response["type"_sv] = "integer"_s;
+        response["minimum"_sv] = di::NumericLimits<T>::min;
+        response["maximum"_sv] = di::NumericLimits<T>::max;
+        response["default"_sv] = defaults;
+        return response;
+    }
+
     static auto operator()(di::InPlaceType<terminal::Color>, di::TreeMap<di::String, di::json::Object>&,
                            terminal::Color const& defaults) -> di::json::Object {
         auto response = di::json::Object {};
@@ -811,7 +822,7 @@ struct NixToString {
     static auto operator()(NixEnum const& value) -> di::String {
         return di::format("  {} = enum [ {} ]"_sv, value.name,
                           value.values | di::transform([](auto const& value) {
-                              return di::format("\"{}\""_sv, value);
+                              return di::format("{:?}"_sv, di::to_string(value));
                           }) | di::join_with(U' ') |
                               di::to<di::String>());
     }

@@ -78,8 +78,9 @@ struct ThemeConfig {
     auto operator==(ThemeConfig const&) const -> bool = default;
 
     constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<ThemeConfig>) {
-        return di::make_fields<"Theme">(di::field<"name", &ThemeConfig::name>, di::field<"dark", &ThemeConfig::dark>,
-                                        di::field<"light", &ThemeConfig::light>);
+        return di::make_fields<"ThemeConfig">(di::field<"name", &ThemeConfig::name>,
+                                              di::field<"dark", &ThemeConfig::dark>,
+                                              di::field<"light", &ThemeConfig::light>);
     }
 };
 
@@ -89,7 +90,7 @@ struct FzfConfig {
     auto operator==(FzfConfig const&) const -> bool = default;
 
     constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<FzfConfig>) {
-        return di::make_fields<"Fzf">(di::field<"colors", &FzfConfig::colors>);
+        return di::make_fields<"FzfConfig">(di::field<"colors", &FzfConfig::colors>);
     }
 };
 
@@ -115,10 +116,22 @@ struct StatusBarConfig {
     auto operator==(StatusBarConfig const&) const -> bool = default;
 
     constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<StatusBarConfig>) {
-        return di::make_fields<"StatusBar">(di::field<"hide", &StatusBarConfig::hide>,
-                                            di::field<"position", &StatusBarConfig::position>,
-                                            di::field<"tab_name_sources", &StatusBarConfig::tab_name_sources>,
-                                            di::field<"colors", &StatusBarConfig::colors>);
+        return di::make_fields<"StatusBarConfig">(di::field<"hide", &StatusBarConfig::hide>,
+                                                  di::field<"position", &StatusBarConfig::position>,
+                                                  di::field<"tab_name_sources", &StatusBarConfig::tab_name_sources>,
+                                                  di::field<"colors", &StatusBarConfig::colors>);
+    }
+};
+
+struct RenderConfig {
+    u32 inactive_dim_factor { 0 };
+    u32 popup_dim_factor { 20 };
+
+    auto operator==(RenderConfig const&) const -> bool = default;
+
+    constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<RenderConfig>) {
+        return di::make_fields<"RenderConfig">(di::field<"inactive_dim_factor", &RenderConfig::inactive_dim_factor>,
+                                               di::field<"popup_dim_factor", &RenderConfig::popup_dim_factor>);
     }
 };
 
@@ -131,17 +144,18 @@ struct Config {
     ShellConfig shell {};
     StatusBarConfig status_bar {};
     FzfConfig fzf {};
+    RenderConfig render {};
     TerminfoConfig terminfo {};
 
     auto operator==(Config const&) const -> bool = default;
 
     constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<Config>) {
-        return di::make_fields<"Config">(di::field<"input", &Config::input>, di::field<"theme", &Config::theme>,
-                                         di::field<"colors", &Config::colors>,
-                                         di::field<"clipboard", &Config::clipboard>,
-                                         di::field<"session", &Config::session>, di::field<"shell", &Config::shell>,
-                                         di::field<"terminfo", &Config::terminfo>, di::field<"fzf", &Config::fzf>,
-                                         di::field<"status_bar", &Config::status_bar>);
+        return di::make_fields<"Config">(
+            di::field<"input", &Config::input>, di::field<"theme", &Config::theme>,
+            di::field<"colors", &Config::colors>, di::field<"clipboard", &Config::clipboard>,
+            di::field<"session", &Config::session>, di::field<"shell", &Config::shell>,
+            di::field<"terminfo", &Config::terminfo>, di::field<"fzf", &Config::fzf>,
+            di::field<"render", &Config::render>, di::field<"status_bar", &Config::status_bar>);
     }
 };
 }

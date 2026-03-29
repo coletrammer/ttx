@@ -524,7 +524,8 @@ static auto do_new(Args&, NewBase& args) -> di::Result<> {
     }
 
     // Setup - render thread.
-    auto render_thread = TRY(RenderThread::create(layout_state, set_done, di::clone(config), features.features));
+    auto render_thread =
+        TRY(RenderThread::create(layout_state, set_done, di::clone(config), features.features, features.palette));
     auto _ = di::ScopeExit([&] {
         render_thread->request_exit();
     });

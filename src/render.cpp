@@ -15,8 +15,10 @@
 
 namespace ttx {
 auto RenderThread::create(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit, Config config,
-                          Feature features) -> di::Result<di::Box<RenderThread>> {
-    auto result = di::make_box<RenderThread>(layout_state, di::move(did_exit), di::move(config), features);
+                          Feature features, terminal::Palette const& outer_terminal_palette)
+    -> di::Result<di::Box<RenderThread>> {
+    auto result = di::make_box<RenderThread>(layout_state, di::move(did_exit), di::move(config), features,
+                                             outer_terminal_palette);
     result->m_thread = TRY(dius::Thread::create([&self = *result.get()] {
         self.render_thread();
     }));
@@ -24,13 +26,14 @@ auto RenderThread::create(di::Synchronized<LayoutState>& layout_state, di::Funct
 }
 
 auto RenderThread::create_mock(di::Synchronized<LayoutState>& layout_state) -> RenderThread {
-    return RenderThread(layout_state, nullptr, {}, Feature::All);
+    return RenderThread(layout_state, nullptr, {}, Feature::All, {});
 }
 
 RenderThread::RenderThread(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit, Config config,
-                           Feature features)
+                           Feature features, terminal::Palette const& outer_terminal_palette)
     : m_layout_state(layout_state)
     , m_did_exit(di::move(did_exit))
+    , m_outer_terminal_palette(outer_terminal_palette)
     , m_clipboard(config.clipboard.mode, features)
     , m_config(di::move(config))
     , m_features(features) {}
@@ -169,6 +172,13 @@ void RenderThread::render_thread() {
                 });
                 m_clipboard.set_mode(ev->config.clipboard.mode);
                 m_config = di::move(ev->config);
+            } else if (auto ev = di::get_if<UpdateOuterTerminalPalette>(event)) {
+                m_layout_state.with_lock([&](LayoutState& state) {
+                    for (auto& tab : state.active_tab()) {
+                        tab.invalidate_all();
+                    }
+                });
+                m_outer_terminal_palette = ev->palette;
             } else if (auto ev = di::get_if<DoRender>(event)) {
                 // Do nothing. This was just to wake us up.
             } else if (auto ev = di::get_if<Exit>(event)) {
@@ -228,6 +238,7 @@ struct PositionAndSize {
 
 struct Render {
     Renderer& renderer;
+    RenderConfig const& config;
     di::Optional<RenderedCursor>& cursor;
     Tab& tab;
     LayoutState& state;
@@ -252,6 +263,9 @@ struct Render {
     void operator()(di::Box<LayoutNode> const& node) { (*this)(*node); }
 
     void operator()(LayoutNode& node) {
+        // The border counts as inactive.
+        auto _ = renderer.set_dim_factor(state.active_popup() ? config.popup_dim_factor : config.inactive_dim_factor);
+
         // Special case to visit the first child since no preceding border is drawn for it.
         if (!node.children.empty()) {
             di::visit(*this, node.children.front().value());
@@ -283,9 +297,13 @@ struct Render {
     }
 
     void operator()(LayoutEntry const& entry) {
+        auto const is_active = entry.pane == tab.active().data();
+        auto dim_factor = is_active ? 0 : state.active_popup() ? config.popup_dim_factor : config.inactive_dim_factor;
+        auto _ = renderer.set_dim_factor(dim_factor);
+
         renderer.set_bound(entry.row + have_top_status_bar, entry.col, entry.size.cols, entry.size.rows);
         auto pane_cursor = entry.pane->draw(renderer);
-        if (entry.pane == tab.active().data()) {
+        if (is_active) {
             pane_cursor.cursor_row += have_top_status_bar;
             pane_cursor.cursor_row += entry.row;
             pane_cursor.cursor_col += entry.col;
@@ -451,7 +469,7 @@ void RenderThread::do_render(Renderer& renderer) {
             auto _ = renderer.set_global_palette(m_config.colors);
 
             // Do the render.
-            renderer.start(state.size());
+            renderer.start(state.size(), m_outer_terminal_palette);
 
             // Status bar.
             if (!state.hide_status_bar()) {
@@ -461,7 +479,8 @@ void RenderThread::do_render(Renderer& renderer) {
             auto cursor = di::Optional<RenderedCursor> {};
 
             // First render all panes in the layout tree.
-            auto render_fn = Render(renderer, cursor, tab, state, state.status_bar_position() == 0_u32);
+            auto render_fn =
+                Render(renderer, m_config.render, cursor, tab, state, state.status_bar_position() == 0_u32);
             render_fn(*tree);
 
             // If there is a popup, render it.
