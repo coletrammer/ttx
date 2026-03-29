@@ -92,14 +92,28 @@ struct FzfConfig {
     }
 };
 
+enum class StatusBarPosition {
+    Top,
+    Bottom,
+};
+
+constexpr static auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<StatusBarPosition>) {
+    using enum StatusBarPosition;
+    return di::make_enumerators<"StatusBarPosition">(
+        di::enumerator<"top", Top, "Show the status bar at the top of the screen">,
+        di::enumerator<"bottom", Bottom, "Show the status bar at the botton of the screen">);
+}
+
 struct StatusBarConfig {
     bool hide { false };
+    StatusBarPosition position { StatusBarPosition::Top };
     StatusBarColors colors {};
 
     auto operator==(StatusBarConfig const&) const -> bool = default;
 
     constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<StatusBarConfig>) {
         return di::make_fields<"StatusBar">(di::field<"hide", &StatusBarConfig::hide>,
+                                            di::field<"position", &StatusBarConfig::position>,
                                             di::field<"colors", &StatusBarConfig::colors>);
     }
 };

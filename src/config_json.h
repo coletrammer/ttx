@@ -115,12 +115,14 @@ struct StatusBarColors {
 
 struct StatusBar {
     di::Optional<bool> hide {};
+    di::Optional<StatusBarPosition> position {};
     StatusBarColors colors {};
 
     constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<StatusBar>) {
         return di::make_fields<"StatusBar", "Configuration for the ttx status bar, including colors and layout">(
             di::field<"hide", &StatusBar::hide,
                       "Hide the status bar. This is useful for minimal layouts or for testing">,
+            di::field<"position", &StatusBar::position, "Where on the screen to show the status bar">,
             di::field<"colors", &StatusBar::colors, "Configure the colors used by the status bar">);
     }
 };

@@ -230,7 +230,7 @@ struct Render {
     di::Optional<RenderedCursor>& cursor;
     Tab& tab;
     LayoutState& state;
-    bool have_status_bar { false };
+    bool have_top_status_bar { false };
 
     auto border_code_point(Direction direction, u32 pos, di::Span<u32 const>& interior_intersections,
                            di::Span<u32 const>& exterior_intersections) -> c32 {
@@ -264,8 +264,8 @@ struct Render {
             auto [row, col, size] = di::visit(PositionAndSize {}, child);
             renderer.set_bound(0, 0, state.size().cols, state.size().rows);
             if (node.direction == Direction::Horizontal) {
-                for (auto r : di::range(row + have_status_bar, row + have_status_bar + size.rows)) {
-                    auto code_point = border_code_point(node.direction, r - have_status_bar, interior_intersections,
+                for (auto r : di::range(row + have_top_status_bar, row + have_top_status_bar + size.rows)) {
+                    auto code_point = border_code_point(node.direction, r - have_top_status_bar, interior_intersections,
                                                         exterior_intersections);
                     renderer.put_text(code_point, r, col - 1);
                 }
@@ -273,7 +273,7 @@ struct Render {
                 for (auto c : di::range(col, col + size.cols)) {
                     auto code_point =
                         border_code_point(node.direction, c, interior_intersections, exterior_intersections);
-                    renderer.put_text(code_point, row + have_status_bar - 1, c);
+                    renderer.put_text(code_point, row + have_top_status_bar - 1, c);
                 }
             }
 
@@ -282,10 +282,10 @@ struct Render {
     }
 
     void operator()(LayoutEntry const& entry) {
-        renderer.set_bound(entry.row + have_status_bar, entry.col, entry.size.cols, entry.size.rows);
+        renderer.set_bound(entry.row + have_top_status_bar, entry.col, entry.size.cols, entry.size.rows);
         auto pane_cursor = entry.pane->draw(renderer);
         if (entry.pane == tab.active().data()) {
-            pane_cursor.cursor_row += have_status_bar;
+            pane_cursor.cursor_row += have_top_status_bar;
             pane_cursor.cursor_row += entry.row;
             pane_cursor.cursor_col += entry.col;
             cursor = pane_cursor;
@@ -319,9 +319,10 @@ void RenderThread::render_status_bar(LayoutState const& state, Renderer& rendere
         };
     };
 
+    auto const status_bar_position = state.status_bar_position().value();
     for (auto& session : state.active_session()) {
         auto offset = 0u;
-        renderer.clear_row(0, terminal::GraphicsRendition { .bg = dark_bg });
+        renderer.clear_row(status_bar_position, terminal::GraphicsRendition { .bg = dark_bg });
 
         {
             auto color = [&] -> terminal::Color {
@@ -337,10 +338,11 @@ void RenderThread::render_status_bar(LayoutState const& state, Renderer& rendere
                 }
                 return {};
             }();
-            renderer.put_text(separator, 0, offset++, { .fg = color, .bg = color });
-            renderer.put_text(di::to_string(m_input_status.mode).view(), 0, offset, make_badge_sgr(color, true));
+            renderer.put_text(separator, status_bar_position, offset++, { .fg = color, .bg = color });
+            renderer.put_text(di::to_string(m_input_status.mode).view(), status_bar_position, offset,
+                              make_badge_sgr(color, true));
             offset += 6;
-            renderer.put_text(separator, 0, offset++, { .fg = color, .bg = color });
+            renderer.put_text(separator, status_bar_position, offset++, { .fg = color, .bg = color });
             offset += 1;
         }
 
@@ -358,29 +360,29 @@ void RenderThread::render_status_bar(LayoutState const& state, Renderer& rendere
                     }
                 }
 
-                auto status_bar_entry = StatusBarEntry { offset, 0 };
+                auto status_bar_entry = StatusBarEntry { offset, status_bar_position };
 
                 auto num_string = di::to_string(i + 1);
-                renderer.put_text(separator, 0, offset++, { .fg = color, .bg = color });
-                renderer.put_text(num_string.view(), 0, offset, make_badge_sgr(color));
+                renderer.put_text(separator, status_bar_position, offset++, { .fg = color, .bg = color });
+                renderer.put_text(num_string.view(), status_bar_position, offset, make_badge_sgr(color));
                 offset += num_string.size_bytes();
-                renderer.put_text(separator, 0, offset++, { .fg = color, .bg = color });
-                renderer.put_text(separator, 0, offset++, { .fg = label_bg, .bg = label_bg });
-                renderer.put_text(tab->name(), 0, offset, { .fg = label_fg, .bg = label_bg });
+                renderer.put_text(separator, status_bar_position, offset++, { .fg = color, .bg = color });
+                renderer.put_text(separator, status_bar_position, offset++, { .fg = label_bg, .bg = label_bg });
+                renderer.put_text(tab->name(), status_bar_position, offset, { .fg = label_fg, .bg = label_bg });
                 offset += tab->name().size_bytes();
                 if (sign != ' ') {
-                    renderer.put_text(' ', 0, offset++, { .fg = label_fg, .bg = label_bg });
-                    renderer.put_text(sign, 0, offset++, { .fg = label_fg, .bg = label_bg });
-                    renderer.put_text(' ', 0, offset++, { .fg = label_fg, .bg = label_bg });
+                    renderer.put_text(' ', status_bar_position, offset++, { .fg = label_fg, .bg = label_bg });
+                    renderer.put_text(sign, status_bar_position, offset++, { .fg = label_fg, .bg = label_bg });
+                    renderer.put_text(' ', status_bar_position, offset++, { .fg = label_fg, .bg = label_bg });
                 }
-                renderer.put_text(separator, 0, offset++, { .fg = label_bg, .bg = label_bg });
+                renderer.put_text(separator, status_bar_position, offset++, { .fg = label_bg, .bg = label_bg });
                 status_bar_entry.width = offset - status_bar_entry.start;
 
                 m_status_bar_layout.push_back(status_bar_entry);
                 offset++;
             }
         } else {
-            renderer.put_text(m_pending_status_message->message.view(), 0, offset,
+            renderer.put_text(m_pending_status_message->message.view(), status_bar_position, offset,
                               terminal::GraphicsRendition { .fg = label_fg, .bg = dark_bg });
         }
 
@@ -399,24 +401,26 @@ void RenderThread::render_status_bar(LayoutState const& state, Renderer& rendere
 
             {
                 auto color = colors.session_badge_background_color;
-                renderer.put_text(separator, 0, offset++, { .fg = color, .bg = color });
-                renderer.put_text(U'', 0, offset++, make_badge_sgr(color));
-                renderer.put_text(' ', 0, offset++, { .bg = color });
-                renderer.put_text(separator, 0, offset++, { .fg = label_bg, .bg = label_bg });
-                renderer.put_text(session.name().view(), 0, offset, { .fg = label_fg, .bg = label_bg });
+                renderer.put_text(separator, status_bar_position, offset++, { .fg = color, .bg = color });
+                renderer.put_text(U'', status_bar_position, offset++, make_badge_sgr(color));
+                renderer.put_text(' ', status_bar_position, offset++, { .bg = color });
+                renderer.put_text(separator, status_bar_position, offset++, { .fg = label_bg, .bg = label_bg });
+                renderer.put_text(session.name().view(), status_bar_position, offset,
+                                  { .fg = label_fg, .bg = label_bg });
                 offset += session.name().size_bytes();
-                renderer.put_text(separator, 0, offset++, { .fg = label_bg, .bg = label_bg });
+                renderer.put_text(separator, status_bar_position, offset++, { .fg = label_bg, .bg = label_bg });
             }
 
             {
                 auto color = colors.host_badge_background_color;
-                renderer.put_text(separator, 0, offset++, { .fg = color, .bg = color });
-                renderer.put_text(U'󰒋', 0, offset++, make_badge_sgr(color));
-                renderer.put_text(' ', 0, offset++, { .bg = color });
-                renderer.put_text(separator, 0, offset++, { .fg = label_bg, .bg = label_bg });
-                renderer.put_text(di::to_string(hostname).view(), 0, offset, { .fg = label_fg, .bg = label_bg });
+                renderer.put_text(separator, status_bar_position, offset++, { .fg = color, .bg = color });
+                renderer.put_text(U'󰒋', status_bar_position, offset++, make_badge_sgr(color));
+                renderer.put_text(' ', status_bar_position, offset++, { .bg = color });
+                renderer.put_text(separator, status_bar_position, offset++, { .fg = label_bg, .bg = label_bg });
+                renderer.put_text(di::to_string(hostname).view(), status_bar_position, offset,
+                                  { .fg = label_fg, .bg = label_bg });
                 offset += hostname.size_bytes();
-                renderer.put_text(separator, 0, offset++, { .fg = label_bg, .bg = label_bg });
+                renderer.put_text(separator, status_bar_position, offset++, { .fg = label_bg, .bg = label_bg });
             }
         }
     }
@@ -449,7 +453,7 @@ void RenderThread::do_render(Renderer& renderer) {
         auto cursor = di::Optional<RenderedCursor> {};
 
         // First render all panes in the layout tree.
-        auto render_fn = Render(renderer, cursor, tab, state, !state.hide_status_bar());
+        auto render_fn = Render(renderer, cursor, tab, state, state.status_bar_position() == 0_u32);
         render_fn(*tree);
 
         // If there is a popup, render it.

@@ -217,7 +217,7 @@ void InputThread::handle_event(KeyEvent&& event) {
 void InputThread::handle_event(MouseEvent&& event) {
     m_layout_state.with_lock([&](LayoutState& state) {
         // Check if the event intersects with the status bar.
-        if (!state.hide_status_bar() && event.position().in_cells().y() == 0) {
+        if (!state.hide_status_bar() && event.position().in_cells().y() == state.status_bar_position()) {
             m_render_thread.push_event(event);
             return;
         }
@@ -232,7 +232,7 @@ void InputThread::handle_event(MouseEvent&& event) {
         }
         auto& tab = *state.active_tab();
 
-        auto ev = event.translate({ 0, u32(-!state.hide_status_bar()) }, state.size());
+        auto ev = event.translate({ 0, u32(-(state.status_bar_position() == 0)) }, state.size());
 
         // Check if we're hitting any popup with the mouse.
         auto row = event.position().in_cells().y();
