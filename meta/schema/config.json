@@ -300,6 +300,11 @@
                     "default": false,
                     "description": "Hide the status bar. This is useful for minimal layouts or for testing",
                     "type": "boolean"
+                },
+                "position": {
+                    "$ref": "#/$defs/StatusBarPosition",
+                    "default": "top",
+                    "description": "Where on the screen to show the status bar"
                 }
             },
             "type": "object"
@@ -370,6 +375,9 @@
             },
             "type": "object"
         },
+        "StatusBarPosition": {
+            "enum": ["top", "bottom"]
+        },
         "Terminfo": {
             "description": "Configuration relating to the terminfo ttx passes to inner applications",
             "properties": {
@@ -387,8 +395,16 @@
             "type": "object"
         },
         "Theme": {
-            "description": "Configure the theme ttx will use",
+            "description": "Configure the theme ttx will use. You can specify dark/light preference aware themes by specifying both the 'dark' and 'light' fields instead of the 'name' field",
             "properties": {
+                "dark": {
+                    "description": "Theme to use when the color preference is 'dark'. When not specified the named theme will be used",
+                    "type": "string"
+                },
+                "light": {
+                    "description": "Theme to use when the color preference is 'light'. When not specified the named theme will be used",
+                    "type": "string"
+                },
                 "name": {
                     "default": "auto",
                     "description": "The named theme to use. When not set, ttx will try to auto-detect your terminal's color scheme against the list available themes. When auto detection fails, the standard 16 ANSI colors will be used, with the theme name set to 'ansi'. You can disable theme detection by explicitly setting the theme to a specific theme or to 'ansi'. When providing a named theme, ttx first searches the directory `$XDG_CONFIG_HOME/ttx/themes` for a JSON configuration file matching the name. The file's name should be the theme's name followed by `.json`. Custom themes use the same JSON schema as normal configuration files, and can include any property (but cannot extend other files). When no custom theme is found, ttx searches its set of built-in themes. The built-in themes are taken from the [iTerm2 Color Schemes repository](https://github.com/mbadolato/iTerm2-Color-Schemes). Configuration defined in a theme has lower precedence than any setting defined in a configuration file. If you want settings to be modifable by the theme you select you cannot specify the option your main configuration file",
@@ -417,7 +433,8 @@
                 "save_layout": true
             },
             "status_bar": {
-                "hide": false
+                "hide": false,
+                "position": "top"
             },
             "terminfo": {
                 "force_local_terminfo": false,

@@ -44,6 +44,12 @@ public:
     auto hide_status_bar() const -> bool { return m_config.status_bar.hide; }
 
     auto active_popup() const -> di::Optional<Pane&>;
+    auto status_bar_position() const -> di::Optional<u32> {
+        if (hide_status_bar()) {
+            return {};
+        }
+        return m_config.status_bar.position == StatusBarPosition::Top ? 0_u32 : u32(m_size.rows - 1);
+    }
 
     void set_layout_did_update(di::Function<void()> layout_did_update);
     void layout_did_update();

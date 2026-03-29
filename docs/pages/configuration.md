@@ -60,11 +60,13 @@ Top-level JSON configuration for ttx.
 
 ### Theme
 
-Configure the theme ttx will use.
+Configure the theme ttx will use. You can specify dark/light preference aware themes by specifying both the 'dark' and 'light' fields instead of the 'name' field.
 
 | Field | Type   | Default | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ----- | ------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | name  | string | "auto"  | The named theme to use. When not set, ttx will try to auto-detect your terminal's color scheme against the list available themes. When auto detection fails, the standard 16 ANSI colors will be used, with the theme name set to 'ansi'. You can disable theme detection by explicitly setting the theme to a specific theme or to 'ansi'. When providing a named theme, ttx first searches the directory `$XDG_CONFIG_HOME/ttx/themes` for a JSON configuration file matching the name. The file's name should be the theme's name followed by `.json`. Custom themes use the same JSON schema as normal configuration files, and can include any property (but cannot extend other files). When no custom theme is found, ttx searches its set of built-in themes. The built-in themes are taken from the [iTerm2 Color Schemes repository](https://github.com/mbadolato/iTerm2-Color-Schemes). Configuration defined in a theme has lower precedence than any setting defined in a configuration file. If you want settings to be modifable by the theme you select you cannot specify the option your main configuration file. |
+| dark  | string | unset   | Theme to use when the color preference is 'dark'. When not specified the named theme will be used.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| light | string | unset   | Theme to use when the color preference is 'light'. When not specified the named theme will be used.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 ### Input
 
@@ -242,10 +244,18 @@ theme for the fzf popups used in the ttx UI. The names of the fields match direc
 
 Configuration for the ttx status bar, including colors and layout.
 
-| Field  | Type                                | Default | Description                                                             |
-| ------ | ----------------------------------- | ------- | ----------------------------------------------------------------------- |
-| hide   | boolean                             | false   | Hide the status bar. This is useful for minimal layouts or for testing. |
-| colors | [StatusBarColors](#StatusBarColors) | {}      | Configure the colors used by the status bar.                            |
+| Field    | Type                                    | Default | Description                                                             |
+| -------- | --------------------------------------- | ------- | ----------------------------------------------------------------------- |
+| hide     | boolean                                 | false   | Hide the status bar. This is useful for minimal layouts or for testing. |
+| position | [StatusBarPosition](#StatusBarPosition) | "top"   | Where on the screen to show the status bar.                             |
+| colors   | [StatusBarColors](#StatusBarColors)     | {}      | Configure the colors used by the status bar.                            |
+
+### StatusBarPosition
+
+| Value  | Description                                     |
+| ------ | ----------------------------------------------- |
+| top    | Show the status bar at the top of the screen    |
+| bottom | Show the status bar at the botton of the screen |
 
 ### StatusBarColors
 
@@ -296,7 +306,8 @@ This JSON block contains the default JSON configuration used by ttx:
     "save_layout": true
   },
   "status_bar": {
-    "hide": false
+    "hide": false,
+    "position": "top"
   },
   "terminfo": {
     "force_local_terminfo": false,
