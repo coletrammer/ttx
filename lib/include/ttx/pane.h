@@ -158,6 +158,9 @@ public:
     /// reports, which require shell integration to work.
     auto current_working_directory() const -> di::Optional<di::PathView> { return m_cwd.transform(&di::Path::view); }
 
+    /// @brief Get the pane's window title
+    auto window_title() const -> di::Optional<di::StringView> { return m_window_title.transform(&di::String::view); }
+
     void update_local_palette(di::FunctionRef<void(terminal::Palette&)> update);
 
     void set_global_palette(terminal::Palette const& palette);
@@ -170,6 +173,7 @@ private:
     void update_selection_after_scrolling();
 
     void update_cwd(terminal::OSC7&& path_with_hostname);
+    void update_window_title(terminal::OSC2&& window_title);
     void reset_viewport_scroll();
 
     u64 m_id { 0 };
@@ -188,6 +192,7 @@ private:
     u32 m_horizontal_scroll_offset { 0 };
 
     di::Optional<di::Path> m_cwd;
+    di::Optional<di::String> m_window_title;
     PaneHooks m_hooks;
 
     // These are declared last, for when dius::Thread calls join() in the destructor.

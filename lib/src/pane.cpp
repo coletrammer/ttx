@@ -18,7 +18,9 @@
 #include "ttx/renderer.h"
 #include "ttx/size.h"
 #include "ttx/terminal.h"
+#include "ttx/terminal/escapes/osc_2.h"
 #include "ttx/terminal/escapes/osc_52.h"
+#include "ttx/terminal/escapes/osc_7.h"
 #include "ttx/terminal/escapes/osc_8671.h"
 #include "ttx/terminal/multi_cell_info.h"
 #include "ttx/terminal/palette.h"
@@ -787,6 +789,17 @@ void Pane::update_cwd(terminal::OSC7&& path_with_hostname) {
     }
 }
 
+void Pane::update_window_title(terminal::OSC2&& window_title) {
+    if (window_title.window_title == m_window_title) {
+        return;
+    }
+    if (window_title.window_title.empty()) {
+        m_window_title.reset();
+    } else {
+        m_window_title = di::move(window_title.window_title);
+    }
+}
+
 void Pane::handle_terminal_event(TerminalEvent&& event) {
     di::visit(di::overload(
                   [&](terminal::OSC52&& osc52) {
@@ -804,11 +817,14 @@ void Pane::handle_terminal_event(TerminalEvent&& event) {
                           m_hooks.apc_passthrough(apc.data.view());
                       }
                   },
+                  [&](terminal::OSC2&& osc2) {
+                      update_window_title(di::move(osc2));
+                  },
                   [&](terminal::OSC7&& osc7) {
                       update_cwd(di::move(osc7));
                   },
                   [&](Size&& size) {
-                      // SAFETY: no on else calls set_tty_window_size(), and the operation is atomic.
+                      // SAFETY: no one else calls set_tty_window_size(), and the operation is atomic.
                       (void) m_pty_controller.get_assuming_no_concurrent_accesses().set_tty_window_size(
                           size.as_window_size());
                   },

@@ -37,7 +37,6 @@ constexpr auto ttx_capabilities = di::Array {
         .long_name = "Has status line"_sv,
         .short_name = "hs"_tsv,
         .description = "Has status line (for displaying window title)"_sv,
-        .enabled = false, // TODO: enable after implementing OSC 2 (set window title)
     },
     Capability {
         .long_name = "Has meta key"_sv,
@@ -289,8 +288,6 @@ constexpr auto ttx_capabilities = di::Array {
         .short_name = "dsl"_tsv,
         .value = R"(\E]2;\E\\)"_tsv,
         .description = "Disable window title via blank OSC 2"_sv,
-        // TODO: enable once we support OSC 2
-        .enabled = false,
     },
     Capability {
         .long_name = "Erase characters"_sv,
@@ -327,8 +324,6 @@ constexpr auto ttx_capabilities = di::Array {
         .short_name = "fsl"_tsv,
         .value = "^G"_tsv,
         .description = "Terminate OSC sequence via \\a (^G)"_sv,
-        // TODO: enable after supporting OSC 2
-        .enabled = false,
     },
     Capability {
         .long_name = "Home"_sv,
@@ -512,8 +507,6 @@ constexpr auto ttx_capabilities = di::Array {
         .short_name = "oc"_tsv,
         .value = "\\E]104\\007"_tsv,
         .description = "Reset color palette via OSC 104"_sv,
-        // TODO: enable once we support OSC 104 to set the palette
-        .enabled = false,
     },
     Capability {
         .long_name = "Original pair"_sv,
@@ -713,8 +706,6 @@ constexpr auto ttx_capabilities = di::Array {
         .short_name = "tsl"_tsv,
         .value = "\\E]2;"_tsv,
         .description = "Enter status line (window title) via OSC 2"_sv,
-        // TODO: enable after supporting OSC 1/2
-        .enabled = false,
     },
     Capability {
         .long_name = "User string 6"_sv,

@@ -77,6 +77,10 @@ void Terminal::on_parser_result(OSC&& osc) {
     }
 
     auto ps = osc.data.substr(osc.data.begin(), ps_end.begin());
+    if (ps == "0"_sv || ps == "2"_sv) {
+        osc_2(osc.data.substr(ps_end.end()));
+        return;
+    }
     if (ps == "7"_sv) {
         osc_7(osc.data.substr(ps_end.end()));
         return;
@@ -585,6 +589,20 @@ void Terminal::dcs_xtgettcap(Params const& params, di::StringView data) {
 
     auto result = terminal::lookup_terminfo_string(data);
     m_outgoing_events.push_back(WritePtyString(result.serialize()));
+}
+
+// OSC 2 (and OSC 0) - Set window title
+void Terminal::osc_2(di::StringView data) {
+    // For full correctness, OSC should receive unencoded data.
+    auto unencoded_data = data.span() | di::transform(di::construct<char>) | di::to<di::TransparentString>();
+
+    auto result = terminal::OSC2::parse(unencoded_data);
+    if (!result) {
+        return;
+    }
+
+    m_window_title = result.clone();
+    m_outgoing_events.push_back(di::move(result).value());
 }
 
 // OSC 7 - Current working directory report
@@ -1547,6 +1565,11 @@ auto Terminal::state_as_escape_sequences() const -> di::String {
         // In band size notifications
         if (m_in_band_size_reports) {
             di::writer_print<di::String::Encoding>(writer, "\033[?2048h"_sv);
+        }
+
+        // Window title (OSC 2)
+        for (auto const& window_title : m_window_title) {
+            di::writer_print<di::String::Encoding>(writer, "{}"_sv, window_title.serialize());
         }
 
         // Current working directory (OSC 7)
