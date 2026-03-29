@@ -12,6 +12,7 @@
 #include "ttx/paste_event_io.h"
 #include "ttx/size.h"
 #include "ttx/terminal/escapes/mode.h"
+#include "ttx/terminal/escapes/osc_2.h"
 #include "ttx/terminal/escapes/osc_52.h"
 #include "ttx/terminal/escapes/osc_7.h"
 #include "ttx/terminal/escapes/osc_8671.h"
@@ -29,7 +30,8 @@ struct WritePtyString {
     di::String string;
 };
 
-using TerminalEvent = di::Variant<APC, terminal::OSC7, terminal::OSC52, terminal::OSC8671, Size, WritePtyString>;
+using TerminalEvent =
+    di::Variant<APC, terminal::OSC2, terminal::OSC7, terminal::OSC52, terminal::OSC8671, Size, WritePtyString>;
 
 struct ModeHandler {
     u32 mode { 0 };
@@ -182,6 +184,7 @@ private:
     void dcs_decrqss(Params const& params, di::StringView data);
     void dcs_xtgettcap(Params const& params, di::StringView data);
 
+    void osc_2(di::StringView data);
     void osc_7(di::StringView data);
     void osc_8(di::StringView data);
     void osc_21(di::StringView data);
@@ -272,6 +275,7 @@ private:
     ShiftEscapeOptions m_shift_escape_options { ShiftEscapeOptions::OverrideApplication };
 
     BracketedPasteMode m_bracketed_paste_mode { false };
+    di::Optional<terminal::OSC2> m_window_title;
     di::Optional<terminal::OSC7> m_cwd;
     bool m_in_band_size_reports { false };
 
