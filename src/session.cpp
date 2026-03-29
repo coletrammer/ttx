@@ -95,11 +95,7 @@ auto Session::popup_pane(Tab& tab, u64 pane_id, PopupLayout const& popup_layout,
 
 auto Session::add_tab(CreatePaneArgs args, u64 tab_id, u64 pane_id, RenderThread& render_thread,
                       InputThread& input_thread) -> di::Result<> {
-    auto name = args.replay_path ? "capture"_s
-                                 : di::back(di::PathView(args.command[0])).value_or(""_tsv) | di::transform([](char c) {
-                                       return c32(c);
-                                   }) | di::to<di::String>();
-    auto tab = di::make_box<Tab>(this, tab_id, di::move(name));
+    auto tab = di::make_box<Tab>(this, tab_id);
     TRY(add_pane(*tab, pane_id, di::move(args), Direction::None, render_thread, input_thread));
 
     set_active_tab(tab.get());
@@ -151,7 +147,7 @@ void Session::layout_did_update() {
 
 auto Session::as_json_v1() const -> json::v1::Session {
     auto json = json::v1::Session {};
-    json.name = name().to_owned();
+    json.name = name().transform(di::to_owned);
     json.id = id();
     for (auto& tab : active_tab()) {
         json.active_tab_id = tab.id();
@@ -169,7 +165,7 @@ auto Session::from_json_v1(json::v1::Session const& json, LayoutState* layout_st
         return di::Unexpected(di::BasicError::InvalidArgument);
     }
 
-    auto result = di::make_box<Session>(layout_state, json.name.clone(), json.id);
+    auto result = di::make_box<Session>(layout_state, json.id, json.name.clone());
     result->m_size = size;
 
     // Restore tabs

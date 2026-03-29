@@ -4,6 +4,7 @@
 #include "dius/system/process.h"
 #include "input_mode.h"
 #include "layout_state.h"
+#include "tab_name.h"
 #include "theme.h"
 #include "ttx/clipboard.h"
 #include "ttx/layout.h"
@@ -368,8 +369,9 @@ void RenderThread::render_status_bar(LayoutState const& state, Renderer& rendere
                 offset += num_string.size_bytes();
                 renderer.put_text(separator, status_bar_position, offset++, { .fg = color, .bg = color });
                 renderer.put_text(separator, status_bar_position, offset++, { .fg = label_bg, .bg = label_bg });
-                renderer.put_text(tab->name(), status_bar_position, offset, { .fg = label_fg, .bg = label_bg });
-                offset += tab->name().size_bytes();
+                auto tab_name = evaluate_tab_name(config.tab_name_sources.span(), *tab, i);
+                renderer.put_text(tab_name, status_bar_position, offset, { .fg = label_fg, .bg = label_bg });
+                offset += tab_name.size_bytes();
                 if (sign != ' ') {
                     renderer.put_text(' ', status_bar_position, offset++, { .fg = label_fg, .bg = label_bg });
                     renderer.put_text(sign, status_bar_position, offset++, { .fg = label_fg, .bg = label_bg });
@@ -393,7 +395,13 @@ void RenderThread::render_status_bar(LayoutState const& state, Renderer& rendere
         {
             // 5 padding cols (including icon) per section.
             auto hostname = dius::system::get_hostname().value_or("unknown"_ts);
-            auto rhs_size = 5_usize * 2 + session.name().size_bytes() + hostname.size();
+            auto session_pointers = state.sessions() | di::transform([](auto& p) {
+                                        return p.get();
+                                    });
+            auto session_index = di::find(session_pointers, &session) - session_pointers.begin();
+            auto session_index_string = di::to_string(session_index + 1);
+            auto session_name = session.name().value_or(session_index_string.view());
+            auto rhs_size = 5_usize * 2 + session_name.size_bytes() + hostname.size();
             if (rhs_size >= state.size().cols || state.size().cols - rhs_size < offset) {
                 return;
             }
@@ -405,9 +413,8 @@ void RenderThread::render_status_bar(LayoutState const& state, Renderer& rendere
                 renderer.put_text(U'', status_bar_position, offset++, make_badge_sgr(color));
                 renderer.put_text(' ', status_bar_position, offset++, { .bg = color });
                 renderer.put_text(separator, status_bar_position, offset++, { .fg = label_bg, .bg = label_bg });
-                renderer.put_text(session.name().view(), status_bar_position, offset,
-                                  { .fg = label_fg, .bg = label_bg });
-                offset += session.name().size_bytes();
+                renderer.put_text(session_name.view(), status_bar_position, offset, { .fg = label_fg, .bg = label_bg });
+                offset += session_name.size_bytes();
                 renderer.put_text(separator, status_bar_position, offset++, { .fg = label_bg, .bg = label_bg });
             }
 
@@ -427,46 +434,56 @@ void RenderThread::render_status_bar(LayoutState const& state, Renderer& rendere
 }
 
 void RenderThread::do_render(Renderer& renderer) {
-    auto cursor = m_layout_state.with_lock([&](LayoutState& state) -> di::Optional<RenderedCursor> {
-        // Ignore if there is no layout.
-        auto active_tab = state.active_tab();
-        if (!active_tab) {
-            return {};
-        }
-        auto& tab = *active_tab;
-        auto tree = tab.layout_tree();
-        if (!tree) {
-            return {};
-        }
+    auto [cursor, window_title] = m_layout_state.with_lock(
+        [&](LayoutState& state) -> di::Tuple<di::Optional<RenderedCursor>, di::Optional<di::String>> {
+            // Ignore if there is no layout.
+            auto active_tab = state.active_tab();
+            if (!active_tab) {
+                return {};
+            }
+            auto& tab = *active_tab;
+            auto tree = tab.layout_tree();
+            if (!tree) {
+                return {};
+            }
 
-        // Set global palette.
-        auto _ = renderer.set_global_palette(m_config.colors);
+            // Set global palette.
+            auto _ = renderer.set_global_palette(m_config.colors);
 
-        // Do the render.
-        renderer.start(state.size());
+            // Do the render.
+            renderer.start(state.size());
 
-        // Status bar.
-        if (!state.hide_status_bar()) {
-            render_status_bar(state, renderer, m_config.status_bar);
-        }
+            // Status bar.
+            if (!state.hide_status_bar()) {
+                render_status_bar(state, renderer, m_config.status_bar);
+            }
 
-        auto cursor = di::Optional<RenderedCursor> {};
+            auto cursor = di::Optional<RenderedCursor> {};
 
-        // First render all panes in the layout tree.
-        auto render_fn = Render(renderer, cursor, tab, state, state.status_bar_position() == 0_u32);
-        render_fn(*tree);
+            // First render all panes in the layout tree.
+            auto render_fn = Render(renderer, cursor, tab, state, state.status_bar_position() == 0_u32);
+            render_fn(*tree);
 
-        // If there is a popup, render it.
-        for (auto popup_layout : tab.popup_layout()) {
-            // For now, always invalidate the popup since we don't have proper damage tracking when
-            // panes overlap.
-            popup_layout.pane->invalidate_all();
-            render_fn(popup_layout);
-        }
+            // If there is a popup, render it.
+            for (auto popup_layout : tab.popup_layout()) {
+                // For now, always invalidate the popup since we don't have proper damage tracking when
+                // panes overlap.
+                popup_layout.pane->invalidate_all();
+                render_fn(popup_layout);
+            }
 
-        return cursor;
-    });
+            auto window_title = di::Optional<di::String> {};
+            for (auto& session : state.active_session()) {
+                auto session_pointers = state.sessions() | di::transform([](auto& p) {
+                                            return p.get();
+                                        });
+                auto session_index = di::find(session_pointers, &session) - session_pointers.begin();
+                auto session_index_string = di::to_string(session_index + 1);
+                window_title = session.name().value_or(session_index_string.view()).to_owned();
+            }
+            return { cursor, di::move(window_title) };
+        });
 
-    (void) renderer.finish(dius::std_in, cursor.value_or({ .hidden = true }));
+    (void) renderer.finish(dius::std_in, cursor.value_or({ .hidden = true }), di::move(window_title));
 }
 }

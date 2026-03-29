@@ -779,25 +779,38 @@ void Pane::update_cwd(terminal::OSC7&& path_with_hostname) {
         return;
     }
 
-    if (path_with_hostname.path == m_cwd) {
-        return;
-    }
+    auto did_update_cwd = m_cwd.with_lock([&](di::Optional<di::Path>& cwd) -> bool {
+        if (path_with_hostname.path == cwd) {
+            return false;
+        }
 
-    m_cwd = di::move(path_with_hostname).path;
-    if (m_hooks.did_update_cwd) {
+        cwd = di::move(path_with_hostname).path;
+        return true;
+    });
+    if (did_update_cwd && m_hooks.did_update_cwd) {
         m_hooks.did_update_cwd();
     }
 }
 
-void Pane::update_window_title(terminal::OSC2&& window_title) {
-    if (window_title.window_title == m_window_title) {
-        return;
-    }
-    if (window_title.window_title.empty()) {
-        m_window_title.reset();
-    } else {
-        m_window_title = di::move(window_title.window_title);
-    }
+void Pane::update_window_title(terminal::OSC2&& new_window_title) {
+    m_window_title.with_lock([&](di::Optional<di::String>& window_title) {
+        if (new_window_title.window_title == window_title) {
+            return;
+        }
+        if (new_window_title.window_title.empty()) {
+            window_title.reset();
+        } else {
+            window_title = di::move(new_window_title.window_title);
+        }
+    });
+}
+
+auto Pane::current_working_directory() -> di::Optional<di::Path> {
+    return m_cwd.with_lock(di::clone);
+}
+
+auto Pane::window_title() -> di::Optional<di::String> {
+    return m_window_title.with_lock(di::clone);
 }
 
 void Pane::handle_terminal_event(TerminalEvent&& event) {

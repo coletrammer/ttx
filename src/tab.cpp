@@ -422,7 +422,7 @@ void Tab::for_each_pane(di::FunctionRef<void(Pane&)> action) {
 
 auto Tab::as_json_v1() const -> json::v1::Tab {
     auto json = json::v1::Tab {};
-    json.name = name().to_owned();
+    json.name = m_name.clone();
     json.id = id();
     for (auto& pane : full_screen_pane()) {
         json.full_screen_pane_id = pane.id();

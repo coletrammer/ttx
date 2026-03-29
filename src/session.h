@@ -11,7 +11,7 @@ class LayoutState;
 /// @brief Represents a "session" (like in tmux)
 class Session {
 public:
-    explicit Session(LayoutState* layout_state, di::String name, u64 id)
+    explicit Session(LayoutState* layout_state, u64 id, di::Optional<di::String> name = {})
         : m_layout_state(layout_state), m_name(di::move(name)), m_id(id) {}
 
     static auto from_json_v1(json::v1::Session const& json, LayoutState* layout_state, Size size, CreatePaneArgs args,
@@ -27,8 +27,8 @@ public:
     auto max_pane_id() const -> u64;
 
     auto id() const { return m_id; }
-    void set_name(di::String name) { m_name = di::move(name); }
-    auto name() const -> di::StringView { return m_name; }
+    void set_name(di::Optional<di::String> name) { m_name = di::move(name); }
+    auto name() const -> di::Optional<di::StringView> { return m_name.transform(&di::String::view); }
 
     auto add_pane(Tab& tab, u64 pane_id, CreatePaneArgs args, Direction direction, RenderThread& render_thread,
                   InputThread& input_thread) -> di::Result<>;
@@ -54,7 +54,7 @@ public:
 
 private:
     LayoutState* m_layout_state { nullptr };
-    di::String m_name;
+    di::Optional<di::String> m_name;
     Size m_size;
     u64 m_id { 0 };
     di::Vector<di::Box<Tab>> m_tabs {};

@@ -7,6 +7,7 @@
 #include "di/serialization/json_value.h"
 #include "di/util/construct.h"
 #include "di/vocab/optional/prelude.h"
+#include "tab_name.h"
 #include "theme.h"
 #include "ttx/key.h"
 #include "ttx/terminal/color.h"
@@ -116,6 +117,7 @@ struct StatusBarColors {
 struct StatusBar {
     di::Optional<bool> hide {};
     di::Optional<StatusBarPosition> position {};
+    di::Optional<di::Vector<TabNameSource>> tab_name_sources {};
     StatusBarColors colors {};
 
     constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<StatusBar>) {
@@ -123,6 +125,9 @@ struct StatusBar {
             di::field<"hide", &StatusBar::hide,
                       "Hide the status bar. This is useful for minimal layouts or for testing">,
             di::field<"position", &StatusBar::position, "Where on the screen to show the status bar">,
+            di::field<"tab_name_sources", &StatusBar::tab_name_sources,
+                      "List of candidate tab name sources to resolve the tab name for the status bar. The first source "
+                      "which has a value set is chosen">,
             di::field<"colors", &StatusBar::colors, "Configure the colors used by the status bar">);
     }
 };

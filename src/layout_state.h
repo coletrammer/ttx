@@ -30,6 +30,7 @@ public:
         -> di::Result<>;
 
     auto sessions() -> di::Vector<di::Box<Session>>& { return m_sessions; }
+    auto sessions() const -> di::Vector<di::Box<Session>> const& { return m_sessions; }
     auto add_session(CreatePaneArgs args, RenderThread& render_thread, InputThread& input_thread) -> di::Result<>;
     void remove_session(Session& session);
     auto set_active_session(Session* session) -> bool;

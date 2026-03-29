@@ -110,6 +110,7 @@ struct ConvertValue {
     }
 
     template<typename T, typename U>
+    requires(!di::SameAs<T, U>)
     static auto operator()(di::InPlaceType<di::Vector<T>>, di::Vector<U>&& value) {
         auto result = di::Vector<T> {};
         for (auto& v : value) {
@@ -581,11 +582,12 @@ struct BuildJsonSchemaDefinitions {
 
     template<typename T>
     static auto operator()(di::InPlaceType<di::Vector<T>>, di::TreeMap<di::String, di::json::Object>& output,
-                           di::Vector<T> const&) -> di::json::Object {
+                           di::Vector<T> const& defaults) -> di::json::Object {
         auto response = di::json::Object {};
         response["type"_sv] = "array"_s;
         response["items"_sv] = BuildJsonSchemaDefinitions::operator()(di::in_place_type<T>, output, T());
-        response["default"_sv] = di::json::Array {};
+        auto defaults_string = *di::to_json_string(defaults);
+        response["default"_sv] = *di::from_json_string<di::json::Value>(defaults_string.view());
         return response;
     }
 
@@ -922,8 +924,8 @@ struct MarkdownDefault {
     static auto operator()(di::String const& value) -> di::String { return di::format("{:?}"_sv, value); }
 
     template<typename T>
-    static auto operator()(di::Vector<T> const&) -> di::String {
-        return "[]"_s;
+    static auto operator()(di::Vector<T> const& value) -> di::String {
+        return *di::to_json_string(value);
     }
 
     template<typename T>

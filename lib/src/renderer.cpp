@@ -16,6 +16,7 @@
 #include "ttx/size.h"
 #include "ttx/terminal/color.h"
 #include "ttx/terminal/cursor.h"
+#include "ttx/terminal/escapes/osc_2.h"
 #include "ttx/terminal/escapes/osc_21.h"
 #include "ttx/terminal/escapes/osc_52.h"
 #include "ttx/terminal/escapes/osc_66.h"
@@ -36,6 +37,10 @@ auto Renderer::setup(dius::SyncFile& output, Feature features, ClipboardMode cli
     // Setup - alternate screen buffer.
     di::writer_print<di::String::Encoding>(buffer, "\033[?1049h"_sv);
     m_cleanup.push_back("\033[?1049l\033[?25h"_s);
+
+    // Setup - window title.
+    di::writer_print<di::String::Encoding>(buffer, "{}"_sv, terminal::OSC2().serialize());
+    m_cleanup.push_back(terminal::OSC2().serialize());
 
     // Setup - disable autowrap.
     di::writer_print<di::String::Encoding>(buffer, "\033[?7l"_sv);
@@ -117,6 +122,7 @@ auto Renderer::setup(dius::SyncFile& output, Feature features, ClipboardMode cli
     m_desired_screen.clear();
     m_desired_screen.clear_damage_tracking();
     m_current_cursor = {};
+    m_window_title = {};
     m_size_changed = true;
 
     auto text = di::move(buffer).vector();
@@ -371,7 +377,8 @@ static auto render_graphics_rendition(terminal::GraphicsRendition const& desired
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor_in) -> di::Result<> {
+auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor_in, di::Optional<di::String> window_title)
+    -> di::Result<> {
     // List of changes which are used to determine what updates to the screen are needed. We
     // render changes in 2 phases to account for specific edge cases around cell sizing. Imagine
     // we have a terminal cell with text "🐈‍⬛". We will think this emoji has width 2, but its
@@ -448,6 +455,12 @@ auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor_in) -
     auto buffer = di::VectorWriter<> {};
     if (!changes.empty()) {
         di::writer_print<di::String::Encoding>(buffer, "\033[?2026h"_sv);
+    }
+    if (m_window_title != window_title) {
+        di::writer_print<di::String::Encoding>(
+            buffer, "{}"_sv,
+            terminal::OSC2(window_title.transform(&di::String::view).value_or(""_sv).to_owned()).serialize());
+        m_window_title = di::move(window_title);
     }
     if (m_current_cursor.transform(&RenderedCursor::hidden) != true) {
         di::writer_print<di::String::Encoding>(buffer, "\033[?25l"_sv);
