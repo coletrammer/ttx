@@ -119,7 +119,7 @@ public:
     ~Pane();
 
     auto id() const { return m_id; }
-    auto draw(Renderer& renderer) -> RenderedCursor;
+    auto draw(Renderer& renderer) -> di::Tuple<RenderedCursor, terminal::Color>;
 
     auto event(KeyEvent const& event) -> bool;
     auto event(MouseEvent const& event) -> bool;

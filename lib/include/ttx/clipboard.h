@@ -101,7 +101,7 @@ private:
     struct SelectionState {
         di::Vector<byte> data;
         di::PriorityQueue<Request, di::Vector<Request>, di::CompareBackwards> requests;
-        bool system_working { false };
+        bool system_working { true };
     };
 
     ClipboardMode m_mode { ClipboardMode::System };

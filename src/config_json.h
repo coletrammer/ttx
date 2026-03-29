@@ -284,12 +284,27 @@ struct Theme {
     }
 };
 
+struct Render {
+    di::Optional<u32> inactive_dim_factor {};
+    di::Optional<u32> popup_dim_factor {};
+
+    constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<Render>) {
+        return di::make_fields<"Render",
+                               "Configuration relating the rendering of the ttx UI (including visual efects)">(
+            di::field<"inactive_dim_factor", &Render::inactive_dim_factor,
+                      "The amount as a percentage to dim non-active terminal panes">,
+            di::field<"popup_dim_factor", &Render::popup_dim_factor,
+                      "The amount as a percentage to dim background panes when there is a popup">);
+    }
+};
+
 struct Config {
     di::String schema { "https://github.com/coletrammer/ttx/raw/refs/heads/main/meta/schema/config.json"_s };
     u32 version { 1 };
     di::Optional<di::Vector<di::String>> extends {};
     Theme theme {};
     Input input {};
+    Render render {};
     Colors colors {};
     Clipboard clipboard {};
     Session session {};
@@ -308,6 +323,8 @@ struct Config {
             di::field<"theme", &Config::theme, "Configure the theme used by ttx">,
             di::field<"input", &Config::input,
                       "Configuration relating the input processing of ttx (primarily key bindings)">,
+            di::field<"render", &Config::render,
+                      "Configuration relating the rendering of the ttx UI (including visual efects)">,
             di::field<"colors", &Config::colors, "Terminal colors to use (main color palette)">,
             di::field<"clipboard", &Config::clipboard,
                       "Configuration relating to the clipboard handling of ttx (OSC 52)">,

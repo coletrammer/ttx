@@ -319,20 +319,10 @@ void InputThread::handle_event(terminal::DarkLightModeDetectionReport&& report) 
                 pane.set_theme_mode(report.mode);
             });
         });
+        m_force_reload_config_on_osc21 = true;
     }
 
-    // Since the outer terminal's palette changed, we need to re-request all
-    // colors.
-    auto osc21 = terminal::OSC21 {};
-    for (auto index_number : di::range(u32(terminal::PaletteIndex::Count))) {
-        if (index_number >= u32(terminal::PaletteIndex::SpecialBegin) &&
-            index_number <= u32(terminal::PaletteIndex::SpecialEnd)) {
-            continue;
-        }
-        auto index = terminal::PaletteIndex(index_number);
-        osc21.requests.push_back(terminal::OSC21::Request { .query = true, .palette = index });
-    }
-    m_render_thread.push_event(WriteString { osc21.serialize(m_features) });
+    m_render_thread.push_event(QueryPalette {});
 }
 
 void InputThread::handle_event(terminal::OSC21&& osc21) {
@@ -343,7 +333,7 @@ void InputThread::handle_event(terminal::OSC21&& osc21) {
             did_change = true;
         }
     }
-    if (did_change) {
+    if (did_change || m_force_reload_config_on_osc21) {
         // The global palette, which is used for resolving palette queries, is determined
         // by merging our configured palette with the outer terminal's actual colors. When
         // rendering, we do not use the resolved palette colors, so this is only used for
@@ -363,6 +353,22 @@ void InputThread::handle_event(terminal::OSC21&& osc21) {
             });
         });
         m_create_pane_args.global_palette = global_palette;
+        m_render_thread.push_event(UpdateOuterTerminalPalette(m_outer_terminal_palette));
+
+        m_force_reload_config_on_osc21 = false;
+
+        // Reload configuration, as the "auto" theme may resolve differently now, as will the "dark" and
+        // "light" specific theme configuration.
+        auto new_config = config_json::v1::resolve_profile(m_profile, m_create_pane_args.theme_mode,
+                                                           m_outer_terminal_palette, di::clone(m_base_config));
+        if (!new_config) {
+            m_render_thread.status_message(di::format("Failed to load configuration: {}"_sv, new_config.error()));
+            return;
+        }
+
+        set_config(di::clone(new_config.value()));
+        m_render_thread.set_config(di::clone(new_config.value()));
+        m_save_layout_thread.set_config(di::clone(new_config.value().session));
     }
 }
 

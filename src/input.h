@@ -88,6 +88,7 @@ private:
     di::Vector<KeyBind> m_key_binds;
     CreatePaneArgs m_create_pane_args;
     di::Atomic<bool> m_done { false };
+    bool m_force_reload_config_on_osc21 { false };
     di::Optional<MouseCoordinate> m_drag_origin;
     di::Synchronized<LayoutState>& m_layout_state;
     di::Synchronized<di::Ring<PendingEvent>> m_pending_events;

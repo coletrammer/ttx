@@ -433,9 +433,7 @@ auto resolve_theme(di::TransparentStringView name, terminal::Palette const& oute
                     auto index = terminal::PaletteIndex(index_number);
                     return theme.palette.get(index) == outer_terminal_palette.get(index);
                 })) {
-                auto result = TRY(resolve_theme(theme.name.view(), outer_terminal_palette));
-                result.theme.name = di::to_utf8_string_lossy(theme.name.view());
-                return result;
+                return resolve_theme(theme.name.view(), outer_terminal_palette);
             }
         }
     }
@@ -560,6 +558,17 @@ struct BuildJsonSchemaDefinitions {
         if (!defaults.empty()) {
             response["default"_sv] = defaults.clone();
         }
+        return response;
+    }
+
+    template<di::concepts::Integer T>
+    static auto operator()(di::InPlaceType<T>, di::TreeMap<di::String, di::json::Object>&, T const& defaults)
+        -> di::json::Object {
+        auto response = di::json::Object {};
+        response["type"_sv] = "integer"_s;
+        response["minimum"_sv] = di::NumericLimits<T>::min;
+        response["maximum"_sv] = di::NumericLimits<T>::max;
+        response["default"_sv] = defaults;
         return response;
     }
 
@@ -811,7 +820,7 @@ struct NixToString {
     static auto operator()(NixEnum const& value) -> di::String {
         return di::format("  {} = enum [ {} ]"_sv, value.name,
                           value.values | di::transform([](auto const& value) {
-                              return di::format("\"{}\""_sv, value);
+                              return di::format("{:?}"_sv, di::to_string(value));
                           }) | di::join_with(U' ') |
                               di::to<di::String>());
     }

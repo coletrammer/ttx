@@ -50,6 +50,7 @@ Top-level JSON configuration for ttx.
 | extends    | list of string          | []      | List of configuration files to extend. These can recursively extend more files. Priority is given to the last time the configuration option is specified. |
 | theme      | [Theme](#Theme)         | {}      | Configure the theme used by ttx.                                                                                                                          |
 | input      | [Input](#Input)         | {}      | Configuration relating the input processing of ttx (primarily key bindings).                                                                              |
+| render     | [Render](#Render)       | {}      | Configuration relating the rendering of the ttx UI (including visual efects).                                                                             |
 | colors     | [Colors](#Colors)       | {}      | Terminal colors to use (main color palette).                                                                                                              |
 | clipboard  | [Clipboard](#Clipboard) | {}      | Configuration relating to the clipboard handling of ttx (OSC 52).                                                                                         |
 | session    | [Session](#Session)     | {}      | Configuration relating the session management, such as automatically saving and restoring the current layout.                                             |
@@ -74,7 +75,7 @@ Configuration relating the input processing of ttx (primarily key bindings).
 
 | Field                    | Type        | Default                    | Description                                                                                                                                                                                                                                                                   |
 | ------------------------ | ----------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| prefix                   | [Key](#Key) | "B"                        | Prefix key to use. Almost all key bindings require using the prefix key to enter 'NORMAL' mode first. Currently, the prefix key must be pressed in conjunction with the control key. So specifying a prefix of 'A' means that to enter 'NORMAL' mode you must press 'ctrl+a'. |
+| prefix                   | [Key](#Key) | "b"                        | Prefix key to use. Almost all key bindings require using the prefix key to enter 'NORMAL' mode first. Currently, the prefix key must be pressed in conjunction with the control key. So specifying a prefix of 'A' means that to enter 'NORMAL' mode you must press 'ctrl+a'. |
 | disable_default_keybinds | boolean     | false                      | Disable all default key bindings to allow full customization.                                                                                                                                                                                                                 |
 | save_state_path          | string      | "/tmp/ttx-save-state.ansi" | Path to write save state files captured by ttx. These save state files can be replayed using `ttx replay`. This functionality is useful for testing and reproducing bugs.                                                                                                     |
 
@@ -82,69 +83,78 @@ Configuration relating the input processing of ttx (primarily key bindings).
 
 Represents a supported key for specifying key bindings.
 
-| Value        | Description            |
-| ------------ | ---------------------- |
-| None         | Disables a key binding |
-| A            |                        |
-| B            |                        |
-| C            |                        |
-| D            |                        |
-| E            |                        |
-| F            |                        |
-| G            |                        |
-| H            |                        |
-| I            |                        |
-| J            |                        |
-| K            |                        |
-| L            |                        |
-| M            |                        |
-| N            |                        |
-| O            |                        |
-| P            |                        |
-| Q            |                        |
-| R            |                        |
-| S            |                        |
-| T            |                        |
-| U            |                        |
-| V            |                        |
-| W            |                        |
-| X            |                        |
-| Y            |                        |
-| Z            |                        |
-| 0            |                        |
-| 1            |                        |
-| 2            |                        |
-| 3            |                        |
-| 4            |                        |
-| 5            |                        |
-| 6            |                        |
-| 7            |                        |
-| 8            |                        |
-| 9            |                        |
-| Backtick     |                        |
-| Minus        |                        |
-| Equal        |                        |
-| Star         |                        |
-| Plus         |                        |
-| LeftBracket  |                        |
-| RightBracket |                        |
-| BackSlash    |                        |
-| SemiColon    |                        |
-| Quote        |                        |
-| Comma        |                        |
-| Period       |                        |
-| Slash        |                        |
-| Escape       |                        |
-| Enter        |                        |
-| Tab          |                        |
-| Backspace    |                        |
-| Space        |                        |
-| Insert       |                        |
-| Delete       |                        |
-| Left         |                        |
-| Right        |                        |
-| Up           |                        |
-| Down         |                        |
+| Value     | Description            |
+| --------- | ---------------------- |
+| none      | Disables a key binding |
+| a         |                        |
+| b         |                        |
+| c         |                        |
+| d         |                        |
+| e         |                        |
+| f         |                        |
+| g         |                        |
+| h         |                        |
+| i         |                        |
+| j         |                        |
+| k         |                        |
+| l         |                        |
+| m         |                        |
+| n         |                        |
+| o         |                        |
+| p         |                        |
+| q         |                        |
+| r         |                        |
+| s         |                        |
+| t         |                        |
+| u         |                        |
+| v         |                        |
+| w         |                        |
+| x         |                        |
+| y         |                        |
+| z         |                        |
+| 0         |                        |
+| 1         |                        |
+| 2         |                        |
+| 3         |                        |
+| 4         |                        |
+| 5         |                        |
+| 6         |                        |
+| 7         |                        |
+| 8         |                        |
+| 9         |                        |
+| `         |                        |
+| -         |                        |
+| =         |                        |
+| \*        |                        |
+| +         |                        |
+| [         |                        |
+| ]         |                        |
+| \         |                        |
+| ;         |                        |
+| '         |                        |
+| ,         |                        |
+| .         |                        |
+| /         |                        |
+| esc       |                        |
+| enter     |                        |
+| tab       |                        |
+| backspace |                        |
+| space     |                        |
+| insert    |                        |
+| delete    |                        |
+| left      |                        |
+| right     |                        |
+| up        |                        |
+| down      |                        |
+
+### Render
+
+Configuration relating the rendering of the ttx UI (including visual efects).
+
+| Field               | Type             | Default | Description                                                               |
+| ------------------- | ---------------- | ------- | ------------------------------------------------------------------------- |
+| inactive_dim_factor | unsigned integer | 0       | The amount as a percentage to dim non-active terminal panes.              |
+| popup_dim_factor    | unsigned integer | 20      | The amount as a percentage to dim background panes when there is a popup. |
 
 ### Colors
 
@@ -307,8 +317,12 @@ This JSON block contains the default JSON configuration used by ttx:
   "extends": [],
   "input": {
     "disable_default_keybinds": false,
-    "prefix": "B",
+    "prefix": "b",
     "save_state_path": "/tmp/ttx-save-state.ansi"
+  },
+  "render": {
+    "inactive_dim_factor": 0,
+    "popup_dim_factor": 20
   },
   "session": {
     "restore_layout": true,

@@ -28,6 +28,8 @@
 #include "ttx/utf8_stream_decoder.h"
 
 namespace ttx {
+using di::Tuple;
+
 static auto spawn_child(CreatePaneArgs& args, dius::SyncFile& pty, Size const& size, i32 stdin_fd, i32 stdout_fd,
                         di::Optional<i32> extra_read_fd, di::Vector<i32> const& close_fds)
     -> di::Result<dius::system::ProcessHandle> {
@@ -328,8 +330,9 @@ Pane::~Pane() {
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-auto Pane::draw(Renderer& renderer) -> RenderedCursor {
-    auto rendered_cursor = m_terminal.with_lock([&](Terminal& terminal) {
+auto Pane::draw(Renderer& renderer) -> di::Tuple<RenderedCursor, terminal::Color> {
+    auto [rendered_cursor,
+          bg] = m_terminal.with_lock([&](Terminal& terminal) -> di::Tuple<RenderedCursor, terminal::Color> {
         auto const& palette = terminal.local_palette();
         auto _ =
             palette.modified() ? renderer.set_local_palette(palette) : di::ScopeExit(di::make_function<void()>([] {}));
@@ -404,22 +407,25 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
             screen.clear_whole_screen_dirty_flag();
         }
 
-        auto absolute_cursor_position = screen.absolute_row_screen_start() + terminal.cursor_row();
-        auto relative_cursor_offset = u32(screen.absolute_row_screen_start() - screen.visual_scroll_offset());
-        return RenderedCursor {
-            .cursor_row = terminal.cursor_row() - m_vertical_scroll_offset + relative_cursor_offset,
-            .cursor_col = terminal.cursor_col() - m_horizontal_scroll_offset,
-            .style = terminal.cursor_style(),
-            .color = renderer.resolve_cursor_color(),
-            .text_color = renderer.resolve_cursor_text_color(),
-            .hidden = terminal.cursor_hidden() || !terminal.allowed_to_draw() ||
-                      terminal.cursor_row() < m_vertical_scroll_offset ||
-                      terminal.cursor_row() - m_vertical_scroll_offset >= visible_size.rows ||
-                      absolute_cursor_position < screen.visual_scroll_offset() ||
-                      absolute_cursor_position >= screen.visual_scroll_offset() + visible_size.rows ||
-                      terminal.cursor_col() < m_horizontal_scroll_offset ||
-                      terminal.cursor_col() - m_horizontal_scroll_offset >= visible_size.cols,
-        };
+        auto const absolute_cursor_position = screen.absolute_row_screen_start() + terminal.cursor_row();
+        auto const relative_cursor_offset = u32(screen.absolute_row_screen_start() - screen.visual_scroll_offset());
+        auto const bg = renderer.resolve_background(terminal::Color());
+        return di::Tuple(
+            RenderedCursor {
+                .cursor_row = terminal.cursor_row() - m_vertical_scroll_offset + relative_cursor_offset,
+                .cursor_col = terminal.cursor_col() - m_horizontal_scroll_offset,
+                .style = terminal.cursor_style(),
+                .color = renderer.resolve_cursor_color(),
+                .text_color = renderer.resolve_cursor_text_color(),
+                .hidden = terminal.cursor_hidden() || !terminal.allowed_to_draw() ||
+                          terminal.cursor_row() < m_vertical_scroll_offset ||
+                          terminal.cursor_row() - m_vertical_scroll_offset >= visible_size.rows ||
+                          absolute_cursor_position < screen.visual_scroll_offset() ||
+                          absolute_cursor_position >= screen.visual_scroll_offset() + visible_size.rows ||
+                          terminal.cursor_col() < m_horizontal_scroll_offset ||
+                          terminal.cursor_col() - m_horizontal_scroll_offset >= visible_size.cols,
+            },
+            bg);
     });
 
     // End by possibly resizing. We're only updating the size in the render() function
@@ -445,7 +451,7 @@ auto Pane::draw(Renderer& renderer) -> RenderedCursor {
         m_hooks.did_update(*this);
     }
 
-    return rendered_cursor;
+    return { rendered_cursor, bg };
 }
 
 auto Pane::event(KeyEvent const& event) -> bool {
@@ -574,6 +580,7 @@ auto Pane::event(FocusEvent const& event) -> bool {
             terminal.active_screen().screen.clear_selection();
             m_pending_selection_start = {};
         }
+        terminal.invalidate_all();
         return di::Tuple { terminal.focus_event_mode() };
     });
 

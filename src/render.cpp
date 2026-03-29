@@ -11,12 +11,15 @@
 #include "ttx/mouse.h"
 #include "ttx/mouse_event.h"
 #include "ttx/renderer.h"
+#include "ttx/terminal/escapes/osc_21.h"
 #include "ttx/terminal/graphics_rendition.h"
 
 namespace ttx {
 auto RenderThread::create(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit, Config config,
-                          Feature features) -> di::Result<di::Box<RenderThread>> {
-    auto result = di::make_box<RenderThread>(layout_state, di::move(did_exit), di::move(config), features);
+                          Feature features, terminal::Palette const& outer_terminal_palette)
+    -> di::Result<di::Box<RenderThread>> {
+    auto result = di::make_box<RenderThread>(layout_state, di::move(did_exit), di::move(config), features,
+                                             outer_terminal_palette);
     result->m_thread = TRY(dius::Thread::create([&self = *result.get()] {
         self.render_thread();
     }));
@@ -24,13 +27,14 @@ auto RenderThread::create(di::Synchronized<LayoutState>& layout_state, di::Funct
 }
 
 auto RenderThread::create_mock(di::Synchronized<LayoutState>& layout_state) -> RenderThread {
-    return RenderThread(layout_state, nullptr, {}, Feature::All);
+    return RenderThread(layout_state, nullptr, {}, Feature::All, {});
 }
 
 RenderThread::RenderThread(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit, Config config,
-                           Feature features)
+                           Feature features, terminal::Palette const& outer_terminal_palette)
     : m_layout_state(layout_state)
     , m_did_exit(di::move(did_exit))
+    , m_outer_terminal_palette(outer_terminal_palette)
     , m_clipboard(config.clipboard.mode, features)
     , m_config(di::move(config))
     , m_features(features) {}
@@ -169,6 +173,32 @@ void RenderThread::render_thread() {
                 });
                 m_clipboard.set_mode(ev->config.clipboard.mode);
                 m_config = di::move(ev->config);
+            } else if (auto ev = di::get_if<UpdateOuterTerminalPalette>(event)) {
+                m_layout_state.with_lock([&](LayoutState& state) {
+                    for (auto& tab : state.active_tab()) {
+                        tab.invalidate_all();
+                    }
+                });
+                m_outer_terminal_palette = ev->palette;
+            } else if (auto ev = di::get_if<QueryPalette>(event)) {
+                // Since the outer terminal's palette changed, we need to re-request all
+                // colors. We also need to clear the palette background and cursor colors since the
+                // renderer may have overriden it.
+                auto osc21 = terminal::OSC21 {};
+                osc21.requests.push_back(terminal::OSC21::Request { .palette = terminal::PaletteIndex::Cursor });
+                osc21.requests.push_back(terminal::OSC21::Request { .palette = terminal::PaletteIndex::CursorText });
+                osc21.requests.push_back(terminal::OSC21::Request { .palette = terminal::PaletteIndex::Background });
+                for (auto index_number : di::range(u32(terminal::PaletteIndex::Count))) {
+                    if (index_number >= u32(terminal::PaletteIndex::SpecialBegin) &&
+                        index_number <= u32(terminal::PaletteIndex::SpecialEnd)) {
+                        continue;
+                    }
+                    auto index = terminal::PaletteIndex(index_number);
+                    osc21.requests.push_back(terminal::OSC21::Request { .query = true, .palette = index });
+                }
+                auto string = osc21.serialize(m_features);
+                (void) dius::std_in.write_exactly(di::as_bytes(string.span()));
+                renderer.flush_palette_color_state();
             } else if (auto ev = di::get_if<DoRender>(event)) {
                 // Do nothing. This was just to wake us up.
             } else if (auto ev = di::get_if<Exit>(event)) {
@@ -202,7 +232,7 @@ void RenderThread::render_thread() {
 
         // Do terminal setup if requested.
         if (do_setup) {
-            (void) renderer.setup(dius::std_in, m_features, m_clipboard.mode());
+            (void) renderer.setup(dius::std_in, m_features);
             do_setup = false;
         }
 
@@ -228,7 +258,9 @@ struct PositionAndSize {
 
 struct Render {
     Renderer& renderer;
+    RenderConfig const& config;
     di::Optional<RenderedCursor>& cursor;
+    di::Optional<terminal::Color>& bg_color;
     Tab& tab;
     LayoutState& state;
     bool have_top_status_bar { false };
@@ -283,13 +315,21 @@ struct Render {
     }
 
     void operator()(LayoutEntry const& entry) {
+        auto const is_active = entry.pane == tab.active().data();
+        auto _ = is_active ? renderer.set_dim_factor(0) : di::ScopeExit<di::Function<void()>>([] {});
+
         renderer.set_bound(entry.row + have_top_status_bar, entry.col, entry.size.cols, entry.size.rows);
-        auto pane_cursor = entry.pane->draw(renderer);
-        if (entry.pane == tab.active().data()) {
+        auto [pane_cursor, bg] = entry.pane->draw(renderer);
+        if (is_active) {
             pane_cursor.cursor_row += have_top_status_bar;
             pane_cursor.cursor_row += entry.row;
             pane_cursor.cursor_col += entry.col;
             cursor = pane_cursor;
+        }
+
+        // Propogate the background color if there is only 1 visible pane.
+        if (is_active && (tab.full_screen_pane() || tab.panes().size() == 1)) {
+            bg_color = bg;
         }
     }
 };
@@ -307,10 +347,9 @@ void RenderThread::render_status_bar(LayoutState const& state, Renderer& rendere
     auto make_badge_sgr = [&](terminal::Color bg, bool bold = false) -> terminal::GraphicsRendition {
         if (badge_fg.is_dynamic()) {
             return terminal::GraphicsRendition {
-                .fg = bg,
-                .bg = {},
+                .fg = renderer.resolve_background(terminal::Color()),
+                .bg = bg,
                 .font_weight = bold ? terminal::FontWeight::Bold : terminal::FontWeight::None,
-                .inverted = true,
             };
         }
         return terminal::GraphicsRendition {
@@ -434,8 +473,9 @@ void RenderThread::render_status_bar(LayoutState const& state, Renderer& rendere
 }
 
 void RenderThread::do_render(Renderer& renderer) {
-    auto [cursor, window_title] = m_layout_state.with_lock(
-        [&](LayoutState& state) -> di::Tuple<di::Optional<RenderedCursor>, di::Optional<di::String>> {
+    auto [cursor, window_title, bg_color] = m_layout_state.with_lock(
+        [&](LayoutState& state)
+            -> di::Tuple<di::Optional<RenderedCursor>, di::Optional<di::String>, di::Optional<terminal::Color>> {
             // Ignore if there is no layout.
             auto active_tab = state.active_tab();
             if (!active_tab) {
@@ -451,17 +491,26 @@ void RenderThread::do_render(Renderer& renderer) {
             auto _ = renderer.set_global_palette(m_config.colors);
 
             // Do the render.
-            renderer.start(state.size());
+            renderer.start(state.size(), m_outer_terminal_palette);
+
+            auto const dim_factor =
+                state.active_popup() ? m_config.render.popup_dim_factor : m_config.render.inactive_dim_factor;
+            auto _ = renderer.set_dim_factor(dim_factor);
 
             // Status bar.
             if (!state.hide_status_bar()) {
+                // Only dim the status bar for popups.
+                auto _ =
+                    !state.active_popup() ? renderer.set_dim_factor(0) : di::ScopeExit<di::Function<void()>>([] {});
                 render_status_bar(state, renderer, m_config.status_bar);
             }
 
             auto cursor = di::Optional<RenderedCursor> {};
 
             // First render all panes in the layout tree.
-            auto render_fn = Render(renderer, cursor, tab, state, state.status_bar_position() == 0_u32);
+            auto bg_color = di::Optional<terminal::Color> {};
+            auto render_fn =
+                Render(renderer, m_config.render, cursor, bg_color, tab, state, state.status_bar_position() == 0_u32);
             render_fn(*tree);
 
             // If there is a popup, render it.
@@ -481,9 +530,17 @@ void RenderThread::do_render(Renderer& renderer) {
                 auto session_index_string = di::to_string(session_index + 1);
                 window_title = session.name().value_or(session_index_string.view()).to_owned();
             }
-            return { cursor, di::move(window_title) };
+
+            // We always need to set the background color to our palette's default color to prevent
+            // visual artifacts at the edge of the screen. This additionally will apply any dimming
+            // factor by using `resolve_background`.
+            if (!bg_color || state.active_popup()) {
+                // Resolving the color applies dimming.
+                bg_color = renderer.resolve_background(bg_color.value_or(terminal::Color()));
+            }
+            return { cursor, di::move(window_title), bg_color };
         });
 
-    (void) renderer.finish(dius::std_in, cursor.value_or({ .hidden = true }), di::move(window_title));
+    (void) renderer.finish(dius::std_in, cursor.value_or({ .hidden = true }), di::move(window_title), bg_color);
 }
 }

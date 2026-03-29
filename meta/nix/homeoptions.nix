@@ -84,6 +84,11 @@ let
         description = "Configuration relating the input processing of ttx (primarily key bindings)";
         default = null;
       };
+      "render" = lib.mkOption {
+        type = nullOr render;
+        description = "Configuration relating the rendering of the ttx UI (including visual efects)";
+        default = null;
+      };
       "colors" = lib.mkOption {
         type = nullOr colors;
         description = "Terminal colors to use (main color palette)";
@@ -239,33 +244,33 @@ let
     };
   };
   key = enum [
-    "None"
-    "A"
-    "B"
-    "C"
-    "D"
-    "E"
-    "F"
-    "G"
-    "H"
-    "I"
-    "J"
-    "K"
-    "L"
-    "M"
-    "N"
-    "O"
-    "P"
-    "Q"
-    "R"
-    "S"
-    "T"
-    "U"
-    "V"
-    "W"
-    "X"
-    "Y"
-    "Z"
+    "none"
+    "a"
+    "b"
+    "c"
+    "d"
+    "e"
+    "f"
+    "g"
+    "h"
+    "i"
+    "j"
+    "k"
+    "l"
+    "m"
+    "n"
+    "o"
+    "p"
+    "q"
+    "r"
+    "s"
+    "t"
+    "u"
+    "v"
+    "w"
+    "x"
+    "y"
+    "z"
     "0"
     "1"
     "2"
@@ -276,31 +281,45 @@ let
     "7"
     "8"
     "9"
-    "Backtick"
-    "Minus"
-    "Equal"
-    "Star"
-    "Plus"
-    "LeftBracket"
-    "RightBracket"
-    "BackSlash"
-    "SemiColon"
-    "Quote"
-    "Comma"
-    "Period"
-    "Slash"
-    "Escape"
-    "Enter"
-    "Tab"
-    "Backspace"
-    "Space"
-    "Insert"
-    "Delete"
-    "Left"
-    "Right"
-    "Up"
-    "Down"
+    "`"
+    "-"
+    "="
+    "*"
+    "+"
+    "["
+    "]"
+    "\\"
+    ";"
+    "'"
+    ","
+    "."
+    "/"
+    "esc"
+    "enter"
+    "tab"
+    "backspace"
+    "space"
+    "insert"
+    "delete"
+    "left"
+    "right"
+    "up"
+    "down"
   ];
+  render = submodule {
+    options = {
+      "inactive_dim_factor" = lib.mkOption {
+        type = nullOr (ints.u32);
+        description = "The amount as a percentage to dim non-active terminal panes";
+        default = null;
+      };
+      "popup_dim_factor" = lib.mkOption {
+        type = nullOr (ints.u32);
+        description = "The amount as a percentage to dim background panes when there is a popup";
+        default = null;
+      };
+    };
+  };
   session = submodule {
     options = {
       "restore_layout" = lib.mkOption {

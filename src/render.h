@@ -12,6 +12,7 @@
 #include "ttx/pane.h"
 #include "ttx/renderer.h"
 #include "ttx/terminal/escapes/osc_52.h"
+#include "ttx/terminal/palette.h"
 
 namespace ttx {
 struct PaneExited {
@@ -48,17 +49,24 @@ struct UpdateConfig {
     Config config;
 };
 
+struct UpdateOuterTerminalPalette {
+    terminal::Palette palette;
+};
+
+struct QueryPalette {};
+
 using RenderEvent = di::Variant<Size, PaneExited, InputStatus, WriteString, StatusMessage, DoRender, MouseEvent,
-                                ClipboardRequest, UpdateConfig, Exit>;
+                                ClipboardRequest, UpdateConfig, UpdateOuterTerminalPalette, QueryPalette, Exit>;
 
 class RenderThread {
 public:
     explicit RenderThread(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit, Config config,
-                          Feature features);
+                          Feature features, terminal::Palette const& outer_terminal_palette);
     ~RenderThread();
 
     static auto create(di::Synchronized<LayoutState>& layout_state, di::Function<void()> did_exit, Config config,
-                       Feature features) -> di::Result<di::Box<RenderThread>>;
+                       Feature features, terminal::Palette const& outer_terminal_palette)
+        -> di::Result<di::Box<RenderThread>>;
     static auto create_mock(di::Synchronized<LayoutState>& layout_state) -> RenderThread;
 
     void push_event(RenderEvent event);
@@ -91,6 +99,7 @@ private:
     dius::ConditionVariable m_condition;
     di::Synchronized<LayoutState>& m_layout_state;
     di::Function<void()> m_did_exit;
+    terminal::Palette m_outer_terminal_palette;
     Clipboard m_clipboard;
     Config m_config;
     Feature m_features { Feature::None };

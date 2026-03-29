@@ -28,7 +28,7 @@
 #include "ttx/terminal/screen.h"
 
 namespace ttx {
-auto Renderer::setup(dius::SyncFile& output, Feature features, ClipboardMode clipboard_mode) -> di::Result<> {
+auto Renderer::setup(dius::SyncFile& output, Feature features) -> di::Result<> {
     m_cleanup = {};
     m_features = features;
 
@@ -54,6 +54,9 @@ auto Renderer::setup(dius::SyncFile& output, Feature features, ClipboardMode cli
     });
     osc21.requests.push_back(terminal::OSC21::Request {
         .palette = terminal::PaletteIndex::CursorText,
+    });
+    osc21.requests.push_back(terminal::OSC21::Request {
+        .palette = terminal::PaletteIndex::Background,
     });
     m_cleanup.push_back(osc21.serialize(features));
 
@@ -106,22 +109,12 @@ auto Renderer::setup(dius::SyncFile& output, Feature features, ClipboardMode cli
         m_cleanup.push_back("\033[?2031l"_s);
     }
 
-    // Setup - requests clipboard to initialize state and determine if the host terminal
-    // supports OSC 52. This is gated by the feature flag and clipboard configuration.
-    if (!!(features & Feature::Clipboard) && clipboard_mode == ClipboardMode::System) {
-        auto osc52 = terminal::OSC52 {};
-        osc52.query = true;
-        (void) osc52.selections.push_back(terminal::SelectionType::Clipboard);
-        di::writer_print<di::String::Encoding>(buffer, "{}"_sv, osc52.serialize());
-        osc52.selections[0] = terminal::SelectionType::Selection;
-        di::writer_print<di::String::Encoding>(buffer, "{}"_sv, osc52.serialize());
-    }
-
     // Setup - ensure the current and desired screens are fully cleared.
     m_current_screen.clear();
     m_desired_screen.clear();
     m_desired_screen.clear_damage_tracking();
     m_current_cursor = {};
+    m_bg_color = {};
     m_window_title = {};
     m_size_changed = true;
 
@@ -140,7 +133,15 @@ auto Renderer::cleanup(dius::SyncFile& output) -> di::Result<> {
     return output.write_exactly(di::as_bytes(text.span()));
 }
 
-void Renderer::start(Size const& size) {
+void Renderer::flush_palette_color_state() {
+    m_bg_color = {};
+    for (auto& cursor : m_current_cursor) {
+        cursor.color = {};
+        cursor.text_color = {};
+    }
+}
+
+void Renderer::start(Size const& size, terminal::Palette const& outer_terminal_palette) {
     // If the size has changed, we need to flush all our state.
     if (m_size_changed || this->size() != size) {
         m_size_changed = true;
@@ -150,6 +151,8 @@ void Renderer::start(Size const& size) {
         m_desired_screen.clear();
         m_desired_screen.clear_damage_tracking();
         m_current_cursor = {};
+        m_window_title = {};
+        m_bg_color = {};
     }
 
     // Reset bounding box.
@@ -157,6 +160,8 @@ void Renderer::start(Size const& size) {
     m_col_offset = 0;
     m_bound_width = size.cols;
     m_bound_height = size.rows;
+
+    m_outer_terminal_palette = outer_terminal_palette;
 }
 
 // The pending changes are stored in the difference between the current and desired screens. We must translate only
@@ -377,8 +382,12 @@ static auto render_graphics_rendition(terminal::GraphicsRendition const& desired
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor_in, di::Optional<di::String> window_title)
-    -> di::Result<> {
+auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor_in, di::Optional<di::String> window_title,
+                      di::Optional<terminal::Color> bg_color) -> di::Result<> {
+    auto _ = di::ScopeExit([&] {
+        m_outer_terminal_palette = {};
+    });
+
     // List of changes which are used to determine what updates to the screen are needed. We
     // render changes in 2 phases to account for specific edge cases around cell sizing. Imagine
     // we have a terminal cell with text "🐈‍⬛". We will think this emoji has width 2, but its
@@ -461,6 +470,23 @@ auto Renderer::finish(dius::SyncFile& output, RenderedCursor const& cursor_in, d
             buffer, "{}"_sv,
             terminal::OSC2(window_title.transform(&di::String::view).value_or(""_sv).to_owned()).serialize());
         m_window_title = di::move(window_title);
+    }
+
+    // We don't want to set the background color unless necessary, so if its the same as the outer terminal's
+    // background color we clear the state.
+    bg_color = di::move(bg_color).filter([&](terminal::Color bg) -> bool {
+        return !bg.is_default() && bg != m_outer_terminal_palette.transform([&](terminal::Palette const& p) {
+            return p.get(terminal::PaletteIndex::Background);
+        });
+    });
+    if (m_bg_color != bg_color) {
+        auto osc21 = terminal::OSC21 {};
+        osc21.requests.push_back(terminal::OSC21::Request {
+            .palette = terminal::PaletteIndex::Background,
+            .color = bg_color.value_or(terminal::Color()),
+        });
+        di::writer_print<di::String::Encoding>(buffer, "{}"_sv, osc21.serialize(m_features));
+        m_bg_color = bg_color;
     }
     if (m_current_cursor.transform(&RenderedCursor::hidden) != true) {
         di::writer_print<di::String::Encoding>(buffer, "\033[?25l"_sv);
@@ -720,7 +746,7 @@ auto Renderer::resolve_color(terminal::Color color) const -> terminal::Color {
     if (m_global_palette) {
         color = m_global_palette.value().resolve(color);
     }
-    return color;
+    return dimmed(color);
 }
 
 auto Renderer::resolve_foreground(terminal::Color color) const -> terminal::Color {
@@ -730,7 +756,7 @@ auto Renderer::resolve_foreground(terminal::Color color) const -> terminal::Colo
     if (m_global_palette) {
         color = m_global_palette.value().resolve_foreground(color);
     }
-    return color;
+    return dimmed(color);
 }
 
 auto Renderer::resolve_background(terminal::Color color) const -> terminal::Color {
@@ -740,7 +766,12 @@ auto Renderer::resolve_background(terminal::Color color) const -> terminal::Colo
     if (m_global_palette) {
         color = m_global_palette.value().resolve_background(color);
     }
-    return color;
+    // We always resolve the background color to allow us to override the local palette's
+    // background color later.
+    if (m_outer_terminal_palette) {
+        color = m_outer_terminal_palette.value().resolve_background(color);
+    }
+    return dimmed(color);
 }
 
 auto Renderer::resolve_cursor_color() const -> terminal::Color {
@@ -757,5 +788,12 @@ auto Renderer::resolve_cursor_text_color() const -> terminal::Color {
         color = resolve_foreground(resolve_color(terminal::PaletteIndex::Background));
     }
     return color;
+}
+
+auto Renderer::dimmed(terminal::Color color) const -> terminal::Color {
+    if (m_dim_factor == 0 || !m_outer_terminal_palette) {
+        return color;
+    }
+    return m_outer_terminal_palette.value().resolve(color).dimmed(m_dim_factor);
 }
 }

@@ -3,7 +3,6 @@
 #include "di/container/string/string_view.h"
 #include "di/util/scope_exit.h"
 #include "dius/sync_file.h"
-#include "ttx/clipboard.h"
 #include "ttx/cursor_style.h"
 #include "ttx/features.h"
 #include "ttx/size.h"
@@ -32,12 +31,14 @@ public:
         : m_current_screen({ 24, 80 }, terminal::Screen::ScrollBackEnabled::No)
         , m_desired_screen({ 24, 80 }, terminal::Screen::ScrollBackEnabled::No) {}
 
-    auto setup(dius::SyncFile& output, Feature features, ClipboardMode clipboard_mode) -> di::Result<>;
+    auto setup(dius::SyncFile& output, Feature features) -> di::Result<>;
     auto cleanup(dius::SyncFile& output) -> di::Result<>;
 
-    void start(Size const& size);
-    auto finish(dius::SyncFile& output, RenderedCursor const& cursor_in, di::Optional<di::String> window_title)
-        -> di::Result<>;
+    void start(Size const& size, terminal::Palette const& outer_terminal_palette);
+    auto finish(dius::SyncFile& output, RenderedCursor const& cursor_in, di::Optional<di::String> window_title,
+                di::Optional<terminal::Color> bg_color) -> di::Result<>;
+
+    void flush_palette_color_state();
 
     void put_text(di::StringView text, u32 row, u32 col, terminal::GraphicsRendition const& rendition = {},
                   di::Optional<terminal::Hyperlink const&> hyperlink = {});
@@ -69,12 +70,22 @@ public:
     }
     void reset_global_palette() { m_global_palette = {}; }
 
+    [[nodiscard]] auto set_dim_factor(u32 dim_factor) -> di::ScopeExit<di::Function<void()>> {
+        auto original_dim_factor = m_dim_factor;
+        m_dim_factor = dim_factor;
+        return di::ScopeExit(di::make_function<void()>([this, original_dim_factor] {
+            m_dim_factor = original_dim_factor;
+        }));
+    }
+    void reset_dim_factor() { m_dim_factor = 0; }
+
     auto resolve_color(terminal::PaletteIndex index) const -> terminal::Color;
     auto resolve_color(terminal::Color color) const -> terminal::Color;
     auto resolve_foreground(terminal::Color color) const -> terminal::Color;
     auto resolve_background(terminal::Color color) const -> terminal::Color;
     auto resolve_cursor_color() const -> terminal::Color;
     auto resolve_cursor_text_color() const -> terminal::Color;
+    auto dimmed(terminal::Color color) const -> terminal::Color;
 
 private:
     auto size() const -> Size { return m_current_screen.size(); }
@@ -84,16 +95,19 @@ private:
     terminal::Screen m_current_screen;
     terminal::Screen m_desired_screen;
     di::Optional<RenderedCursor> m_current_cursor;
+    di::Optional<terminal::Color> m_bg_color;
     di::Optional<di::String> m_window_title;
     di::Vector<di::String> m_cleanup;
     Feature m_features { Feature::None };
     di::Optional<terminal::Palette const&> m_global_palette;
     di::Optional<terminal::Palette const&> m_local_palette;
+    di::Optional<terminal::Palette const&> m_outer_terminal_palette;
 
     u32 m_row_offset { 0 };
     u32 m_col_offset { 0 };
     u32 m_bound_width { 0 };
     u32 m_bound_height { 0 };
+    u32 m_dim_factor { 0 };
     bool m_size_changed { true };
 };
 }
