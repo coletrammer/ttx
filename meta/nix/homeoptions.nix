@@ -341,6 +341,11 @@ let
         description = "Where on the screen to show the status bar";
         default = null;
       };
+      "tab_name_sources" = lib.mkOption {
+        type = nullOr (listOf (tabNameSource));
+        description = "List of candidate tab name sources to resolve the tab name for the status bar. The first source which has a value set is chosen";
+        default = null;
+      };
       "colors" = lib.mkOption {
         type = nullOr statusBarColors;
         description = "Configure the colors used by the status bar";
@@ -415,6 +420,11 @@ let
   statusBarPosition = enum [
     "top"
     "bottom"
+  ];
+  tabNameSource = enum [
+    "manual"
+    "window-title"
+    "current-working-directory"
   ];
   terminfo = submodule {
     options = {

@@ -139,8 +139,7 @@ auto LayoutState::add_session(CreatePaneArgs args, RenderThread& render_thread, 
     auto _ = di::ScopeExit(di::bind_front(&LayoutState::layout_did_update, this));
 
     auto id = m_next_session_id++;
-    auto name = di::to_string(id);
-    auto& session = m_sessions.push_back(di::make_box<Session>(this, di::move(name), id));
+    auto& session = m_sessions.push_back(di::make_box<Session>(this, id));
     auto result = add_tab(*session, di::move(args), render_thread, input_thread);
     if (!result) {
         remove_session(*session);

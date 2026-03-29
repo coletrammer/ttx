@@ -2,6 +2,7 @@
 
 #include "colors.h"
 #include "di/reflect/prelude.h"
+#include "tab_name.h"
 #include "ttx/clipboard.h"
 #include "ttx/key.h"
 #include "ttx/terminal/palette.h"
@@ -107,6 +108,8 @@ constexpr static auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<StatusBar
 struct StatusBarConfig {
     bool hide { false };
     StatusBarPosition position { StatusBarPosition::Top };
+    di::Vector<TabNameSource> tab_name_sources { TabNameSource::Manual, TabNameSource::WindowTitle,
+                                                 TabNameSource::CurrentWorkingDirectory };
     StatusBarColors colors {};
 
     auto operator==(StatusBarConfig const&) const -> bool = default;
@@ -114,6 +117,7 @@ struct StatusBarConfig {
     constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<StatusBarConfig>) {
         return di::make_fields<"StatusBar">(di::field<"hide", &StatusBarConfig::hide>,
                                             di::field<"position", &StatusBarConfig::position>,
+                                            di::field<"tab_name_sources", &StatusBarConfig::tab_name_sources>,
                                             di::field<"colors", &StatusBarConfig::colors>);
     }
 };

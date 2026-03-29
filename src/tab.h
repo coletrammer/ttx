@@ -17,7 +17,8 @@ class Session;
 // Corresponds to tmux window.
 class Tab {
 public:
-    explicit Tab(Session* session, u64 id, di::String name) : m_session(session), m_id(id), m_name(di::move(name)) {}
+    explicit Tab(Session* session, u64 id, di::Optional<di::String> name = {})
+        : m_session(session), m_id(id), m_name(di::move(name)) {}
 
     static auto from_json_v1(json::v1::Tab const& json, Session* session, Size size, CreatePaneArgs args,
                              RenderThread& render_thread, InputThread& input_thread) -> di::Result<di::Box<Tab>>;
@@ -47,10 +48,10 @@ public:
     auto set_active(Pane* pane) -> bool;
 
     auto id() const { return m_id; }
-    auto name() const -> di::StringView { return m_name; }
+    auto name() const -> di::Optional<di::StringView> { return m_name.transform(&di::String::view); }
     auto empty() const -> bool { return m_layout_root.empty() && !m_popup; }
 
-    void set_name(di::String name) { m_name = di::move(name); }
+    void set_name(di::Optional<di::String> name) { m_name = di::move(name); }
 
     auto layout_group() -> LayoutGroup& { return m_layout_root; }
     auto layout_tree() const -> di::Optional<LayoutNode&> {
@@ -94,7 +95,7 @@ private:
     Session* m_session { nullptr };
     u64 m_id { 0 };
     Size m_size;
-    di::String m_name;
+    di::Optional<di::String> m_name;
     LayoutGroup m_layout_root {};
     di::Box<LayoutNode> m_layout_tree {};
     di::Ring<Pane*> m_panes_ordered_by_recency {};

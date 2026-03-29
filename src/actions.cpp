@@ -9,6 +9,7 @@
 #include "input.h"
 #include "render.h"
 #include "tab.h"
+#include "tab_name.h"
 #include "theme.h"
 #include "ttx/layout.h"
 
@@ -78,7 +79,7 @@ auto create_tab() -> Action {
                 context.layout_state.with_lock([&](LayoutState& state) {
                     for (auto& session : state.active_session()) {
                         auto cwd = session.active_pane().and_then(&Pane::current_working_directory);
-                        (void) state.add_tab(session, context.create_pane_args.with_cwd(cwd.transform(di::to_owned)),
+                        (void) state.add_tab(session, context.create_pane_args.with_cwd(di::move(cwd)),
                                              context.render_thread, context.input_thread);
                     }
                 });
@@ -99,27 +100,49 @@ auto rename_tab() -> Action {
                         }
                         auto& tab = session.active_tab().value();
 
+                        auto original_name = tab.name().value_or(""_sv).to_owned();
                         auto [create_pane_args, popup_layout] =
                             FzfCommand()
                                 .as_text_box()
                                 .with_title("Rename Tab"_s)
                                 .with_prompt("Name"_s)
-                                .with_query(tab.name().to_owned())
+                                .with_query(original_name.clone())
+                                .with_query_as_extra_output()
                                 .popup_args(context.create_pane_args.clone(), context.config.fzf);
                         create_pane_args.hooks.did_finish_output = di::make_function<void(di::StringView)>(
-                            [&layout_state = context.layout_state, &tab,
-                             &render_thread = context.render_thread](di::StringView contents) {
+                            [&layout_state = context.layout_state, &tab, &render_thread = context.render_thread,
+                             original_name = di::move(original_name)](di::StringView contents) {
+                                auto cancelled = contents.empty();
+                                if (cancelled) {
+                                    contents = original_name.view();
+                                }
                                 while (contents.ends_with(U'\n')) {
                                     contents = contents.substr(contents.begin(), --contents.end());
-                                }
-                                if (contents.empty()) {
-                                    return;
                                 }
                                 layout_state.with_lock([&](LayoutState&) {
                                     // NOTE: we take the layout state lock to prevent data races. Also, the tab is
                                     // guaranteed to still be alive because tabs won't be killed until all their panes
                                     // have exited. And we put the popup in the tab.
-                                    tab.set_name(contents.to_owned());
+                                    if (contents.empty()) {
+                                        tab.set_name(di::nullopt);
+                                    } else {
+                                        tab.set_name(contents.to_owned());
+                                    }
+                                });
+                                render_thread.request_render();
+                            });
+                        create_pane_args.hooks.did_get_extra_output = di::make_function<void(di::StringView)>(
+                            [&layout_state = context.layout_state, &tab,
+                             &render_thread = context.render_thread](di::StringView contents) {
+                                while (contents.ends_with(U'\n')) {
+                                    contents = contents.substr(contents.begin(), --contents.end());
+                                }
+                                layout_state.with_lock([&](LayoutState&) {
+                                    if (contents.empty()) {
+                                        tab.set_name(di::nullopt);
+                                    } else {
+                                        tab.set_name(contents.to_owned());
+                                    }
                                 });
                                 render_thread.request_render();
                             });
@@ -212,7 +235,9 @@ auto find_tab() -> Action {
                     auto tab_names = di::Vector<di::String>();
                     if (auto session = state.active_session()) {
                         for (auto [i, tab] : session.value().tabs() | di::enumerate) {
-                            tab_names.push_back(di::format("{} {}"_sv, i + 1, tab->name()));
+                            auto tab_name =
+                                evaluate_tab_name(context.config.status_bar.tab_name_sources.span(), *tab, i + 1);
+                            tab_names.push_back(di::format("{} {}"_sv, i + 1, tab_name));
                         }
 
                         auto [create_pane_args, popup_layout] =
@@ -270,16 +295,22 @@ auto rename_session() -> Action {
             [](ActionContext const& context) {
                 context.layout_state.with_lock([&](LayoutState& state) {
                     for (auto& session : state.active_session()) {
+                        auto original_name = session.name().value_or(""_sv).to_owned();
                         auto [create_pane_args, popup_layout] =
                             FzfCommand()
                                 .as_text_box()
                                 .with_title("Rename Session"_s)
                                 .with_prompt("Name"_s)
-                                .with_query(session.name().to_owned())
+                                .with_query(original_name.clone())
+                                .with_query_as_extra_output()
                                 .popup_args(context.create_pane_args.clone(), context.config.fzf);
                         create_pane_args.hooks.did_finish_output = di::make_function<void(di::StringView)>(
-                            [&layout_state = context.layout_state, &session,
-                             &render_thread = context.render_thread](di::StringView contents) {
+                            [&layout_state = context.layout_state, &session, &render_thread = context.render_thread,
+                             original_name = di::move(original_name)](di::StringView contents) {
+                                auto cancelled = contents.empty();
+                                if (cancelled) {
+                                    contents = original_name.view();
+                                }
                                 while (contents.ends_with(U'\n')) {
                                     contents = contents.substr(contents.begin(), --contents.end());
                                 }
@@ -290,7 +321,26 @@ auto rename_session() -> Action {
                                     // NOTE: we take the layout state lock to prevent data races. Also, the session is
                                     // guaranteed to still be alive because sessions won't be killed until all their
                                     // panes have exited. And we put the popup in the session.
-                                    session.set_name(contents.to_owned());
+                                    if (contents.empty()) {
+                                        session.set_name(di::nullopt);
+                                    } else {
+                                        session.set_name(contents.to_owned());
+                                    }
+                                });
+                                render_thread.request_render();
+                            });
+                        create_pane_args.hooks.did_get_extra_output = di::make_function<void(di::StringView)>(
+                            [&layout_state = context.layout_state, &session,
+                             &render_thread = context.render_thread](di::StringView contents) {
+                                while (contents.ends_with(U'\n')) {
+                                    contents = contents.substr(contents.begin(), --contents.end());
+                                }
+                                layout_state.with_lock([&](LayoutState&) {
+                                    if (contents.empty()) {
+                                        session.set_name(di::nullopt);
+                                    } else {
+                                        session.set_name(contents.to_owned());
+                                    }
                                 });
                                 render_thread.request_render();
                             });
@@ -364,7 +414,9 @@ auto find_session() -> Action {
                 context.layout_state.with_lock([&](LayoutState& state) {
                     auto session_names = di::Vector<di::String>();
                     for (auto [i, session] : state.sessions() | di::enumerate) {
-                        session_names.push_back(di::format("{} {}"_sv, i + 1, session->name()));
+                        auto string_number = di::to_string(i + 1);
+                        auto session_name = session->name().value_or(string_number.view());
+                        session_names.push_back(di::format("{} {}"_sv, string_number, session_name));
                     }
 
                     auto [create_pane_args, popup_layout] =
@@ -537,8 +589,7 @@ auto hard_reset() -> Action {
                     for (auto& tab : state.active_tab()) {
                         for (auto& pane : tab.active()) {
                             (void) tab.replace_pane(pane,
-                                                    context.create_pane_args.with_cwd(
-                                                        pane.current_working_directory().transform(di::to_owned)),
+                                                    context.create_pane_args.with_cwd(pane.current_working_directory()),
                                                     context.render_thread, context.input_thread);
                         }
                     }
@@ -577,8 +628,7 @@ auto add_pane(Direction direction) -> Action {
                     for (auto& session : state.active_session()) {
                         for (auto& tab : session.active_tab()) {
                             auto cwd = tab.active().and_then(&Pane::current_working_directory);
-                            (void) state.add_pane(session, tab,
-                                                  context.create_pane_args.with_cwd(cwd.transform(di::to_owned)),
+                            (void) state.add_pane(session, tab, context.create_pane_args.with_cwd(di::move(cwd)),
                                                   direction, context.render_thread, context.input_thread);
                         }
                     }

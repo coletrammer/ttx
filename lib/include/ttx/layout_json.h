@@ -62,7 +62,7 @@ struct Tab {
     di::Vector<u64> pane_ids_by_recency;
     di::Optional<u64> active_pane_id;
     di::Optional<u64> full_screen_pane_id;
-    di::String name;
+    di::Optional<di::String> name;
     u64 id { 0 };
 
     auto operator==(Tab const&) const -> bool = default;
@@ -79,7 +79,7 @@ struct Tab {
 struct Session {
     di::Vector<Tab> tabs;
     di::Optional<u64> active_tab_id;
-    di::String name;
+    di::Optional<di::String> name;
     u64 id { 0 };
 
     auto operator==(Session const&) const -> bool = default;

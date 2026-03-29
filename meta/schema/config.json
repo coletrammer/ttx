@@ -305,6 +305,15 @@
                     "$ref": "#/$defs/StatusBarPosition",
                     "default": "top",
                     "description": "Where on the screen to show the status bar"
+                },
+                "tab_name_sources": {
+                    "default": ["manual", "window-title", "current-working-directory"],
+                    "description": "List of candidate tab name sources to resolve the tab name for the status bar. The first source which has a value set is chosen",
+                    "items": {
+                        "$ref": "#/$defs/TabNameSource",
+                        "default": "manual"
+                    },
+                    "type": "array"
                 }
             },
             "type": "object"
@@ -378,6 +387,9 @@
         "StatusBarPosition": {
             "enum": ["top", "bottom"]
         },
+        "TabNameSource": {
+            "enum": ["manual", "window-title", "current-working-directory"]
+        },
         "Terminfo": {
             "description": "Configuration relating to the terminfo ttx passes to inner applications",
             "properties": {
@@ -434,7 +446,8 @@
             },
             "status_bar": {
                 "hide": false,
-                "position": "top"
+                "position": "top",
+                "tab_name_sources": ["manual", "window-title", "current-working-directory"]
             },
             "terminfo": {
                 "force_local_terminfo": false,

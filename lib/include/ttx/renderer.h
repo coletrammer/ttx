@@ -36,7 +36,8 @@ public:
     auto cleanup(dius::SyncFile& output) -> di::Result<>;
 
     void start(Size const& size);
-    auto finish(dius::SyncFile& output, RenderedCursor const& cursor_in) -> di::Result<>;
+    auto finish(dius::SyncFile& output, RenderedCursor const& cursor_in, di::Optional<di::String> window_title)
+        -> di::Result<>;
 
     void put_text(di::StringView text, u32 row, u32 col, terminal::GraphicsRendition const& rendition = {},
                   di::Optional<terminal::Hyperlink const&> hyperlink = {});
@@ -83,6 +84,7 @@ private:
     terminal::Screen m_current_screen;
     terminal::Screen m_desired_screen;
     di::Optional<RenderedCursor> m_current_cursor;
+    di::Optional<di::String> m_window_title;
     di::Vector<di::String> m_cleanup;
     Feature m_features { Feature::None };
     di::Optional<terminal::Palette const&> m_global_palette;

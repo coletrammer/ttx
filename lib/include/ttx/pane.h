@@ -156,10 +156,10 @@ public:
     /// In the future, this method could fall back to (or prefer) scanning the procfs
     /// to determine this information. For now, this value is determined via OSC 7
     /// reports, which require shell integration to work.
-    auto current_working_directory() const -> di::Optional<di::PathView> { return m_cwd.transform(&di::Path::view); }
+    auto current_working_directory() -> di::Optional<di::Path>;
 
     /// @brief Get the pane's window title
-    auto window_title() const -> di::Optional<di::StringView> { return m_window_title.transform(&di::String::view); }
+    auto window_title() -> di::Optional<di::String>;
 
     void update_local_palette(di::FunctionRef<void(terminal::Palette&)> update);
 
@@ -191,8 +191,8 @@ private:
     u32 m_vertical_scroll_offset { 0 };
     u32 m_horizontal_scroll_offset { 0 };
 
-    di::Optional<di::Path> m_cwd;
-    di::Optional<di::String> m_window_title;
+    di::Synchronized<di::Optional<di::Path>> m_cwd;
+    di::Synchronized<di::Optional<di::String>> m_window_title;
     PaneHooks m_hooks;
 
     // These are declared last, for when dius::Thread calls join() in the destructor.
