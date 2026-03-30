@@ -32,8 +32,8 @@ auto Session::set_active_tab(Tab* tab) -> bool {
     m_active_tab = tab;
     if (is_active() && m_active_tab) {
         m_active_tab->set_is_active(true);
-        layout();
     }
+    layout();
     return true;
 }
 
@@ -86,11 +86,6 @@ auto Session::pane_by_id(u64 tab_id, u64 pane_id) -> di::Optional<Pane&> {
 auto Session::add_pane(Tab& tab, u64 pane_id, CreatePaneArgs args, Direction direction, RenderThread& render_thread,
                        InputThread& input_thread) -> di::Result<> {
     return tab.add_pane(pane_id, m_size, di::move(args), direction, render_thread, input_thread);
-}
-
-auto Session::popup_pane(Tab& tab, u64 pane_id, PopupLayout const& popup_layout, CreatePaneArgs args,
-                         RenderThread& render_thread, InputThread& input_thread) -> di::Result<> {
-    return tab.popup_pane(pane_id, popup_layout, m_size, di::move(args), render_thread, input_thread);
 }
 
 auto Session::add_tab(CreatePaneArgs args, u64 tab_id, u64 pane_id, RenderThread& render_thread,

@@ -10,17 +10,12 @@
 #include "ttx/focus_event.h"
 #include "ttx/layout.h"
 #include "ttx/layout_json.h"
-#include "ttx/popup.h"
 #include "ttx/terminal/escapes/osc_8671.h"
 #include "ttx/terminal/navigation_direction.h"
 
 namespace ttx {
 void Tab::layout(Size const& size) {
     m_size = size;
-
-    if (m_popup) {
-        m_popup_layout = m_popup.value().layout(size);
-    }
 
     if (m_full_screen_pane) {
         // In full screen mode, circumvent ordinary layout.
@@ -60,15 +55,6 @@ auto Tab::remove_pane(Pane* pane) -> di::Box<Pane> {
         set_active(candidates.front().value_or(nullptr));
     }
 
-    // Clean the popup information if this pane was a popup. In this case,
-    // we don't return try to remove the pane from the layout tree.
-    if (m_popup && m_popup.value().pane.get() == pane) {
-        auto result = di::move(m_popup).value().pane;
-        m_popup_layout = {};
-        m_popup = {};
-        return result;
-    }
-
     return m_layout_root.remove_pane(pane);
 }
 
@@ -93,32 +79,6 @@ auto Tab::add_pane(u64 pane_id, Size const& size, CreatePaneArgs args, Direction
     m_layout_tree = di::move(new_layout);
 
     set_active(pane.get());
-    return {};
-}
-
-auto Tab::popup_pane(u64 pane_id, PopupLayout const& popup_layout, Size const& size, CreatePaneArgs args,
-                     RenderThread& render_thread, InputThread& input_thread) -> di::Result<> {
-    // Prevent creating more than 1 popup.
-    if (m_popup) {
-        return di::Unexpected(di::BasicError::InvalidArgument);
-    }
-    m_popup = Popup {
-        .pane = nullptr,
-        .layout_config = popup_layout,
-    };
-    m_popup_layout = m_popup.value().layout(size);
-
-    auto maybe_pane = make_pane(pane_id, di::move(args), m_popup_layout.value().size, render_thread, input_thread);
-    if (!maybe_pane) {
-        m_popup = {};
-        m_popup_layout = {};
-        return di::Unexpected(di::move(maybe_pane).error());
-    }
-    m_popup.value().pane = di::move(maybe_pane).value();
-    m_popup_layout.value().pane = m_popup.value().pane.get();
-
-    set_active(m_popup.value().pane.get());
-    invalidate_all();
     return {};
 }
 
@@ -352,7 +312,7 @@ auto Tab::set_is_active(bool b) -> bool {
     }
 
     // Send focus in/out events appropriately.
-    if (is_active() && m_active) {
+    if (m_active) {
         m_active->event(FocusEvent::focus_out());
     }
     m_is_active = b;
@@ -369,45 +329,13 @@ auto Tab::make_pane(u64 pane_id, CreatePaneArgs args, Size const& size, RenderTh
             render_thread.push_event(PaneExited(m_session, this, &pane));
         };
     }
-    if (!args.hooks.did_update) {
-        args.hooks.did_update = [&render_thread](Pane&) {
-            render_thread.request_render();
-        };
-    }
-    if (!args.hooks.did_selection) {
-        args.hooks.did_selection = di::make_function<void(terminal::OSC52, bool)>(
-            [this, pane_id, &render_thread](terminal::OSC52 osc52, bool manual) {
-                render_thread.push_event(ClipboardRequest {
-                    .osc52 = di::move(osc52),
-                    .identifier =
-                        Clipboard::Identifier {
-                            .session_id = m_session->id(),
-                            .tab_id = id(),
-                            .pane_id = pane_id,
-                        },
-                    .manual = manual,
-                    .reply = false,
-                });
-            });
-    }
-    if (!args.hooks.did_receive_seamless_navigation) {
-        args.hooks.did_receive_seamless_navigation = [&input_thread](terminal::OSC8671 osc6871) {
-            input_thread.notify_osc_8671(di::move(osc6871));
-        };
-    }
-    if (!args.hooks.apc_passthrough) {
-        args.hooks.apc_passthrough = [&render_thread](di::StringView apc_data) {
-            // Pass-through APC commands to host terminal. This makes kitty graphics "work".
-            auto string = di::format("\033_{}\033\\"_sv, apc_data);
-            render_thread.push_event(WriteString(di::move(string)));
-        };
-    }
-    if (!args.hooks.did_update_cwd) {
-        args.hooks.did_update_cwd = [this] {
-            layout_did_update();
-        };
-    }
-    return Pane::create(pane_id, di::move(args), size);
+    return layout_state().make_pane_with_default_hooks(di::move(args), size,
+                                                       Clipboard::Identifier {
+                                                           .session_id = m_session->id(),
+                                                           .tab_id = id(),
+                                                           .pane_id = pane_id,
+                                                       },
+                                                       render_thread, input_thread);
 }
 
 void Tab::layout_did_update() {
@@ -498,5 +426,9 @@ auto Tab::max_pane_id() const -> u64 {
         return 1;
     }
     return di::max(m_panes_ordered_by_recency | di::transform(&Pane::id));
+}
+
+auto Tab::layout_state() const -> LayoutState& {
+    return m_session->layout_state();
 }
 }

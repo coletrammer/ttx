@@ -548,6 +548,9 @@ static auto do_new(Args&, NewBase& args) -> di::Result<> {
     auto _ = di::ScopeExit([&] {
         layout_state.lock()->set_layout_did_update(nullptr);
         layout_state.with_lock([&](LayoutState& state) {
+            if (state.active_popup()) {
+                state.remove_popup();
+            }
             while (!state.empty()) {
                 auto& session = *state.sessions().front();
                 while (!session->empty()) {

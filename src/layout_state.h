@@ -17,15 +17,16 @@ public:
 
     void set_config(Config config);
     void layout(di::Optional<Size> size = {});
-    auto set_active_tab(Session& session, Tab* tab) -> bool;
+    auto set_active_tab(Session& session, Tab* tab, bool focus = true) -> bool;
     void remove_tab(Session& session, Tab& tab);
     auto remove_pane(Session& session, Tab& tab, Pane* pane) -> di::Box<Pane>;
+    auto remove_popup() -> di::Box<Pane>;
     auto pane_by_id(u64 session_id, u64 tab_id, u64 pane_id) -> di::Optional<Pane&>;
 
     auto add_pane(Session& session, Tab& tab, CreatePaneArgs args, Direction direction, RenderThread& render_thread,
                   InputThread& input_thread) -> di::Result<>;
-    auto popup_pane(Session& session, Tab& tab, PopupLayout const& popup_layout, CreatePaneArgs args,
-                    RenderThread& render_thread, InputThread& input_thread) -> di::Result<>;
+    auto popup_pane(PopupLayout const& popup_layout, CreatePaneArgs args, RenderThread& render_thread,
+                    InputThread& input_thread) -> di::Result<>;
     auto add_tab(Session& session, CreatePaneArgs args, RenderThread& render_thread, InputThread& input_thread)
         -> di::Result<>;
 
@@ -33,7 +34,7 @@ public:
     auto sessions() const -> di::Vector<di::Box<Session>> const& { return m_sessions; }
     auto add_session(CreatePaneArgs args, RenderThread& render_thread, InputThread& input_thread) -> di::Result<>;
     void remove_session(Session& session);
-    auto set_active_session(Session* session) -> bool;
+    auto set_active_session(Session* session, bool focus = true) -> bool;
     auto active_session() const -> di::Optional<Session&>;
 
     auto empty() const -> bool { return m_sessions.empty(); }
@@ -44,6 +45,7 @@ public:
     auto size() const -> Size { return m_size; }
     auto hide_status_bar() const -> bool { return m_config.status_bar.hide; }
 
+    auto popup_layout() const -> di::Optional<LayoutEntry> { return m_popup_layout; }
     auto active_popup() const -> di::Optional<Pane&>;
     auto status_bar_position() const -> di::Optional<u32> {
         if (hide_status_bar()) {
@@ -63,6 +65,12 @@ public:
 
     void for_each_pane(di::FunctionRef<void(Pane&)>);
 
+    auto available_size() const -> Size { return hide_status_bar() ? m_size : m_size.rows_shrinked(1); }
+
+    auto make_pane_with_default_hooks(CreatePaneArgs args, Size const& size, Clipboard::Identifier identifier,
+                                      RenderThread& render_thread, InputThread& input_thread)
+        -> di::Result<di::Box<Pane>>;
+
 private:
     di::Function<void()> m_layout_did_update;
     Size m_size;
@@ -72,5 +80,7 @@ private:
     u64 m_next_tab_id { 1 };
     u64 m_next_session_id { 1 };
     Config m_config;
+    di::Optional<Popup> m_popup;
+    di::Optional<LayoutEntry> m_popup_layout;
 };
 }

@@ -27,15 +27,13 @@ void LayoutState::layout(di::Optional<Size> size) {
     if (!m_active_session) {
         return;
     }
-    if (hide_status_bar()) {
-        // Now status bar when forcing a single pane.
-        m_active_session->layout(m_size);
-    } else {
-        m_active_session->layout(m_size.rows_shrinked(1));
+    if (m_popup) {
+        m_popup_layout = m_popup.value().layout(available_size());
     }
+    m_active_session->layout(available_size());
 }
 
-auto LayoutState::set_active_session(Session* session) -> bool {
+auto LayoutState::set_active_session(Session* session, bool focus) -> bool {
     if (m_active_session == session) {
         return false;
     }
@@ -45,19 +43,19 @@ auto LayoutState::set_active_session(Session* session) -> bool {
         m_active_session->set_is_active(false);
     }
     m_active_session = session;
-    if (m_active_session) {
+    if (focus && m_active_session) {
         m_active_session->set_is_active(true);
-        // Force a layout() when switching which session is rendered,
-        // since we resize things only when rendered.
-        layout();
     }
+    layout();
     return true;
 }
 
-auto LayoutState::set_active_tab(Session& session, Tab* tab) -> bool {
+auto LayoutState::set_active_tab(Session& session, Tab* tab, bool focus) -> bool {
     auto _ = di::ScopeExit(di::bind_front(&LayoutState::layout_did_update, this));
 
-    set_active_session(&session);
+    if (focus) {
+        set_active_session(&session);
+    }
     return session.set_active_tab(tab);
 }
 
@@ -76,6 +74,24 @@ auto LayoutState::remove_pane(Session& session, Tab& tab, Pane* pane) -> di::Box
     auto result = session.remove_pane(tab, pane);
     if (session.empty()) {
         remove_session(session);
+    }
+    return result;
+}
+
+auto LayoutState::remove_popup() -> di::Box<Pane> {
+    if (!m_popup) {
+        return {};
+    }
+
+    auto _ = di::ScopeExit(di::bind_front(&LayoutState::layout_did_update, this));
+    auto result = di::move(m_popup.value().pane);
+    m_popup = {};
+    m_popup_layout = {};
+    for (auto& session : active_session()) {
+        session.set_is_active(true);
+    }
+    for (auto& tab : active_tab()) {
+        tab.invalidate_all();
     }
     return result;
 }
@@ -120,12 +136,6 @@ auto LayoutState::add_pane(Session& session, Tab& tab, CreatePaneArgs args, Dire
     return session.add_pane(tab, m_next_pane_id++, di::move(args), direction, render_thread, input_thread);
 }
 
-auto LayoutState::popup_pane(Session& session, Tab& tab, PopupLayout const& popup_layout, CreatePaneArgs args,
-                             RenderThread& render_thread, InputThread& input_thread) -> di::Result<> {
-    set_active_session(&session);
-    return session.popup_pane(tab, m_next_pane_id++, popup_layout, di::move(args), render_thread, input_thread);
-}
-
 auto LayoutState::add_tab(Session& session, CreatePaneArgs args, RenderThread& render_thread, InputThread& input_thread)
     -> di::Result<> {
     auto _ = di::ScopeExit(di::bind_front(&LayoutState::layout_did_update, this));
@@ -147,7 +157,51 @@ auto LayoutState::add_session(CreatePaneArgs args, RenderThread& render_thread, 
     return result;
 }
 
+auto LayoutState::popup_pane(PopupLayout const& popup_layout, CreatePaneArgs args, RenderThread& render_thread,
+                             InputThread& input_thread) -> di::Result<> {
+    // Prevent creating more than 1 popup.
+    if (m_popup) {
+        return di::Unexpected(di::BasicError::InvalidArgument);
+    }
+    m_popup = Popup {
+        .pane = nullptr,
+        .layout_config = popup_layout,
+    };
+    m_popup_layout = m_popup.value().layout(available_size());
+
+    if (!args.hooks.did_exit) {
+        args.hooks.did_exit = [&render_thread](Pane&, auto) {
+            render_thread.push_event(RemovePopup {});
+        };
+    }
+    auto maybe_pane = make_pane_with_default_hooks(di::move(args), m_popup_layout.value().size,
+                                                   Clipboard::Identifier { .pane_id = m_next_pane_id++ }, render_thread,
+                                                   input_thread);
+    if (!maybe_pane) {
+        m_popup = {};
+        m_popup_layout = {};
+        return di::Unexpected(di::move(maybe_pane).error());
+    }
+
+    auto _ = di::ScopeExit(di::bind_front(&LayoutState::layout_did_update, this));
+    m_popup.value().pane = di::move(maybe_pane).value();
+    m_popup_layout.value().pane = m_popup.value().pane.get();
+
+    for (auto& session : active_session()) {
+        session.set_is_active(false);
+    }
+    for (auto& tab : active_tab()) {
+        tab.invalidate_all();
+    }
+    return {};
+}
+
 auto LayoutState::pane_by_id(u64 session_id, u64 tab_id, u64 pane_id) -> di::Optional<Pane&> {
+    // Check for the popup pane
+    if (session_id == 0 && tab_id == 0 && m_popup && m_popup->pane->id() == pane_id) {
+        return *m_popup->pane;
+    }
+
     auto* session = di::find(m_sessions, session_id, &Session::id);
     if (session == m_sessions.end()) {
         return {};
@@ -167,6 +221,9 @@ auto LayoutState::active_tab() const -> di::Optional<Tab&> {
 }
 
 auto LayoutState::active_pane() const -> di::Optional<Pane&> {
+    if (auto popup = active_popup()) {
+        return popup.value();
+    }
     if (!active_tab()) {
         return {};
     }
@@ -184,7 +241,7 @@ auto LayoutState::active_popup() const -> di::Optional<Pane&> {
     if (!active_tab()) {
         return {};
     }
-    return active_tab()->popup_layout().transform([&](LayoutEntry const& entry) {
+    return popup_layout().transform([&](LayoutEntry const& entry) {
         return di::ref(*entry.pane);
     });
 }
@@ -205,6 +262,45 @@ void LayoutState::for_each_pane(di::FunctionRef<void(Pane&)> action) {
             tab->for_each_pane(action);
         }
     }
+}
+
+auto LayoutState::make_pane_with_default_hooks(CreatePaneArgs args, Size const& size, Clipboard::Identifier identifier,
+                                               RenderThread& render_thread, InputThread& input_thread)
+    -> di::Result<di::Box<Pane>> {
+    if (!args.hooks.did_update) {
+        args.hooks.did_update = [&render_thread](Pane&) {
+            render_thread.request_render();
+        };
+    }
+    if (!args.hooks.did_selection) {
+        args.hooks.did_selection = di::make_function<void(terminal::OSC52, bool)>(
+            [identifier, &render_thread](terminal::OSC52 osc52, bool manual) {
+                render_thread.push_event(ClipboardRequest {
+                    .osc52 = di::move(osc52),
+                    .identifier = identifier,
+                    .manual = manual,
+                    .reply = false,
+                });
+            });
+    }
+    if (!args.hooks.did_receive_seamless_navigation) {
+        args.hooks.did_receive_seamless_navigation = [&input_thread](terminal::OSC8671 osc6871) {
+            input_thread.notify_osc_8671(di::move(osc6871));
+        };
+    }
+    if (!args.hooks.apc_passthrough) {
+        args.hooks.apc_passthrough = [&render_thread](di::StringView apc_data) {
+            // Pass-through APC commands to host terminal. This makes kitty graphics "work".
+            auto string = di::format("\033_{}\033\\"_sv, apc_data);
+            render_thread.push_event(WriteString(di::move(string)));
+        };
+    }
+    if (!args.hooks.did_update_cwd) {
+        args.hooks.did_update_cwd = [this] {
+            layout_did_update();
+        };
+    }
+    return Pane::create(identifier.pane_id, di::move(args), size);
 }
 
 auto LayoutState::as_json_v1() const -> json::v1::LayoutState {

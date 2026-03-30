@@ -146,10 +146,8 @@ auto rename_tab() -> Action {
                                 });
                                 render_thread.request_render();
                             });
-                        if (auto tab = state.active_tab()) {
-                            (void) state.popup_pane(session, tab.value(), popup_layout, di::move(create_pane_args),
-                                                    context.render_thread, context.input_thread);
-                        }
+                        (void) state.popup_pane(popup_layout, di::move(create_pane_args), context.render_thread,
+                                                context.input_thread);
                     }
                 });
                 context.render_thread.request_render();
@@ -234,27 +232,31 @@ auto find_tab() -> Action {
                 context.layout_state.with_lock([&](LayoutState& state) {
                     auto tab_names = di::Vector<di::String>();
                     if (auto session = state.active_session()) {
+                        auto original_tab_index = 0_usize;
                         for (auto [i, tab] : session.value().tabs() | di::enumerate) {
                             auto tab_name =
                                 evaluate_tab_name(context.config.status_bar.tab_name_sources.span(), *tab, i + 1);
                             tab_names.push_back(di::format("{} {}"_sv, i + 1, tab_name));
+                            if (session.value().active_tab().data() == tab.get()) {
+                                original_tab_index = i;
+                            }
                         }
+                        di::rotate(tab_names, tab_names.begin() + original_tab_index);
 
                         auto [create_pane_args, popup_layout] =
                             FzfCommand()
                                 .with_prompt("Switch to tab"_s)
                                 .with_title("Tabs"_s)
                                 .with_input(di::move(tab_names))
+                                .with_selection_as_extra_output()
                                 .popup_args(context.create_pane_args.clone(), context.config.fzf);
                         create_pane_args.hooks.did_finish_output = di::make_function<void(di::StringView)>(
-                            [&layout_state = context.layout_state, &render_thread = context.render_thread,
-                             &session](di::StringView contents) {
+                            [&layout_state = context.layout_state, &render_thread = context.render_thread, &session,
+                             original_tab_index](di::StringView contents) {
                                 // Try to parse the first index. This will fail if contents is empty.
+                                // If we fail to parse we restore the original tab.
                                 auto maybe_tab_index = di::parse_partial<usize>(contents);
-                                if (!maybe_tab_index || maybe_tab_index == 0) {
-                                    return;
-                                }
-                                auto tab_index = maybe_tab_index.value() - 1;
+                                auto tab_index = maybe_tab_index.value_or(original_tab_index + 1) - 1;
                                 layout_state.with_lock([&](LayoutState& state) {
                                     if (auto tab = session.value().tabs().at(tab_index)) {
                                         state.set_active_tab(session.value(), tab.value().get());
@@ -262,11 +264,23 @@ auto find_tab() -> Action {
                                 });
                                 render_thread.request_render();
                             });
-                        if (auto tab = state.active_tab()) {
-                            (void) state.popup_pane(session.value(), tab.value(), popup_layout,
-                                                    di::move(create_pane_args), context.render_thread,
-                                                    context.input_thread);
-                        }
+                        create_pane_args.hooks.did_get_extra_output = di::make_function<void(di::StringView)>(
+                            [&layout_state = context.layout_state, &render_thread = context.render_thread,
+                             &session](di::StringView contents) {
+                                auto maybe_tab_index = di::parse_partial<usize>(contents);
+                                if (!maybe_tab_index || maybe_tab_index == 0_usize) {
+                                    return;
+                                }
+                                auto tab_index = maybe_tab_index.value() - 1;
+                                layout_state.with_lock([&](LayoutState& state) {
+                                    if (auto tab = session.value().tabs().at(tab_index)) {
+                                        state.set_active_tab(session.value(), tab.value().get(), false);
+                                    }
+                                });
+                                render_thread.request_render();
+                            });
+                        (void) state.popup_pane(popup_layout, di::move(create_pane_args), context.render_thread,
+                                                context.input_thread);
                     }
                 });
                 context.render_thread.request_render();
@@ -344,10 +358,8 @@ auto rename_session() -> Action {
                                 });
                                 render_thread.request_render();
                             });
-                        if (auto tab = state.active_tab()) {
-                            (void) state.popup_pane(session, tab.value(), popup_layout, di::move(create_pane_args),
-                                                    context.render_thread, context.input_thread);
-                        }
+                        (void) state.popup_pane(popup_layout, di::move(create_pane_args), context.render_thread,
+                                                context.input_thread);
                     }
                 });
                 context.render_thread.request_render();
@@ -413,27 +425,31 @@ auto find_session() -> Action {
             [](ActionContext const& context) {
                 context.layout_state.with_lock([&](LayoutState& state) {
                     auto session_names = di::Vector<di::String>();
+                    auto original_session_index = 0_usize;
                     for (auto [i, session] : state.sessions() | di::enumerate) {
                         auto string_number = di::to_string(i + 1);
                         auto session_name = session->name().value_or(string_number.view());
                         session_names.push_back(di::format("{} {}"_sv, string_number, session_name));
+                        if (state.active_session().data() == session.get()) {
+                            original_session_index = i;
+                        }
                     }
+                    di::rotate(session_names, session_names.begin() + original_session_index);
 
                     auto [create_pane_args, popup_layout] =
                         FzfCommand()
                             .with_prompt("Switch to session"_s)
                             .with_title("Sessions"_s)
                             .with_input(di::move(session_names))
+                            .with_selection_as_extra_output()
                             .popup_args(context.create_pane_args.clone(), context.config.fzf);
                     create_pane_args.hooks.did_finish_output = di::make_function<void(di::StringView)>(
-                        [&layout_state = context.layout_state,
-                         &render_thread = context.render_thread](di::StringView contents) {
+                        [&layout_state = context.layout_state, &render_thread = context.render_thread,
+                         original_session_index](di::StringView contents) {
                             // Try to parse the first index. This will fail if contents is empty.
+                            // When failing we restore the original session.
                             auto maybe_session_index = di::parse_partial<usize>(contents);
-                            if (!maybe_session_index || maybe_session_index == 0) {
-                                return;
-                            }
-                            auto session_index = maybe_session_index.value() - 1;
+                            auto session_index = maybe_session_index.value_or(original_session_index + 1) - 1;
                             layout_state.with_lock([&](LayoutState& state) {
                                 if (auto session = state.sessions().at(session_index)) {
                                     state.set_active_session(session.value().get());
@@ -441,13 +457,23 @@ auto find_session() -> Action {
                             });
                             render_thread.request_render();
                         });
-                    if (auto session = state.active_session()) {
-                        if (auto tab = state.active_tab()) {
-                            (void) state.popup_pane(session.value(), tab.value(), popup_layout,
-                                                    di::move(create_pane_args), context.render_thread,
-                                                    context.input_thread);
-                        }
-                    }
+                    create_pane_args.hooks.did_get_extra_output = di::make_function<void(di::StringView)>(
+                        [&layout_state = context.layout_state,
+                         &render_thread = context.render_thread](di::StringView contents) {
+                            auto maybe_session_index = di::parse_partial<usize>(contents);
+                            if (!maybe_session_index || maybe_session_index == 0_usize) {
+                                return;
+                            }
+                            auto session_index = maybe_session_index.value() - 1;
+                            layout_state.with_lock([&](LayoutState& state) {
+                                if (auto session = state.sessions().at(session_index)) {
+                                    state.set_active_session(session.value().get(), false);
+                                }
+                            });
+                            render_thread.request_render();
+                        });
+                    (void) state.popup_pane(popup_layout, di::move(create_pane_args), context.render_thread,
+                                            context.input_thread);
                 });
                 context.render_thread.request_render();
             },
@@ -509,13 +535,8 @@ auto save_layout() -> Action {
                         save_layout_thread.request_save_layout(di::move(raw_string));
                     });
                 context.layout_state.with_lock([&](LayoutState& state) {
-                    if (auto session = state.active_session()) {
-                        if (auto tab = state.active_tab()) {
-                            (void) state.popup_pane(session.value(), tab.value(), popup_layout,
-                                                    di::move(create_pane_args), context.render_thread,
-                                                    context.input_thread);
-                        }
-                    }
+                    (void) state.popup_pane(popup_layout, di::move(create_pane_args), context.render_thread,
+                                            context.input_thread);
                 });
             },
     };
@@ -783,85 +804,80 @@ auto switch_theme() -> Action {
                 }
 
                 context.layout_state.with_lock([&](LayoutState& state) {
-                    if (auto session = state.active_session()) {
-                        if (auto tab = state.active_tab()) {
-                            auto [create_pane_args, popup_layout] =
-                                FzfCommand()
-                                    .with_prompt("Switch to theme"_s)
-                                    .with_title("Themes"_s)
-                                    .with_input(di::move(theme_names))
-                                    .with_selection_as_extra_output()
-                                    .with_indirect_color_palette()
-                                    .with_preview_command(
-                                        "echo -e '\n\n\t\x1b[1mANSI Colors (0-7)\x1b[m\n\n\t\x1b[40m  \x1b[41m  "
-                                        "\x1b[42m  \x1b[43m  \x1b[44m  \x1b[45m  \x1b[46m  \x1b[47m  \x1b[m\n\n"
-                                        "\t\x1b[1mANSI Colors (8-15)\x1b[m\n\n\t\x1b[100m  \x1b[101m  \x1b[102m  \x1b[103m  \x1b[104m  \x1b[105m  \x1b[106m  \x1b[107m  \x1b[m\n\n'"_ts)
-                                    .popup_args(context.create_pane_args.clone(), context.config.fzf);
-                            create_pane_args.hooks.did_finish_output = di::make_function<void(di::StringView)>(
-                                [&input_thread = context.input_thread, &render_thread = context.render_thread,
-                                 original_theme = di::move(original_theme)](di::StringView name) {
-                                    auto name_ts = di::to_transparent_string(name);
-                                    while (name_ts.back() == '\n' || name_ts.back() == ' ') {
-                                        name_ts.pop_back();
-                                    }
-                                    if (name_ts.empty()) {
-                                        name_ts = original_theme.clone();
-                                    }
-                                    auto base_config = di::clone(input_thread.base_config());
-                                    base_config.theme.name = di::to_utf8_string_lossy(name_ts);
-                                    auto new_config = config_json::v1::resolve_profile(
-                                        input_thread.profile(), input_thread.create_pane_args().theme_mode,
-                                        input_thread.outer_terminal_palette(), di::move(base_config));
-                                    if (!new_config) {
-                                        render_thread.status_message(
-                                            di::format("Failed to load configuration: {}"_sv, new_config.error()));
-                                        return;
-                                    }
+                    auto [create_pane_args, popup_layout] =
+                        FzfCommand()
+                            .with_prompt("Switch to theme"_s)
+                            .with_title("Themes"_s)
+                            .with_input(di::move(theme_names))
+                            .with_selection_as_extra_output()
+                            .with_indirect_color_palette()
+                            .with_preview_command(
+                                "echo -e '\n\n\t\x1b[1mANSI Colors (0-7)\x1b[m\n\n\t\x1b[40m  \x1b[41m  "
+                                "\x1b[42m  \x1b[43m  \x1b[44m  \x1b[45m  \x1b[46m  \x1b[47m  \x1b[m\n\n"
+                                "\t\x1b[1mANSI Colors (8-15)\x1b[m\n\n\t\x1b[100m  \x1b[101m  \x1b[102m  \x1b[103m  \x1b[104m  \x1b[105m  \x1b[106m  \x1b[107m  \x1b[m\n\n'"_ts)
+                            .popup_args(context.create_pane_args.clone(), context.config.fzf);
+                    create_pane_args.hooks.did_finish_output = di::make_function<void(di::StringView)>(
+                        [&input_thread = context.input_thread, &render_thread = context.render_thread,
+                         original_theme = di::move(original_theme)](di::StringView name) {
+                            auto name_ts = di::to_transparent_string(name);
+                            while (name_ts.back() == '\n' || name_ts.back() == ' ') {
+                                name_ts.pop_back();
+                            }
+                            if (name_ts.empty()) {
+                                name_ts = original_theme.clone();
+                            }
+                            auto base_config = di::clone(input_thread.base_config());
+                            base_config.theme.name = di::to_utf8_string_lossy(name_ts);
+                            auto new_config = config_json::v1::resolve_profile(
+                                input_thread.profile(), input_thread.create_pane_args().theme_mode,
+                                input_thread.outer_terminal_palette(), di::move(base_config));
+                            if (!new_config) {
+                                render_thread.status_message(
+                                    di::format("Failed to load configuration: {}"_sv, new_config.error()));
+                                return;
+                            }
 
-                                    input_thread.set_config(di::clone(new_config.value()));
-                                    render_thread.set_config(di::clone(new_config.value()));
-                                });
-                            create_pane_args.hooks.did_get_extra_output = di::make_function<void(di::StringView)>(
-                                [&input_thread = context.input_thread, &render_thread = context.render_thread,
-                                 original_theme = di::clone(context.config.theme.name),
-                                 &layout_state = context.layout_state](di::StringView name) {
-                                    auto name_ts = di::to_transparent_string(name);
-                                    if (name_ts.empty()) {
-                                        return;
-                                    }
-                                    auto base_config = di::clone(input_thread.base_config());
-                                    base_config.theme.name = di::to_utf8_string_lossy(name_ts);
-                                    auto new_config = config_json::v1::resolve_profile(
-                                        input_thread.profile(), input_thread.create_pane_args().theme_mode,
-                                        input_thread.outer_terminal_palette(), di::move(base_config));
-                                    if (!new_config) {
-                                        render_thread.status_message(
-                                            di::format("Failed to load configuration: {}"_sv, new_config.error()));
-                                        return;
-                                    }
+                            input_thread.set_config(di::clone(new_config.value()));
+                            render_thread.set_config(di::clone(new_config.value()));
+                        });
+                    create_pane_args.hooks.did_get_extra_output = di::make_function<void(di::StringView)>(
+                        [&input_thread = context.input_thread, &render_thread = context.render_thread,
+                         original_theme = di::clone(context.config.theme.name),
+                         &layout_state = context.layout_state](di::StringView name) {
+                            auto name_ts = di::to_transparent_string(name);
+                            if (name_ts.empty()) {
+                                return;
+                            }
+                            auto base_config = di::clone(input_thread.base_config());
+                            base_config.theme.name = di::to_utf8_string_lossy(name_ts);
+                            auto new_config = config_json::v1::resolve_profile(
+                                input_thread.profile(), input_thread.create_pane_args().theme_mode,
+                                input_thread.outer_terminal_palette(), di::move(base_config));
+                            if (!new_config) {
+                                render_thread.status_message(
+                                    di::format("Failed to load configuration: {}"_sv, new_config.error()));
+                                return;
+                            }
 
-                                    input_thread.set_config(di::clone(new_config.value()));
-                                    layout_state.with_lock([&](LayoutState& state) {
-                                        for (auto& pane : state.active_popup()) {
-                                            pane.update_local_palette([&](terminal::Palette& palette) {
-                                                palette = input_thread.create_pane_args().global_palette;
-                                                FzfCommand::update_palette_with_indirect_fzf_colors(
-                                                    palette, new_config.value().fzf.colors);
-                                            });
-                                        }
+                            input_thread.set_config(di::clone(new_config.value()));
+                            layout_state.with_lock([&](LayoutState& state) {
+                                for (auto& pane : state.active_popup()) {
+                                    pane.update_local_palette([&](terminal::Palette& palette) {
+                                        palette = input_thread.create_pane_args().global_palette;
+                                        FzfCommand::update_palette_with_indirect_fzf_colors(
+                                            palette, new_config.value().fzf.colors);
                                     });
-                                    render_thread.set_config(di::clone(new_config.value()));
-                                });
-                            create_pane_args.local_palette = [&] {
-                                auto palette = context.create_pane_args.global_palette;
-                                FzfCommand::update_palette_with_indirect_fzf_colors(palette, context.config.fzf.colors);
-                                return palette;
-                            }();
-                            (void) state.popup_pane(session.value(), tab.value(), popup_layout,
-                                                    di::move(create_pane_args), context.render_thread,
-                                                    context.input_thread);
-                        }
-                    }
+                                }
+                            });
+                            render_thread.set_config(di::clone(new_config.value()));
+                        });
+                    create_pane_args.local_palette = [&] {
+                        auto palette = context.create_pane_args.global_palette;
+                        FzfCommand::update_palette_with_indirect_fzf_colors(palette, context.config.fzf.colors);
+                        return palette;
+                    }();
+                    (void) state.popup_pane(popup_layout, di::move(create_pane_args), context.render_thread,
+                                            context.input_thread);
                 });
                 context.render_thread.request_render();
             },

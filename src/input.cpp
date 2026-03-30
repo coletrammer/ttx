@@ -185,6 +185,17 @@ void InputThread::process_pending_events() {
 }
 
 void InputThread::handle_event(KeyEvent&& event) {
+    // Popup panes swallow all key events.
+    if (m_layout_state.with_lock([&](LayoutState& state) -> bool {
+            for (auto& pane : state.active_popup()) {
+                pane.event(event);
+                return true;
+            }
+            return false;
+        })) {
+        return;
+    }
+
     for (auto const& bind : m_key_binds) {
         // Ignore key up events and modifier keys when not in insert mode.
         if (m_mode != InputMode::Insert && (event.type() == KeyEventType::Release ||
@@ -237,7 +248,7 @@ void InputThread::handle_event(MouseEvent&& event) {
         // Check if we're hitting any popup with the mouse.
         auto row = event.position().in_cells().y();
         auto col = event.position().in_cells().x();
-        for (auto entry : tab.popup_layout()) {
+        for (auto entry : state.popup_layout()) {
             if (row >= entry.row && row < entry.row + entry.size.rows && col >= entry.col &&
                 col < entry.col + entry.size.cols) {
                 if (ev.type() != MouseEventType::Move) {
@@ -292,7 +303,7 @@ void InputThread::handle_event(MouseEvent&& event) {
                 // Set the pane the user just clicked on as active.
                 tab.set_active(entry.pane);
                 // If we had a popup, exit it as the user clicked out.
-                for (auto popup_entry : tab.popup_layout()) {
+                for (auto popup_entry : state.popup_layout()) {
                     popup_entry.pane->exit();
                 }
             }

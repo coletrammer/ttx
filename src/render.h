@@ -21,6 +21,8 @@ struct PaneExited {
     Pane* pane = nullptr;
 };
 
+struct RemovePopup {};
+
 struct DoRender {};
 
 struct Exit {};
@@ -55,8 +57,9 @@ struct UpdateOuterTerminalPalette {
 
 struct QueryPalette {};
 
-using RenderEvent = di::Variant<Size, PaneExited, InputStatus, WriteString, StatusMessage, DoRender, MouseEvent,
-                                ClipboardRequest, UpdateConfig, UpdateOuterTerminalPalette, QueryPalette, Exit>;
+using RenderEvent =
+    di::Variant<Size, PaneExited, RemovePopup, InputStatus, WriteString, StatusMessage, DoRender, MouseEvent,
+                ClipboardRequest, UpdateConfig, UpdateOuterTerminalPalette, QueryPalette, Exit>;
 
 class RenderThread {
 public:

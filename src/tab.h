@@ -5,13 +5,13 @@
 #include "ttx/layout.h"
 #include "ttx/layout_json.h"
 #include "ttx/pane.h"
-#include "ttx/popup.h"
 #include "ttx/terminal/navigation_direction.h"
 
 namespace ttx {
 class InputThread;
 class RenderThread;
 
+class LayoutState;
 class Session;
 
 // Corresponds to tmux window.
@@ -33,8 +33,6 @@ public:
 
     auto add_pane(u64 pane_id, Size const& size, CreatePaneArgs args, Direction direction, RenderThread& render_thread,
                   InputThread& input_thread) -> di::Result<>;
-    auto popup_pane(u64 pane_id, PopupLayout const& popup_layout, Size const& size, CreatePaneArgs args,
-                    RenderThread& render_thread, InputThread& input_thread) -> di::Result<>;
     auto replace_pane(Pane& pane, CreatePaneArgs args, RenderThread& render_thread, InputThread& input_thread)
         -> di::Result<>;
     auto pane_by_id(u64 pane_id) -> di::Optional<Pane&>;
@@ -49,7 +47,7 @@ public:
 
     auto id() const { return m_id; }
     auto name() const -> di::Optional<di::StringView> { return m_name.transform(&di::String::view); }
-    auto empty() const -> bool { return m_layout_root.empty() && !m_popup; }
+    auto empty() const -> bool { return m_layout_root.empty(); }
 
     void set_name(di::Optional<di::String> name) { m_name = di::move(name); }
 
@@ -81,12 +79,12 @@ public:
     }
     auto set_full_screen_pane(Pane* pane) -> bool;
 
-    auto popup_layout() const -> di::Optional<LayoutEntry> { return m_popup_layout; }
-
     void for_each_pane(di::FunctionRef<void(Pane&)> action);
 
     void layout_did_update();
     auto as_json_v1() const -> json::v1::Tab;
+
+    auto layout_state() const -> LayoutState&;
 
 private:
     auto make_pane(u64 pane_id, CreatePaneArgs args, Size const& size, RenderThread& render_thread,
@@ -102,7 +100,5 @@ private:
     bool m_is_active { false };
     Pane* m_active { nullptr };
     Pane* m_full_screen_pane { nullptr };
-    di::Optional<Popup> m_popup;
-    di::Optional<LayoutEntry> m_popup_layout;
 };
 }

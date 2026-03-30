@@ -102,6 +102,10 @@ void RenderThread::render_thread() {
                 if (should_exit) {
                     return;
                 }
+            } else if (auto ev = di::get_if<RemovePopup>(event)) {
+                m_layout_state.with_lock([&](LayoutState& state) {
+                    state.remove_popup();
+                });
             } else if (auto ev = di::get_if<StatusMessage>(event)) {
                 m_pending_status_message = {
                     di::move(ev->message),
@@ -315,7 +319,7 @@ struct Render {
     }
 
     void operator()(LayoutEntry const& entry) {
-        auto const is_active = entry.pane == tab.active().data();
+        auto const is_active = entry.pane == state.active_pane().data();
         auto _ = is_active ? renderer.set_dim_factor(0) : di::ScopeExit<di::Function<void()>>([] {});
 
         renderer.set_bound(entry.row + have_top_status_bar, entry.col, entry.size.cols, entry.size.rows);
@@ -514,7 +518,7 @@ void RenderThread::do_render(Renderer& renderer) {
             render_fn(*tree);
 
             // If there is a popup, render it.
-            for (auto popup_layout : tab.popup_layout()) {
+            for (auto popup_layout : state.popup_layout()) {
                 // For now, always invalidate the popup since we don't have proper damage tracking when
                 // panes overlap.
                 popup_layout.pane->invalidate_all();

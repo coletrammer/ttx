@@ -3,7 +3,6 @@
 #include "di/container/vector/vector.h"
 #include "tab.h"
 #include "ttx/layout_json.h"
-#include "ttx/popup.h"
 
 namespace ttx {
 class LayoutState;
@@ -32,8 +31,6 @@ public:
 
     auto add_pane(Tab& tab, u64 pane_id, CreatePaneArgs args, Direction direction, RenderThread& render_thread,
                   InputThread& input_thread) -> di::Result<>;
-    auto popup_pane(Tab& tab, u64 pane_id, PopupLayout const& popup_layout, CreatePaneArgs args,
-                    RenderThread& render_thread, InputThread& input_thread) -> di::Result<>;
     auto add_tab(CreatePaneArgs args, u64 tab_id, u64 pane_id, RenderThread& render_thread, InputThread& input_thread)
         -> di::Result<>;
 
@@ -51,6 +48,8 @@ public:
 
     void layout_did_update();
     auto as_json_v1() const -> json::v1::Session;
+
+    auto layout_state() const -> LayoutState& { return *m_layout_state; }
 
 private:
     LayoutState* m_layout_state { nullptr };
