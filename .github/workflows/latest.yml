@@ -61,6 +61,8 @@ jobs:
           git push origin latest --force
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Sleep
+        run: sleep 60
       - name: Update latest release
         uses: softprops/action-gh-release@v2
         with:
