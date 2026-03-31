@@ -433,20 +433,21 @@ auto Pane::draw(Renderer& renderer) -> di::Tuple<RenderedCursor, terminal::Color
     // applications in a short duration is inefficient and casues rendering issues. We want
     // to resize() after rendering because resizing may clear parts of the screen. This does
     // however require a second render for things to fully look correct at the new size.
-    auto need_another_render = m_terminal.with_lock([&](Terminal& terminal) {
-        if (auto visible_size = di::exchange(m_desired_visible_size, {})) {
-            if (terminal.visible_size() == visible_size.value()) {
-                return false;
-            }
-            terminal.set_visible_size(visible_size.value());
+    auto [need_another_render, events] =
+        m_terminal.with_lock([&](Terminal& terminal) -> di::Tuple<bool, di::Vector<TerminalEvent>> {
+            if (auto visible_size = di::exchange(m_desired_visible_size, {})) {
+                if (terminal.visible_size() == visible_size.value()) {
+                    return { false, di::Vector<TerminalEvent> {} };
+                }
+                terminal.set_visible_size(visible_size.value());
 
-            for (auto&& event : terminal.outgoing_events()) {
-                handle_terminal_event(di::move(event));
+                return { true, terminal.outgoing_events() };
             }
-            return true;
-        }
-        return false;
-    });
+            return { false, di::Vector<TerminalEvent> {} };
+        });
+    for (auto&& event : events) {
+        handle_terminal_event(di::move(event));
+    }
     if (need_another_render && m_hooks.did_update) {
         m_hooks.did_update(*this);
     }
@@ -855,6 +856,7 @@ void Pane::handle_terminal_event(TerminalEvent&& event) {
 }
 
 void Pane::write_pty_string(di::StringView data) {
+    // TODO: this could deadlock if the output buffer overflows
     m_pty_controller.with_lock([&](dius::SyncFile& pty) {
         (void) pty.write_exactly(di::as_bytes(data.span()));
     });

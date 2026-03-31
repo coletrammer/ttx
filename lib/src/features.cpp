@@ -2,6 +2,8 @@
 
 #include "di/io/vector_writer.h"
 #include "di/io/writer_print.h"
+#include "dius/condition_variable.h"
+#include "dius/thread.h"
 #include "ttx/focus_event.h"
 #include "ttx/key_event.h"
 #include "ttx/mouse_event.h"
@@ -266,29 +268,55 @@ auto detect_features(dius::SyncFile& terminal) -> di::Result<FeatureResult> {
     // Clear the line, as we have been writing text:
     di::writer_print<di::String::Encoding>(request_buffer, "\r\033[K"_sv);
 
+    // Setup reader thread.
+    auto detector = FeatureDetector {};
+    auto error = di::Error {};
+    auto cv = dius::ConditionVariable {};
+    auto lock = dius::Mutex {};
+    auto reader = TRY(dius::Thread::create([&] {
+        auto _ = di::ScopeExit([&] {
+            cv.notify_one();
+        });
+
+        // Read responses out.
+        auto buffer = di::Vector<byte> {};
+        buffer.resize(16384);
+
+        auto parser = TerminalInputParser {};
+        auto utf8_decoder = Utf8StreamDecoder {};
+        while (!detector.done()) {
+            auto nread = terminal.read_some(buffer.span());
+            if (!nread) {
+                error = di::move(nread).error();
+                break;
+            }
+            if (nread == 0) {
+                error = di::BasicError::StreamTimeout;
+            }
+
+            auto utf8_string = utf8_decoder.decode(buffer | di::take(nread.value()));
+            auto events = parser.parse(utf8_string, Feature::KittyKeyProtocol);
+            for (auto const& event : events) {
+                di::visit(
+                    [&](auto const& ev) {
+                        detector.handle_event(ev);
+                    },
+                    event);
+            }
+        }
+    }));
+
+    // Write query
     auto _ = TRY(terminal.enter_raw_mode());
     auto text = di::move(request_buffer).vector();
     TRY(terminal.write_exactly(di::as_bytes(text.span())));
 
-    // Read responses out.
-    auto buffer = di::Vector<byte> {};
-    buffer.resize(4096);
+    auto guard = di::UniqueLock(lock);
+    cv.wait(guard);
+    TRY(reader.join());
 
-    auto detector = FeatureDetector {};
-    auto parser = TerminalInputParser {};
-    auto utf8_decoder = Utf8StreamDecoder {};
-    while (!detector.done()) {
-        auto nread = TRY(terminal.read_some(buffer.span()));
-
-        auto utf8_string = utf8_decoder.decode(buffer | di::take(nread));
-        auto events = parser.parse(utf8_string, Feature::None);
-        for (auto const& event : events) {
-            di::visit(
-                [&](auto const& ev) {
-                    detector.handle_event(ev);
-                },
-                event);
-        }
+    if (error.failure()) {
+        return di::Unexpected(di::move(error));
     }
 
     auto result = detector.result();
