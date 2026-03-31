@@ -1,0 +1,27 @@
+var classttx_1_1Renderer =
+[
+    [ "Renderer", "classttx_1_1Renderer.html#a0d6e622437ea6c7a46ac63c45a16bd56", null ],
+    [ "cleanup", "classttx_1_1Renderer.html#a82fb4b0feb1a0553a829a4418bf3cb39", null ],
+    [ "clear_row", "classttx_1_1Renderer.html#ae5d3411e10fa37143cade2194eb11a26", null ],
+    [ "dimmed", "classttx_1_1Renderer.html#a98cf78a877c25b7a121d07ed4d88560e", null ],
+    [ "finish", "classttx_1_1Renderer.html#aabc246ce293441a05dc46f0a9b8bf217", null ],
+    [ "flush_palette_color_state", "classttx_1_1Renderer.html#a0376230a0c7053719559ed7d1a3fb2c4", null ],
+    [ "put_cell", "classttx_1_1Renderer.html#a37c297375d8590ecbdfd9158e1128123", null ],
+    [ "put_text", "classttx_1_1Renderer.html#afb77627f06ab58994a44beaec14c5240", null ],
+    [ "put_text", "classttx_1_1Renderer.html#a098e3d8317586b0f85f3c3117ebfefc2", null ],
+    [ "reset_dim_factor", "classttx_1_1Renderer.html#a6d6577206ca0f5093b82a9766d575455", null ],
+    [ "reset_global_palette", "classttx_1_1Renderer.html#a16792b743c24ad0dbd964c42b654e620", null ],
+    [ "reset_local_palette", "classttx_1_1Renderer.html#aa3964b9573a6ac580419786672883336", null ],
+    [ "resolve_background", "classttx_1_1Renderer.html#a3f338d825a83be40a83ebe93c2cab35a", null ],
+    [ "resolve_color", "classttx_1_1Renderer.html#acac81a199bb5d583865667d02635754b", null ],
+    [ "resolve_color", "classttx_1_1Renderer.html#aa06824a5573286bf1fa2d0a8ddf8ad5a", null ],
+    [ "resolve_cursor_color", "classttx_1_1Renderer.html#adf30bf0dd6a172f2585cf58ef2316b09", null ],
+    [ "resolve_cursor_text_color", "classttx_1_1Renderer.html#ab495068173bfeae513a5bcc8e8b78679", null ],
+    [ "resolve_foreground", "classttx_1_1Renderer.html#afad6d2924360247927679c5b57572d4d", null ],
+    [ "set_bound", "classttx_1_1Renderer.html#a840a7593cb4e72b6315993244c51993d", null ],
+    [ "set_dim_factor", "classttx_1_1Renderer.html#ac73ec149dfb9e55492e017893cc47069", null ],
+    [ "set_global_palette", "classttx_1_1Renderer.html#a1d678eee5aca168258add36ef800da23", null ],
+    [ "set_local_palette", "classttx_1_1Renderer.html#aab8739b77c5f51e77982d81704c4e789", null ],
+    [ "setup", "classttx_1_1Renderer.html#ace4cee86a36ca3594f6eb8b7ee88bbd3", null ],
+    [ "start", "classttx_1_1Renderer.html#a5ac385665ef415b7964314b0b8b24efd", null ]
+];

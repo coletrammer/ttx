@@ -1,0 +1,28 @@
+var searchData=
+[
+  ['reflow_0',['reflow',['../classttx_1_1terminal_1_1RowGroup.html#a8b0dfc1629b378674365ab18e88a5db2',1,'ttx::terminal::RowGroup']]],
+  ['reflow_5fvisual_5frows_1',['reflow_visual_rows',['../classttx_1_1terminal_1_1ScrollBack.html#a14d51c143dca791334e4decb9e326958',1,'ttx::terminal::ScrollBack']]],
+  ['relative_5fsize_2',['relative_size',['../classttx_1_1LayoutGroup.html#a3b58fcde77c024a2c78fe5afa94b1658',1,'ttx::LayoutGroup::relative_size() -&gt; i64 &amp;'],['../classttx_1_1LayoutGroup.html#a4e1760c0349eee387fd53520a61fab53',1,'ttx::LayoutGroup::relative_size() const -&gt; i64']]],
+  ['remove_5fpane_3',['remove_pane',['../classttx_1_1LayoutGroup.html#ac7c833e74f704721245580b9d3c0ef44',1,'ttx::LayoutGroup']]],
+  ['renderer_4',['Renderer',['../classttx_1_1Renderer.html#a0d6e622437ea6c7a46ac63c45a16bd56',1,'ttx::Renderer']]],
+  ['request_5fclipboard_5',['request_clipboard',['../classttx_1_1Clipboard.html#ad221288aa259f107b852a7a173329a15',1,'ttx::Clipboard']]],
+  ['reset_6',['reset',['../classttx_1_1terminal_1_1Palette.html#af24799edacf99be8aa0f12c3f3c39c28',1,'ttx::terminal::Palette']]],
+  ['reset_5fdim_5ffactor_7',['reset_dim_factor',['../classttx_1_1Renderer.html#a6d6577206ca0f5093b82a9766d575455',1,'ttx::Renderer']]],
+  ['reset_5fglobal_5fpalette_8',['reset_global_palette',['../classttx_1_1Renderer.html#a16792b743c24ad0dbd964c42b654e620',1,'ttx::Renderer']]],
+  ['reset_5flocal_5fpalette_9',['reset_local_palette',['../classttx_1_1Renderer.html#aa3964b9573a6ac580419786672883336',1,'ttx::Renderer']]],
+  ['reset_5fmouse_5freporting_10',['reset_mouse_reporting',['../classttx_1_1Terminal.html#a29fe3fc59be518703eb585e14c6acddb',1,'ttx::Terminal']]],
+  ['resize_11',['resize',['../classttx_1_1LayoutGroup.html#a0fa48f544da0537f83358da10e141144',1,'ttx::LayoutGroup::resize()'],['../classttx_1_1Pane.html#a17ab0d55667d4cc9fcabf0ba79ee403f',1,'ttx::Pane::resize()'],['../classttx_1_1terminal_1_1Screen.html#a5f62a5b0532f6ea9fdcf9f10435fab66',1,'ttx::terminal::Screen::resize()']]],
+  ['resolve_12',['resolve',['../classttx_1_1terminal_1_1Palette.html#a1c32cae8b470d90a7851b425e278cd23',1,'ttx::terminal::Palette']]],
+  ['resolve_5fbackground_13',['resolve_background',['../classttx_1_1Renderer.html#a3f338d825a83be40a83ebe93c2cab35a',1,'ttx::Renderer::resolve_background()'],['../classttx_1_1terminal_1_1Palette.html#abc34de4d0a07a19d02333d05f74819da',1,'ttx::terminal::Palette::resolve_background()']]],
+  ['resolve_5fcolor_14',['resolve_color',['../classttx_1_1Renderer.html#aa06824a5573286bf1fa2d0a8ddf8ad5a',1,'ttx::Renderer::resolve_color(terminal::PaletteIndex index) const -&gt; terminal::Color'],['../classttx_1_1Renderer.html#acac81a199bb5d583865667d02635754b',1,'ttx::Renderer::resolve_color(terminal::Color color) const -&gt; terminal::Color']]],
+  ['resolve_5fcursor_5fcolor_15',['resolve_cursor_color',['../classttx_1_1Renderer.html#adf30bf0dd6a172f2585cf58ef2316b09',1,'ttx::Renderer']]],
+  ['resolve_5fcursor_5ftext_5fcolor_16',['resolve_cursor_text_color',['../classttx_1_1Renderer.html#ab495068173bfeae513a5bcc8e8b78679',1,'ttx::Renderer']]],
+  ['resolve_5fforeground_17',['resolve_foreground',['../classttx_1_1Renderer.html#afad6d2924360247927679c5b57572d4d',1,'ttx::Renderer::resolve_foreground()'],['../classttx_1_1terminal_1_1Palette.html#a9a061ea04036c6ba88b094d144e1bce4',1,'ttx::terminal::Palette::resolve_foreground()']]],
+  ['restore_5fcursor_18',['restore_cursor',['../classttx_1_1terminal_1_1Screen.html#aa7258e45e6b48ae4244b7954f9d9a769',1,'ttx::terminal::Screen']]],
+  ['result_19',['result',['../classttx_1_1FeatureDetector.html#a99db4ddbcab88501e3bc62904d6bd5ac',1,'ttx::FeatureDetector']]],
+  ['reverse_5fvideo_20',['reverse_video',['../classttx_1_1Terminal.html#affd7f5307d8be927c24f6602fd884d3c',1,'ttx::Terminal']]],
+  ['row_5fcount_21',['row_count',['../classttx_1_1Terminal.html#a8b9dfe0b683c2c868a016e291fb5a9ee',1,'ttx::Terminal']]],
+  ['rowgroup_22',['RowGroup',['../classttx_1_1terminal_1_1RowGroup.html#abb2b198bb81ad50b98b429b45a1dcc4a',1,'ttx::terminal::RowGroup']]],
+  ['rows_23',['rows',['../classttx_1_1terminal_1_1RowGroup.html#aa05e97a14ebf53a34c977feb20516534',1,'ttx::terminal::RowGroup::rows() -&gt; di::Ring&lt; Row &gt; &amp;'],['../classttx_1_1terminal_1_1RowGroup.html#a4c19976983db630031d4fa9155eba5ae',1,'ttx::terminal::RowGroup::rows() const -&gt; di::Ring&lt; Row &gt; const &amp;']]],
+  ['rows_5fshrinked_24',['rows_shrinked',['../structttx_1_1Size.html#a0339eb84b969ea0e321ce5a29bbfd21f',1,'ttx::Size']]]
+];

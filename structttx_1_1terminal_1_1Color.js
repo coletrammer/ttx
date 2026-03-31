@@ -1,0 +1,47 @@
+var structttx_1_1terminal_1_1Color =
+[
+    [ "IsAtom", "structttx_1_1terminal_1_1Color.html#a571fa3f23c99e352a465b60ffd81069b", null ],
+    [ "Palette", "structttx_1_1terminal_1_1Color.html#afad61c29aa585dbdad32afae087b2f53", [
+      [ "Black", "structttx_1_1terminal_1_1Color.html#afad61c29aa585dbdad32afae087b2f53a6c4e37508f445d0bfd6ff2edd6ef9763", null ],
+      [ "Red", "structttx_1_1terminal_1_1Color.html#afad61c29aa585dbdad32afae087b2f53adffcbade7e98682fc8f42fbc6e3fe01e", null ],
+      [ "Green", "structttx_1_1terminal_1_1Color.html#afad61c29aa585dbdad32afae087b2f53a8ad1ec18756b281570729aac147d65e8", null ],
+      [ "Yellow", "structttx_1_1terminal_1_1Color.html#afad61c29aa585dbdad32afae087b2f53a7e4d0b228a7cc375160856255d722e50", null ],
+      [ "Blue", "structttx_1_1terminal_1_1Color.html#afad61c29aa585dbdad32afae087b2f53ad50c0004155cc67e48fed28dda9f51eb", null ],
+      [ "Magenta", "structttx_1_1terminal_1_1Color.html#afad61c29aa585dbdad32afae087b2f53a936c8702eef7cf3fa73666c3433ef73f", null ],
+      [ "Cyan", "structttx_1_1terminal_1_1Color.html#afad61c29aa585dbdad32afae087b2f53a2446d0b741dc90bfc8a7a62522010087", null ],
+      [ "LightGrey", "structttx_1_1terminal_1_1Color.html#afad61c29aa585dbdad32afae087b2f53a18af4457f70b1afc33ffa6cd6803f0ba", null ],
+      [ "DarkGrey", "structttx_1_1terminal_1_1Color.html#afad61c29aa585dbdad32afae087b2f53a7df087f1941e0e225bcf5428d9115fbd", null ],
+      [ "LightRed", "structttx_1_1terminal_1_1Color.html#afad61c29aa585dbdad32afae087b2f53a01e0e6c30ab8a0d764207c216aff586d", null ],
+      [ "LightGreen", "structttx_1_1terminal_1_1Color.html#afad61c29aa585dbdad32afae087b2f53afb38d0ae99e659a9f74456999f0b6c97", null ],
+      [ "LightYellow", "structttx_1_1terminal_1_1Color.html#afad61c29aa585dbdad32afae087b2f53ae65d0b408d23c2692873b093b1c65e2f", null ],
+      [ "LightBlue", "structttx_1_1terminal_1_1Color.html#afad61c29aa585dbdad32afae087b2f53ad5adf97e85c3489daaed0af2ef9a3ebf", null ],
+      [ "LightMagenta", "structttx_1_1terminal_1_1Color.html#afad61c29aa585dbdad32afae087b2f53afb9eb059644a4f3c9b706e9f47b0086d", null ],
+      [ "LightCyan", "structttx_1_1terminal_1_1Color.html#afad61c29aa585dbdad32afae087b2f53a96c7ee257608c45778406320a54354c5", null ],
+      [ "White", "structttx_1_1terminal_1_1Color.html#afad61c29aa585dbdad32afae087b2f53a66e8629ace3c9092107f02f8e5de26b3", null ]
+    ] ],
+    [ "Type", "structttx_1_1terminal_1_1Color.html#a88d284933519c60f91975a12d725863c", [
+      [ "Default", "structttx_1_1terminal_1_1Color.html#a88d284933519c60f91975a12d725863ca7a1920d61156abc05a60135aefe8bc67", null ],
+      [ "Palette", "structttx_1_1terminal_1_1Color.html#a88d284933519c60f91975a12d725863ca278f9a3d3077c522e71022e302b9e0e4", null ],
+      [ "Custom", "structttx_1_1terminal_1_1Color.html#a88d284933519c60f91975a12d725863ca90589c47f06eb971d548591f23c285af", null ],
+      [ "Dynamic", "structttx_1_1terminal_1_1Color.html#a88d284933519c60f91975a12d725863ca971fd8cc345d8bd9f92e9f7d88fdf20c", null ]
+    ] ],
+    [ "Color", "structttx_1_1terminal_1_1Color.html#aeb51792a6b7ae0eb00c663328fdb5315", null ],
+    [ "Color", "structttx_1_1terminal_1_1Color.html#ab8416fded3e2ce9052b2bf0e96efee76", null ],
+    [ "Color", "structttx_1_1terminal_1_1Color.html#a93ba6c21975cd247510d52bb9022c0f0", null ],
+    [ "Color", "structttx_1_1terminal_1_1Color.html#a631ec14c198997d24db2b3743eeb7d70", null ],
+    [ "brightness", "structttx_1_1terminal_1_1Color.html#a6166f7cd765c6df2819c6896a715efdf", null ],
+    [ "dimmed", "structttx_1_1terminal_1_1Color.html#a43de296b4af28b2a563b94578ff55ed2", null ],
+    [ "is_custom", "structttx_1_1terminal_1_1Color.html#abf9c3ef819653e08972a4cccd78ec2a1", null ],
+    [ "is_default", "structttx_1_1terminal_1_1Color.html#a50041adcb457f7ae62a76a0e0886ecd9", null ],
+    [ "is_dynamic", "structttx_1_1terminal_1_1Color.html#a4d12d32c4d89552356b837ba86df6854", null ],
+    [ "is_palette", "structttx_1_1terminal_1_1Color.html#a43851005adfa669a2e5163806b42e243", null ],
+    [ "operator<=>", "structttx_1_1terminal_1_1Color.html#a3124059ee3a508fdcbce439a8e892131", null ],
+    [ "operator==", "structttx_1_1terminal_1_1Color.html#a5632f8769091f13ad87f3aa5ede98366", null ],
+    [ "to_string", "structttx_1_1terminal_1_1Color.html#a9a8c623518cb250aae6749b6476fa8ea", null ],
+    [ "value_or", "structttx_1_1terminal_1_1Color.html#a25e0efaa8d1480b81cbce39b586815d3", null ],
+    [ "tag_invoke", "structttx_1_1terminal_1_1Color.html#ad015c4a998144c7d2d8848c3f7565e59", null ],
+    [ "b", "structttx_1_1terminal_1_1Color.html#addae585929c575e7b37a9d39fae9ce29", null ],
+    [ "g", "structttx_1_1terminal_1_1Color.html#a18b619b820589b56c4ee86c7adb99a1d", null ],
+    [ "r", "structttx_1_1terminal_1_1Color.html#a9bd451179dbd9d572bb9c3e51c5c02a0", null ],
+    [ "type", "structttx_1_1terminal_1_1Color.html#a93e89685273e7a0d6f6b9cd5270d834e", null ]
+];
