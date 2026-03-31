@@ -1,5 +1,6 @@
 #pragma once
 
+#include "di/container/queue/queue.h"
 #include "di/container/string/string_view.h"
 #include "di/container/tree/tree_map.h"
 #include "di/container/vector/vector.h"
@@ -8,6 +9,7 @@
 #include "di/sync/synchronized.h"
 #include "di/vocab/error/result.h"
 #include "di/vocab/pointer/box.h"
+#include "dius/condition_variable.h"
 #include "dius/sync_file.h"
 #include "dius/system/process.h"
 #include "dius/thread.h"
@@ -182,7 +184,7 @@ private:
     di::Optional<MousePosition> m_last_mouse_position;
     di::Optional<terminal::AbsolutePosition> m_pending_selection_start;
     MouseClickTracker m_mouse_click_tracker { 3 };
-    di::Synchronized<dius::SyncFile> m_pty_controller;
+    dius::SyncFile m_pty_controller;
     di::Function<void()> m_restore_termios;
     di::Synchronized<Terminal> m_terminal;
     di::Optional<Size> m_desired_visible_size;
@@ -194,9 +196,12 @@ private:
     di::Synchronized<di::Optional<di::Path>> m_cwd;
     di::Synchronized<di::Optional<di::String>> m_window_title;
     PaneHooks m_hooks;
+    di::Synchronized<di::Queue<di::Vector<byte>>> m_output_queue;
+    dius::ConditionVariable m_output_condition;
 
     // These are declared last, for when dius::Thread calls join() in the destructor.
     dius::Thread m_process_thread;
+    dius::Thread m_output_thread;
     dius::Thread m_reader_thread;
     dius::Thread m_pipe_writer_thread;
     dius::Thread m_pipe_reader_thread;

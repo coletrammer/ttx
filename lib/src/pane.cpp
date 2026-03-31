@@ -188,6 +188,7 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
     pane->m_process_thread = TRY(dius::Thread::create([&pane = *pane] mutable {
         auto result = pane.m_process.wait();
         pane.m_done.store(true, di::MemoryOrder::Release);
+        pane.m_output_condition.notify_one();
 
         if (pane.m_hooks.did_exit) {
             pane.m_hooks.did_exit(pane, result.optional_value());
@@ -204,7 +205,7 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
 
             while (!pane.m_done.load(di::MemoryOrder::Acquire)) {
                 // SAFETY: this thread is the only one which reads the pty.
-                auto nread = pane.m_pty_controller.get_assuming_no_concurrent_accesses().read_some(buffer.span());
+                auto nread = pane.m_pty_controller.read_some(buffer.span());
                 if (!nread.has_value()) {
                     break;
                 }
@@ -235,6 +236,33 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
                 }
             }
         }));
+
+    pane->m_output_thread = TRY(dius::Thread::create([&pane = *pane] -> void {
+        while (!pane.m_done.load(di::MemoryOrder::Acquire)) {
+            auto output_bytes = [&] {
+                auto lock = di::UniqueLock(pane.m_output_queue.get_lock());
+                pane.m_output_condition.wait(lock, [&] {
+                    // SAFETY: we acquired the lock manually above.
+                    return !pane.m_output_queue.get_assuming_no_concurrent_accesses().empty() ||
+                           pane.m_done.load(di::MemoryOrder::Acquire);
+                });
+
+                // SAFETY: we acquired the lock manually above.
+                auto result = di::Vector<di::Vector<byte>> {};
+                for (auto& bytes : pane.m_output_queue.get_assuming_no_concurrent_accesses()) {
+                    result.push_back(di::move(bytes));
+                }
+                return result;
+            }();
+
+            for (auto const& bytes : output_bytes) {
+                if (pane.m_done.load(di::MemoryOrder::Acquire)) {
+                    break;
+                }
+                (void) pane.m_pty_controller.write_exactly(bytes.span());
+            }
+        }
+    }));
 
     if (args.pipe_input) {
         pane->m_pipe_writer_thread = TRY(dius::Thread::create(
@@ -326,6 +354,7 @@ Pane::~Pane() {
     (void) m_pipe_writer_thread.join();
     (void) m_pipe_extra_reader_thread.join();
     (void) m_reader_thread.join();
+    (void) m_output_thread.join();
     (void) m_process_thread.join();
 }
 
@@ -845,9 +874,7 @@ void Pane::handle_terminal_event(TerminalEvent&& event) {
                       update_cwd(di::move(osc7));
                   },
                   [&](Size&& size) {
-                      // SAFETY: no one else calls set_tty_window_size(), and the operation is atomic.
-                      (void) m_pty_controller.get_assuming_no_concurrent_accesses().set_tty_window_size(
-                          size.as_window_size());
+                      (void) m_pty_controller.set_tty_window_size(size.as_window_size());
                   },
                   [&](WritePtyString&& write_command) {
                       write_pty_string(write_command.string);
@@ -856,15 +883,18 @@ void Pane::handle_terminal_event(TerminalEvent&& event) {
 }
 
 void Pane::write_pty_string(di::StringView data) {
-    // TODO: this could deadlock if the output buffer overflows
-    m_pty_controller.with_lock([&](dius::SyncFile& pty) {
-        (void) pty.write_exactly(di::as_bytes(data.span()));
+    auto bytes = di::as_bytes(data.span()) | di::to<di::Vector>();
+    m_output_queue.with_lock([&](auto& queue) {
+        queue.push(di::move(bytes));
+        m_output_condition.notify_one();
     });
 }
 
 void Pane::write_pty_string(di::TransparentStringView data) {
-    m_pty_controller.with_lock([&](dius::SyncFile& pty) {
-        (void) pty.write_exactly(di::as_bytes(data.span()));
+    auto bytes = di::as_bytes(data.span()) | di::to<di::Vector>();
+    m_output_queue.with_lock([&](auto& queue) {
+        queue.push(di::move(bytes));
+        m_output_condition.notify_one();
     });
 }
 
