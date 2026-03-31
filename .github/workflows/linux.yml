@@ -57,7 +57,7 @@ jobs:
           nix develop --command cmake --build --preset ${{ matrix.preset }} -t coverage
         if: matrix.preset == 'ci-coverage'
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           flags: ${{ runner.os }}
           name: ${{ runner.os }}-coverage
