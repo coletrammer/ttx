@@ -64,7 +64,7 @@ jobs:
       - name: Sleep
         run: sleep 60
       - name: Update latest release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: latest
           name: "Latest Build"
