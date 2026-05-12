@@ -370,7 +370,7 @@ static auto maybe_get_terminfo_dir(di::TransparentStringView term, bool force_lo
     auto const& terminfo = terminal::get_ttx_terminfo();
     auto serialized_terminfo = terminfo.serialize();
     auto terminfo_hash = di::hash(serialized_terminfo);
-    if (auto result = dius::read_to_string(terminfo_dir.clone() / "ttx.terminfo.hash"_pv)) {
+    if (auto result = dius::read_to_string_sync(terminfo_dir.clone() / "ttx.terminfo.hash"_pv)) {
         if (result.value() == di::to_string(terminfo_hash)) {
             return terminfo_dir;
         }

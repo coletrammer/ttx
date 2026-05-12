@@ -146,7 +146,7 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
         di::writer_print<di::String::Encoding>(capture_file.value(), "\033[8;{};{}t"_sv, size.rows, size.cols);
     }
 
-    auto pty_controller = TRY(dius::open_psuedo_terminal_controller(dius::OpenMode::ReadWrite));
+    auto pty_controller = TRY(dius::open_psuedo_terminal_controller_sync(dius::OpenMode::ReadWrite));
 #ifdef __linux__
     auto restore_termios = TRY(pty_controller.get_termios_restorer());
 #endif
@@ -160,19 +160,19 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
     auto read_pipes = di::Optional<di::Tuple<dius::SyncFile, dius::SyncFile>> {};
     auto read_extra_pipes = di::Optional<di::Tuple<dius::SyncFile, dius::SyncFile>> {};
     if (args.pipe_input) {
-        write_pipes = TRY(dius::open_pipe(dius::OpenFlags::KeepAfterExec));
+        write_pipes = TRY(dius::open_pipe_sync(dius::OpenFlags::KeepAfterExec));
         stdin_fd = di::get<0>(write_pipes.value()).file_descriptor();
         close_fds.push_back(di::get<0>(write_pipes.value()).file_descriptor());
         close_fds.push_back(di::get<1>(write_pipes.value()).file_descriptor());
     }
     if (args.pipe_output) {
-        read_pipes = TRY(dius::open_pipe(dius::OpenFlags::KeepAfterExec));
+        read_pipes = TRY(dius::open_pipe_sync(dius::OpenFlags::KeepAfterExec));
         stdout_fd = di::get<1>(read_pipes.value()).file_descriptor();
         close_fds.push_back(di::get<0>(read_pipes.value()).file_descriptor());
         close_fds.push_back(di::get<1>(read_pipes.value()).file_descriptor());
     }
     if (args.pipe_extra_output) {
-        read_extra_pipes = TRY(dius::open_pipe(dius::OpenFlags::KeepAfterExec));
+        read_extra_pipes = TRY(dius::open_pipe_sync(dius::OpenFlags::KeepAfterExec));
         extra_fd = di::get<1>(read_extra_pipes.value()).file_descriptor();
         close_fds.push_back(di::get<0>(read_extra_pipes.value()).file_descriptor());
         close_fds.push_back(di::get<1>(read_extra_pipes.value()).file_descriptor());
@@ -186,7 +186,7 @@ auto Pane::create(u64 id, CreatePaneArgs args, Size const& size) -> di::Result<d
 #endif
 
     pane->m_process_thread = TRY(dius::Thread::create([&pane = *pane] mutable {
-        auto result = pane.m_process.wait();
+        auto result = pane.m_process.sync_wait();
         pane.m_done.store(true, di::MemoryOrder::Release);
         pane.m_output_condition.notify_one();
 
@@ -350,12 +350,6 @@ auto Pane::create_mock(u64 id, di::Optional<di::Path> cwd) -> di::Box<Pane> {
 Pane::~Pane() {
     // TODO: timeout/skip waiting for processes to die after sending SIGHUP.
     (void) m_process.signal(dius::Signal::Hangup);
-    (void) m_pipe_reader_thread.join();
-    (void) m_pipe_writer_thread.join();
-    (void) m_pipe_extra_reader_thread.join();
-    (void) m_reader_thread.join();
-    (void) m_output_thread.join();
-    (void) m_process_thread.join();
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)

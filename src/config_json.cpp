@@ -58,11 +58,11 @@ static auto get_theme_search_paths() -> di::Result<di::Vector<di::Path>> {
 static auto resolve_config_path(di::Span<di::Path const> search_paths, di::TransparentStringView config_path)
     -> di::Result<di::String> {
     if (config_path.starts_with('/')) {
-        return dius::read_to_string(di::PathView(config_path));
+        return dius::read_to_string_sync(di::PathView(config_path));
     }
     for (auto const& dir : search_paths) {
         auto path = dir.clone() / config_path;
-        auto result = dius::read_to_string(path);
+        auto result = dius::read_to_string_sync(path);
         if (result) {
             return di::move(result).value();
         }
@@ -72,7 +72,7 @@ static auto resolve_config_path(di::Span<di::Path const> search_paths, di::Trans
         if (!path.extension()) {
             path += ".json"_tsv;
         }
-        result = dius::read_to_string(path);
+        result = dius::read_to_string_sync(path);
         if (result) {
             return di::move(result).value();
         }
