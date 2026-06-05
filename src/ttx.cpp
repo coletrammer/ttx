@@ -1,3 +1,4 @@
+#include "client.h"
 #include "config.h"
 #include "config_json.h"
 #include "di/cli/parser.h"
@@ -14,6 +15,7 @@
 #include "layout_state.h"
 #include "render.h"
 #include "save_layout.h"
+#include "server.h"
 #include "ttx/features.h"
 #include "ttx/terminal/capability.h"
 #include "ttx/terminal/escapes/osc_21.h"
@@ -87,6 +89,39 @@ struct Replay : NewBase {
             .option<&NewBase::headless>('h', "headless"_tsv, "Headless mode"_sv)
             .argument<&NewBase::replay_paths>("REPLAY_FILES"_sv, "Files to replay (each file gets its own pane)"_sv,
                                               true)
+            .help();
+    }
+};
+
+struct Attach : NewBase {
+    bool help { false };
+
+    constexpr static auto get_cli_parser() {
+        return di::cli_parser<Attach>("attach"_tsv, "Attach to an existing ttx session"_sv)
+            .option<&NewBase::prefix>({}, "prefix"_tsv, "Override config prefix key for key bindings"_sv, false,
+                                      "KEY"_sv)
+            .option<&NewBase::disable_layout_restore>({}, "disable-layout-restore"_tsv,
+                                                      "Disable restoring from saved layout"_sv)
+            .option<&NewBase::disable_layout_save>({}, "disable-layout-restore"_tsv,
+                                                   "Disable continuously saving the current layout"_sv)
+            .option<&NewBase::layout_name>({}, "layout-name"_tsv,
+                                           "Layout name for save/restore (default: profile name)"_sv)
+            .option<&NewBase::profile>('p', "profile"_tsv,
+                                       "Profile name to use for this session (empty string loads no configuration)"_sv)
+            .option<&NewBase::theme>({}, "theme"_tsv, "Theme to use (overrides configuration if specified)"_sv)
+            .option<&NewBase::hide_status_bar>('s', "hide-status-bar"_tsv, "Hide the status bar"_sv)
+            .option<&NewBase::capture_command_output_path>('c', "capture-command-output-path"_tsv,
+                                                           "Capture command output to a file"_sv)
+            .option<&NewBase::save_state_path>('S', "save-state-path"_tsv,
+                                               "Save state path when triggering saving a pane's state"_sv)
+            .option<&NewBase::headless>('h', "headless"_tsv, "Headless mode"_sv)
+            .option<&NewBase::term>('t', "term"_tsv, "Override config TERM environment variable"_sv)
+            .option<&NewBase::clipboard_mode>({}, "clipboard"_tsv, "Set the clipboard mode"_sv, false, "MODE"_sv)
+            .option<&NewBase::force_local_terminfo>(
+                {}, "force-local-terminfo"_tsv,
+                "Always try and compile built-in terminfo, and set TERMINFO env variable"_sv)
+            .argument<&NewBase::command>("COMMAND"_sv, "Program to run in terminal (default: $SHELL)"_sv, false,
+                                         di::cli::ValueType::CommandWithArgs)
             .help();
     }
 };
@@ -274,8 +309,32 @@ struct Terminfo {
     }
 };
 
+struct ServerStart {
+    di::TransparentStringView session { "main"_tsv };
+    bool help { false };
+
+    constexpr static auto get_cli_parser() {
+        return di::cli_parser<ServerStart>("start"_tsv, "Start a ttx server instance"_sv)
+            .argument<&ServerStart::session>("SESSION"_sv, "The session identifier for the server instance"_sv)
+            .help();
+    }
+};
+
+struct ServerCommand {
+    di::Variant<di::Void, ServerStart> subcommand;
+    bool help { false };
+
+    constexpr static auto get_cli_parser() {
+        return di::cli_parser<ServerCommand>("server"_tsv, "Manage ttx server instances"_sv)
+            .subcommands<&ServerCommand::subcommand>()
+            .help();
+    }
+};
+
 struct Args {
-    di::Variant<New, ConfigCommand, ThemeCommand, Completions, Replay, Keybinds, Features, Terminfo> subcommand;
+    di::Variant<New, Attach, ConfigCommand, ThemeCommand, Completions, Replay, Keybinds, Features, Terminfo,
+                ServerCommand>
+        subcommand;
     bool help { false };
 
     constexpr static auto get_cli_parser() {
@@ -302,6 +361,17 @@ static auto get_session_save_dir() -> di::Result<di::Path> {
     result /= "ttx"_tsv;
     result /= "layouts"_tsv;
     return di::move(result);
+}
+
+static auto get_runtime_dir() -> di::Path {
+    auto const& env = dius::system::get_environment();
+    auto xdg_runtime_dir = env.at("XDG_RUNTIME_DIR"_tsv)
+                               .transform([&](di::TransparentStringView path) {
+                                   return di::PathView(path);
+                               })
+                               .value_or("/tmp"_pv)
+                               .to_owned();
+    return di::move(xdg_runtime_dir) / "ttx"_tsv;
 }
 
 static auto get_local_terminfo_dir() -> di::Result<di::Path> {
@@ -670,6 +740,58 @@ static auto main(Args& base_args, Replay& args) -> di::Result<> {
     return do_new(base_args, args);
 }
 
+static auto main(Args&, Attach& args) -> di::Result<> {
+    auto const replay_mode = !args.replay_paths.empty();
+    if (args.headless || replay_mode) {
+        args.profile = ""_tsv;
+    }
+
+    if (args.profile.ends_with('/')) {
+        return di::Unexpected(di::format_error("--profile cannot be a directory"_sv));
+    }
+    auto features = FeatureResult { .features = Feature::All };
+    if (!args.headless) {
+        features = TRY(detect_features(dius::std_in));
+    }
+    auto config_from_args = config_json::v1::Config {
+        .theme = {
+            .name = args.theme.transform(di::to_utf8_string_lossy),
+        },
+        .input = {
+            .prefix = args.prefix,
+            .save_state_path = args.save_state_path.transform([](di::PathView path) { return di::to_utf8_string_lossy(path.data()); }),
+        },
+        .clipboard = {
+            .mode = args.clipboard_mode,
+        },
+        .session = {
+            .restore_layout = args.disable_layout_restore ? di::Optional(false) : di::nullopt,
+            .save_layout = args.disable_layout_save ? di::Optional(false) : di::nullopt,
+            .layout_name = args.layout_name.transform(di::to_utf8_string_lossy),
+        },
+        .shell = {
+            .command = !args.command.empty () ? di::Optional(args.command | di::transform(di::to_utf8_string_lossy) | di::to<di::Vector>()) : di::nullopt,
+        },
+        .status_bar = {
+            .hide = args.hide_status_bar,
+        },
+        .terminfo = {
+            .term = args.term.transform(di::to_utf8_string_lossy),
+            .force_local_terminfo = args.force_local_terminfo ? di::Optional(true) : di::nullopt,
+        },
+    };
+    auto config = TRY(config_json::v1::resolve_profile(args.profile, features.theme_mode, features.palette,
+                                                       di::clone(config_from_args))
+                          .transform_error([&](auto&& error) {
+                              return di::format_error("Failed to resolve profile '{}': {}"_sv, args.profile, error);
+                          }));
+
+    // Setup - log to file.
+    [[maybe_unused]] auto& log = dius::std_err = TRY(dius::open_sync("/tmp/ttx.log"_pv, dius::OpenMode::WriteClobber));
+
+    return run_client(di::move(config), features.features);
+}
+
 static auto main(Args&, Completions& args) -> di::Result<> {
     auto parser = di::get_cli_parser<Args>();
     parser.write_completions(dius::std_out, args.shell);
@@ -865,6 +987,25 @@ static auto main(Args&, ThemeCommand&, ThemeShow& args) -> di::Result<> {
 }
 
 static auto main(Args& base_args, ThemeCommand& args) -> di::Result<> {
+    return di::visit(
+        [&](auto& subcommand) -> di::Result<> {
+            if constexpr (di::SameAs<di::Void, di::meta::RemoveCVRef<decltype(subcommand)>>) {
+                ASSERT(false);
+                return {};
+            } else {
+                return main(base_args, args, subcommand);
+            }
+        },
+        args.subcommand);
+}
+
+static auto main(Args&, ServerCommand&, ServerStart& args) -> di::Result<> {
+    auto socket_path = get_runtime_dir();
+    socket_path /= args.session;
+    return run_server(di::move(socket_path));
+}
+
+static auto main(Args& base_args, ServerCommand& args) -> di::Result<> {
     return di::visit(
         [&](auto& subcommand) -> di::Result<> {
             if constexpr (di::SameAs<di::Void, di::meta::RemoveCVRef<decltype(subcommand)>>) {

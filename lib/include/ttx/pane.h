@@ -115,7 +115,7 @@ public:
         : m_id(id)
         , m_pty_controller(di::move(pty_controller))
         , m_terminal(di::in_place, id, size, global_palette, local_palette, theme_mode)
-        , m_process(process)
+        , m_process(di::move(process))
         , m_cwd(di::move(cwd))
         , m_hooks(di::move(hooks)) {}
     ~Pane();

@@ -185,9 +185,9 @@ objects anymore.
 - [x] Atomic intrusive queue (as helper for async mutex and queue?)
 - [x] Async resource helper (define resource with 2 senders)
 - [x] Delete async io, ipc binary, etc. (move to dius)
-- [ ] di::Lazy<> scheduler affinity (not sure how this works, but need to run di::Lazy<> on a specific scheduler
+- [x] di::Lazy<> scheduler affinity (not sure how this works, but need to run di::Lazy<> on a specific scheduler
       regardless of what it waits for)
-- [ ] Time based scheduling (schedule at time point or after duration) + timeout() utility
+- [x] Time based scheduling (schedule at time point or after duration) + timeout() utility
 
 #### dius
 
@@ -197,7 +197,7 @@ objects anymore.
 - [x] Better socket operations + async IO definitions
 - [ ] Refactor io_uring backed context (thread safety + cancellation + adding operations while blocked)
 - [x] Add async waiting for signals
-- [ ] Add async waiting for process completion (maybe use SIGCHLD?)
+- [x] Add async waiting for process completion (maybe use SIGCHLD?)
 - [x] Add time based scheduling to contexts
-- [ ] Add file change notifications
+- [x] Add file change notifications
 - [ ] Add kqueue backed context for MacOS
