@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ttx/ipc/pane_id.h"
 #include "ttx/layout.h"
 #include "ttx/size.h"
 
@@ -33,7 +34,7 @@ struct PopupLayout {
 };
 
 struct Popup {
-    di::Box<Pane> pane {};
+    PaneId pane_id {};
     PopupLayout layout_config;
 
     auto layout(Size const& size) -> LayoutEntry;

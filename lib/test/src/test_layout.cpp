@@ -1,20 +1,18 @@
 #include "di/test/prelude.h"
 #include "dius/print.h"
+#include "ttx/ipc/pane_id.h"
 #include "ttx/layout.h"
 #include "ttx/size.h"
 
 namespace layout {
 using namespace ttx;
 
-static auto add_pane(LayoutGroup& root, Size const& size, Pane* reference, Direction direction)
-    -> di::Tuple<Pane&, di::Box<LayoutNode>> {
-    auto [layout_tree, entry, pane_out] = root.split(size, 0, 0, reference, direction);
-    ASSERT(entry);
-    ASSERT(pane_out);
-    auto& pane = *pane_out = Pane::create_mock();
-    entry->pane = pane.get();
-
-    return { *pane, di::move(layout_tree) };
+static auto add_pane(LayoutGroup& root, Size const& size, PaneId reference, Direction direction)
+    -> di::Tuple<PaneId, di::Box<LayoutNode>> {
+    static auto next_pane_id = PaneId(1);
+    auto new_pane = ++next_pane_id;
+    auto layout_tree = root.split(size, 0, 0, reference, direction, new_pane);
+    return { new_pane, di::move(layout_tree) };
 };
 
 static auto get_child_node(LayoutNode const& tree, size_t index) -> LayoutNode const& {
@@ -22,15 +20,15 @@ static auto get_child_node(LayoutNode const& tree, size_t index) -> LayoutNode c
     return *tree.children.at(index).value().get<di::Box<LayoutNode>>();
 }
 
-static auto validate_layout_for_pane(Pane& pane, LayoutNode& tree, u32 row, u32 col, Size size) {
-    auto entry = tree.find_pane(&pane);
+static auto validate_layout_for_pane(PaneId pane, LayoutNode& tree, u32 row, u32 col, Size size) {
+    auto entry = tree.find_pane(pane);
     ASSERT(entry);
 
     // Default the pixel widths/heights.
     size.ypixels = size.rows * 10;
     size.xpixels = size.cols * 10;
 
-    ASSERT_EQ(entry->pane, &pane);
+    ASSERT_EQ(entry->pane_id, pane);
     ASSERT_EQ(entry->row, row);
     ASSERT_EQ(entry->col, col);
     ASSERT_EQ(entry->size, size);
@@ -48,18 +46,18 @@ static void splits() {
     auto root = LayoutGroup {};
 
     // Initial pane
-    auto [pane0, l0] = add_pane(root, size, nullptr, Direction::None);
+    auto [pane0, l0] = add_pane(root, size, PaneId(0), Direction::None);
     validate_layout_for_pane(pane0, *l0, 0, 0, size);
     validate_layout_intersections(*l0, {}, {});
 
     // Vertical split
-    auto [pane1, l1] = add_pane(root, size, &pane0, Direction::Vertical);
+    auto [pane1, l1] = add_pane(root, size, pane0, Direction::Vertical);
     validate_layout_for_pane(pane0, *l1, 0, 0, { 32, 128 });
     validate_layout_for_pane(pane1, *l1, 33, 0, { 31, 128 });
     validate_layout_intersections(*l1, { 32 }, { 32 });
 
     // Horitzontal split above
-    auto [pane2, l2] = add_pane(root, size, &pane0, Direction::Horizontal);
+    auto [pane2, l2] = add_pane(root, size, pane0, Direction::Horizontal);
     validate_layout_for_pane(pane0, *l2, 0, 0, { 32, 64 });
     validate_layout_for_pane(pane1, *l2, 33, 0, { 31, 128 });
     validate_layout_for_pane(pane2, *l2, 0, 65, { 32, 63 });
@@ -67,8 +65,8 @@ static void splits() {
     validate_layout_intersections(get_child_node(*l2, 0), { 64 }, { 64 });
 
     // 2 Veritcal splits under pane 2.
-    auto [pane4, _] = add_pane(root, size, &pane2, Direction::Vertical);
-    auto [pane3, l3] = add_pane(root, size, &pane2, Direction::Vertical);
+    auto [pane4, _] = add_pane(root, size, pane2, Direction::Vertical);
+    auto [pane3, l3] = add_pane(root, size, pane2, Direction::Vertical);
     validate_layout_for_pane(pane0, *l3, 0, 0, { 32, 64 });
     validate_layout_for_pane(pane1, *l3, 33, 0, { 31, 128 });
     validate_layout_for_pane(pane2, *l3, 0, 65, { 10, 63 });
@@ -84,18 +82,18 @@ static void many_splits() {
     auto root = LayoutGroup {};
 
     // Initial pane
-    auto [pane0, l0] = add_pane(root, size, nullptr, Direction::None);
+    auto [pane0, l0] = add_pane(root, size, PaneId(0), Direction::None);
 
     // Add 99 panes, and verify space is distributed evenly between them.
-    auto panes = di::Vector<Pane*> {};
+    auto panes = di::Vector<PaneId> {};
     for (auto _ : di::range(99)) {
-        auto [pane, _] = add_pane(root, size, &pane0, Direction::Vertical);
-        panes.push_back(&pane);
+        auto [pane, _] = add_pane(root, size, pane0, Direction::Vertical);
+        panes.push_back(pane);
     }
 
     auto l = root.layout(size, 0, 0);
     auto expected_intersections = di::Vector<u32> {};
-    for (auto* pane : panes) {
+    for (auto pane : panes) {
         auto entry = l->find_pane(pane);
         ASSERT(entry);
 
@@ -114,10 +112,10 @@ static void nested_splits() {
     auto root = LayoutGroup {};
 
     // Initial pane
-    auto [pane0, l0] = add_pane(root, size, nullptr, Direction::None);
+    auto [pane0, l0] = add_pane(root, size, PaneId(0), Direction::None);
 
     // Recursively split the last pane 8 times along alternating directions
-    auto* curr_pane = &pane0;
+    auto curr_pane = pane0;
     auto horizontal_intersections = di::Vector<u32> {};
     auto vertical_intersections = di::Vector<u32> {};
     for (auto i = 0; i < num_splits; i++) {
@@ -127,7 +125,7 @@ static void nested_splits() {
         } else {
             vertical_intersections.push_back(size.rows - size.rows / (2 << (i / 2)));
         }
-        curr_pane = &next_pane;
+        curr_pane = next_pane;
     }
 
     auto l = root.layout(size, 0, 0);
@@ -155,17 +153,17 @@ static void remove_pane() {
         auto root = LayoutGroup {};
 
         // Initial pane
-        auto [pane0, _] = add_pane(root, size, nullptr, Direction::None);
+        auto [pane0, _] = add_pane(root, size, PaneId(0), Direction::None);
 
         // Vertical split
-        auto [pane1, _] = add_pane(root, size, &pane0, Direction::Vertical);
+        auto [pane1, _] = add_pane(root, size, pane0, Direction::Vertical);
 
         // Horitzontal split above
-        auto [pane2, _] = add_pane(root, size, &pane0, Direction::Horizontal);
+        auto [pane2, _] = add_pane(root, size, pane0, Direction::Horizontal);
 
         // 2 Veritcal splits under pane 2.
-        auto [pane4, _] = add_pane(root, size, &pane2, Direction::Vertical);
-        auto [pane3, _] = add_pane(root, size, &pane2, Direction::Vertical);
+        auto [pane4, _] = add_pane(root, size, pane2, Direction::Vertical);
+        auto [pane3, _] = add_pane(root, size, pane2, Direction::Vertical);
 
         // Now the layout looks something like this:
         // |---------|--------|
@@ -184,7 +182,7 @@ static void remove_pane() {
 
         // When we remove pane 0, we need to collapse panes 2-4, into the same vertical layout
         // group with pane 1.
-        root.remove_pane(&pane0);
+        root.remove_pane(pane0);
 
         // Now the layout looks something like this:
         // |------------------|
@@ -212,13 +210,13 @@ static void remove_pane() {
         auto root = LayoutGroup {};
 
         // Initial pane
-        auto [pane0, _] = add_pane(root, size, nullptr, Direction::None);
+        auto [pane0, _] = add_pane(root, size, PaneId(0), Direction::None);
 
         // Horizontal split
-        auto [pane1, _] = add_pane(root, size, &pane0, Direction::Horizontal);
+        auto [pane1, _] = add_pane(root, size, pane0, Direction::Horizontal);
 
         // Vertical Split
-        auto [pane2, _] = add_pane(root, size, &pane1, Direction::Vertical);
+        auto [pane2, _] = add_pane(root, size, pane1, Direction::Vertical);
 
         // Now the layout looks something like this:
         // |---------|--------|
@@ -228,7 +226,7 @@ static void remove_pane() {
         // |---------|--------|
 
         // When we remove pane 0, we need need to replace the root layout group with its direct child.
-        root.remove_pane(&pane0);
+        root.remove_pane(pane0);
 
         auto l0 = root.layout(size, 0, 0);
         validate_layout_for_pane(pane1, *l0, 0, 0, { 32, 128 });
@@ -243,16 +241,16 @@ static void remove_then_split() {
         auto root = LayoutGroup {};
 
         // Initial pane
-        auto [pane0, _] = add_pane(root, size, nullptr, Direction::None);
+        auto [pane0, _] = add_pane(root, size, PaneId(0), Direction::None);
 
         // Horizontal split
-        auto [pane1, _] = add_pane(root, size, &pane0, Direction::Vertical);
+        auto [pane1, _] = add_pane(root, size, pane0, Direction::Vertical);
 
         // Horitzontal split above
-        auto [pane2, _] = add_pane(root, size, &pane0, Direction::Horizontal);
+        auto [pane2, _] = add_pane(root, size, pane0, Direction::Horizontal);
 
         // Horizontal split below
-        auto [pane3, _] = add_pane(root, size, &pane1, Direction::Horizontal);
+        auto [pane3, _] = add_pane(root, size, pane1, Direction::Horizontal);
 
         // Now the layout looks something like this:
         // |---------|--------|
@@ -268,7 +266,7 @@ static void remove_then_split() {
         validate_layout_for_pane(pane3, *l0, 33, 65, { 31, 63 });
 
         // Remove pane 2, which should cause a layout group to be collapsed.
-        root.remove_pane(&pane2);
+        root.remove_pane(pane2);
 
         // Now the layout looks something like this:
         // |------------------|
@@ -283,7 +281,7 @@ static void remove_then_split() {
         validate_layout_for_pane(pane3, *l1, 33, 65, { 31, 63 });
 
         // Add pane 5 to replace the old pane 2.
-        auto [pane5, _] = add_pane(root, size, &pane0, Direction::Horizontal);
+        auto [pane5, _] = add_pane(root, size, pane0, Direction::Horizontal);
 
         // Now the layout looks something like this:
         // |---------|--------|
@@ -306,23 +304,23 @@ static void hit_test() {
     auto root = LayoutGroup {};
 
     // Initial pane
-    auto [pane0, _] = add_pane(root, size, nullptr, Direction::None);
+    auto [pane0, _] = add_pane(root, size, PaneId(0), Direction::None);
 
     // Vertical split
-    auto [pane1, _] = add_pane(root, size, &pane0, Direction::Vertical);
+    auto [pane1, _] = add_pane(root, size, pane0, Direction::Vertical);
 
     // Horitzontal split above
-    auto [pane2, _] = add_pane(root, size, &pane0, Direction::Horizontal);
+    auto [pane2, _] = add_pane(root, size, pane0, Direction::Horizontal);
 
     // 2 Veritcal splits under pane 2.
-    auto [pane4, _] = add_pane(root, size, &pane2, Direction::Vertical);
-    auto [pane3, l0] = add_pane(root, size, &pane2, Direction::Vertical);
+    auto [pane4, _] = add_pane(root, size, pane2, Direction::Vertical);
+    auto [pane3, l0] = add_pane(root, size, pane2, Direction::Vertical);
 
-    auto p0 = l0->find_pane(&pane0);
-    auto p1 = l0->find_pane(&pane1);
-    auto p2 = l0->find_pane(&pane2);
-    auto p3 = l0->find_pane(&pane3);
-    auto p4 = l0->find_pane(&pane4);
+    auto p0 = l0->find_pane(pane0);
+    auto p1 = l0->find_pane(pane1);
+    auto p2 = l0->find_pane(pane2);
+    auto p3 = l0->find_pane(pane3);
+    auto p4 = l0->find_pane(pane4);
     ASSERT(p0.has_value());
     ASSERT(p1.has_value());
     ASSERT(p2.has_value());
@@ -354,14 +352,14 @@ static void resize() {
     auto root = LayoutGroup {};
 
     // Initial pane
-    auto [pane0, _] = add_pane(root, size, nullptr, Direction::None);
+    auto [pane0, _] = add_pane(root, size, PaneId(0), Direction::None);
 
     // Vertical split
-    auto [pane1, _] = add_pane(root, size, &pane0, Direction::Vertical);
+    auto [pane1, _] = add_pane(root, size, pane0, Direction::Vertical);
 
     // 3 Horizontal splits
-    auto [pane2, _] = add_pane(root, size, &pane0, Direction::Horizontal);
-    auto [pane3, l] = add_pane(root, size, &pane1, Direction::Horizontal);
+    auto [pane2, _] = add_pane(root, size, pane0, Direction::Horizontal);
+    auto [pane3, l] = add_pane(root, size, pane1, Direction::Horizontal);
 
     // Now the layout looks something like this:
     // |---------|--------|
@@ -386,7 +384,7 @@ static void resize() {
     validate(0, 0, 0);
 
     struct Case {
-        Pane* pane { nullptr };
+        PaneId pane { 0 };
         ResizeDirection direction { ResizeDirection::Bottom };
         i32 amount { 0 };
         di::Tuple<i32, i32, i32> edges;
@@ -396,24 +394,24 @@ static void resize() {
     // Now test several possible resize events to make they work.
     auto cases = di::Array {
         // Pane 0
-        Case { &pane0, ResizeDirection::Bottom, 1, { 1, 0, 0 } },
-        Case { &pane0, ResizeDirection::Bottom, -1, { -1, 0, 0 } },
-        Case { &pane0, ResizeDirection::Right, 1, { 0, 1, 0 } },
-        Case { &pane0, ResizeDirection::Right, -1, { 0, -1, 0 } },
-        Case { &pane0, ResizeDirection::Left, 1, { 0, 0, 0 }, false },
-        Case { &pane0, ResizeDirection::Left, -1, { 0, 0, 0 }, false },
-        Case { &pane0, ResizeDirection::Top, 1, { 0, 0, 0 }, false },
-        Case { &pane0, ResizeDirection::Top, -1, { 0, 0, 0 }, false },
+        Case { pane0, ResizeDirection::Bottom, 1, { 1, 0, 0 } },
+        Case { pane0, ResizeDirection::Bottom, -1, { -1, 0, 0 } },
+        Case { pane0, ResizeDirection::Right, 1, { 0, 1, 0 } },
+        Case { pane0, ResizeDirection::Right, -1, { 0, -1, 0 } },
+        Case { pane0, ResizeDirection::Left, 1, { 0, 0, 0 }, false },
+        Case { pane0, ResizeDirection::Left, -1, { 0, 0, 0 }, false },
+        Case { pane0, ResizeDirection::Top, 1, { 0, 0, 0 }, false },
+        Case { pane0, ResizeDirection::Top, -1, { 0, 0, 0 }, false },
 
         // Pane 3
-        Case { &pane3, ResizeDirection::Top, -1, { 1, 0, 0 } },
-        Case { &pane3, ResizeDirection::Top, 1, { -1, 0, 0 } },
-        Case { &pane3, ResizeDirection::Left, -1, { 0, 0, 1 } },
-        Case { &pane3, ResizeDirection::Left, 1, { 0, 0, -1 } },
-        Case { &pane3, ResizeDirection::Right, 1, { 0, 0, 0 }, false },
-        Case { &pane3, ResizeDirection::Right, -1, { 0, 0, 0 }, false },
-        Case { &pane3, ResizeDirection::Bottom, 1, { 0, 0, 0 }, false },
-        Case { &pane3, ResizeDirection::Bottom, -1, { 0, 0, 0 }, false },
+        Case { pane3, ResizeDirection::Top, -1, { 1, 0, 0 } },
+        Case { pane3, ResizeDirection::Top, 1, { -1, 0, 0 } },
+        Case { pane3, ResizeDirection::Left, -1, { 0, 0, 1 } },
+        Case { pane3, ResizeDirection::Left, 1, { 0, 0, -1 } },
+        Case { pane3, ResizeDirection::Right, 1, { 0, 0, 0 }, false },
+        Case { pane3, ResizeDirection::Right, -1, { 0, 0, 0 }, false },
+        Case { pane3, ResizeDirection::Bottom, 1, { 0, 0, 0 }, false },
+        Case { pane3, ResizeDirection::Bottom, -1, { 0, 0, 0 }, false },
     };
 
     for (auto [pane, direction, amount, edges, changed] : cases) {
@@ -438,16 +436,16 @@ static void resize_nested() {
     auto root = LayoutGroup {};
 
     // Initial pane
-    auto [pane0, _] = add_pane(root, size, nullptr, Direction::None);
+    auto [pane0, _] = add_pane(root, size, PaneId(0), Direction::None);
 
     // Horizontal split
-    auto [pane1, _] = add_pane(root, size, &pane0, Direction::Horizontal);
+    auto [pane1, _] = add_pane(root, size, pane0, Direction::Horizontal);
 
     // Vertical split
-    auto [pane2, _] = add_pane(root, size, &pane1, Direction::Vertical);
+    auto [pane2, _] = add_pane(root, size, pane1, Direction::Vertical);
 
     // Horizontal split
-    auto [pane3, l] = add_pane(root, size, &pane2, Direction::Horizontal);
+    auto [pane3, l] = add_pane(root, size, pane2, Direction::Horizontal);
 
     // Now the layout looks something like this:
     // |---------|--------|
@@ -477,7 +475,7 @@ static void resize_nested() {
     validate(0, 0, 0, false);
 
     struct Case {
-        Pane* pane { nullptr };
+        PaneId pane { 0 };
         ResizeDirection direction { ResizeDirection::Bottom };
         i32 amount { 0 };
         di::Tuple<i32, i32, i32> edges;
@@ -488,12 +486,12 @@ static void resize_nested() {
     // Now test several possible resize events to make they work.
     auto cases = di::Array {
         // Pane 2
-        Case { &pane2, ResizeDirection::Top, -1, { 0, 1, 0 } },
-        Case { &pane2, ResizeDirection::Top, 1, { 0, -1, 0 } },
-        Case { &pane2, ResizeDirection::Left, -1, { 1, 0, 0 } },
-        Case { &pane2, ResizeDirection::Left, 1, { -1, 0, 0 }, true, true },
-        Case { &pane2, ResizeDirection::Bottom, 1, { 0, 0, 0 }, false },
-        Case { &pane2, ResizeDirection::Bottom, -1, { 0, 0, 0 }, false },
+        Case { pane2, ResizeDirection::Top, -1, { 0, 1, 0 } },
+        Case { pane2, ResizeDirection::Top, 1, { 0, -1, 0 } },
+        Case { pane2, ResizeDirection::Left, -1, { 1, 0, 0 } },
+        Case { pane2, ResizeDirection::Left, 1, { -1, 0, 0 }, true, true },
+        Case { pane2, ResizeDirection::Bottom, 1, { 0, 0, 0 }, false },
+        Case { pane2, ResizeDirection::Bottom, -1, { 0, 0, 0 }, false },
     };
 
     for (auto [pane, direction, amount, edges, changed, size_goes_to_two] : cases) {
@@ -518,19 +516,19 @@ static void resize_to_zero() {
     auto root = LayoutGroup {};
 
     // Initial pane
-    auto [pane0, _] = add_pane(root, size, nullptr, Direction::None);
+    auto [pane0, _] = add_pane(root, size, PaneId(0), Direction::None);
 
     // 2 vertical splits
-    auto [pane1, _] = add_pane(root, size, &pane0, Direction::Vertical);
-    auto [pane2, l0] = add_pane(root, size, &pane1, Direction::Vertical);
+    auto [pane1, _] = add_pane(root, size, pane0, Direction::Vertical);
+    auto [pane2, l0] = add_pane(root, size, pane1, Direction::Vertical);
 
     // Resize pane 1 and pane 2 to be empty.
-    ASSERT(root.resize(*l0, &pane2, ResizeDirection::Top, -128));
-    ASSERT(root.resize(*l0, &pane1, ResizeDirection::Top, -128));
+    ASSERT(root.resize(*l0, pane2, ResizeDirection::Top, -128));
+    ASSERT(root.resize(*l0, pane1, ResizeDirection::Top, -128));
 
     // Bounds checking, these should do nothing, since there's no space left to take.
-    ASSERT(!root.resize(*l0, &pane2, ResizeDirection::Top, -128));
-    ASSERT(!root.resize(*l0, &pane1, ResizeDirection::Top, -128));
+    ASSERT(!root.resize(*l0, pane2, ResizeDirection::Top, -128));
+    ASSERT(!root.resize(*l0, pane1, ResizeDirection::Top, -128));
 
     // The layout should now have both pane1 and pane2 having a height of 1 (the minimum value).
     auto l1 = root.layout(size, 0, 0);
@@ -539,7 +537,7 @@ static void resize_to_zero() {
     validate_layout_for_pane(pane2, *l1, 63, 0, { 1, 128 });
 
     // After erasing pane 0, the space should be distributed evenly.
-    ASSERT(root.remove_pane(&pane0));
+    root.remove_pane(pane0);
     auto l2 = root.layout(size, 0, 0);
     validate_layout_for_pane(pane1, *l2, 0, 0, { 32, 128 });
     validate_layout_for_pane(pane2, *l2, 33, 0, { 31, 128 });

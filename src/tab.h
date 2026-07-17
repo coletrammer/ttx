@@ -2,9 +2,12 @@
 
 #include "di/container/string/prelude.h"
 #include "di/reflect/prelude.h"
+#include "ttx/ids.h"
+#include "ttx/ipc/pane_id.h"
 #include "ttx/layout.h"
 #include "ttx/layout_json.h"
 #include "ttx/pane.h"
+#include "ttx/popup.h"
 #include "ttx/terminal/navigation_direction.h"
 
 namespace ttx {
@@ -12,30 +15,23 @@ class InputThread;
 class RenderThread;
 
 class LayoutState;
-class Session;
+class Workspace;
 
-// Corresponds to tmux window.
+/// @brief Represents a tab (like a "window" in tmux)
 class Tab {
 public:
-    explicit Tab(Session* session, u64 id, di::Optional<di::String> name = {})
-        : m_session(session), m_id(id), m_name(di::move(name)) {}
+    explicit Tab(Workspace* workspace, TabId id, di::Optional<di::String> name = {})
+        : m_workspace(workspace), m_id(id), m_name(di::move(name)) {}
 
-    static auto from_json_v1(json::v1::Tab const& json, Session* session, Size size, CreatePaneArgs args,
-                             RenderThread& render_thread, InputThread& input_thread) -> di::Result<di::Box<Tab>>;
+    static auto from_json_v1(json::v1::Tab const& json, Workspace* workspace, Size size) -> di::Result<di::Box<Tab>>;
 
     void layout(Size const& size);
     void invalidate_all();
 
-    auto max_pane_id() const -> u64;
+    void remove_pane(PaneId pane);
 
-    // Returns the removed pane, if found.
-    auto remove_pane(Pane* pane) -> di::Box<Pane>;
-
-    auto add_pane(u64 pane_id, Size const& size, CreatePaneArgs args, Direction direction, RenderThread& render_thread,
-                  InputThread& input_thread) -> di::Result<>;
-    auto replace_pane(Pane& pane, CreatePaneArgs args, RenderThread& render_thread, InputThread& input_thread)
-        -> di::Result<>;
-    auto pane_by_id(u64 pane_id) -> di::Optional<Pane&>;
+    void add_pane(PaneId pane, Size const& size, Direction direction);
+    void replace_pane(PaneId original_pane, PaneId new_pane);
 
     enum class SeamlessNavigateMode { Disabled, Enabled };
     auto navigate(terminal::NavigateDirection direction, terminal::NavigateWrapMode wrap_mode,
@@ -43,7 +39,7 @@ public:
                   SeamlessNavigateMode seamless_navigate_mode, bool force_wrap) -> di::Optional<bool>;
 
     // Returns true if active pane has changed.
-    auto set_active(Pane* pane) -> bool;
+    auto set_active(di::Optional<PaneId> pane) -> bool;
 
     auto id() const { return m_id; }
     auto name() const -> di::Optional<di::StringView> { return m_name.transform(&di::String::view); }
@@ -59,46 +55,35 @@ public:
         return *m_layout_tree;
     }
 
-    auto active() const -> di::Optional<Pane&> {
+    auto active() const -> di::Optional<PaneId> {
         if (!m_active) {
             return {};
         }
         return *m_active;
     }
 
-    auto panes() const -> di::Ring<Pane*> const& { return m_panes_ordered_by_recency; }
+    auto panes() const -> di::Ring<PaneId> const& { return m_panes_ordered_by_recency; }
 
     auto set_is_active(bool b) -> bool;
     auto is_active() const -> bool { return m_is_active; }
 
-    auto full_screen_pane() const -> di::Optional<Pane&> {
-        if (!m_full_screen_pane) {
-            return {};
-        }
-        return *m_full_screen_pane;
-    }
-    auto set_full_screen_pane(Pane* pane) -> bool;
+    auto full_screen_pane() const -> di::Optional<PaneId> { return m_full_screen_pane; }
+    auto set_full_screen_pane(di::Optional<PaneId> pane) -> bool;
 
-    void for_each_pane(di::FunctionRef<void(Pane&)> action);
-
-    void layout_did_update();
     auto as_json_v1() const -> json::v1::Tab;
 
     auto layout_state() const -> LayoutState&;
 
 private:
-    auto make_pane(u64 pane_id, CreatePaneArgs args, Size const& size, RenderThread& render_thread,
-                   InputThread& input_thread) -> di::Result<di::Box<Pane>>;
-
-    Session* m_session { nullptr };
-    u64 m_id { 0 };
+    Workspace* m_workspace { nullptr };
+    TabId m_id { 0 };
     Size m_size;
     di::Optional<di::String> m_name;
     LayoutGroup m_layout_root {};
     di::Box<LayoutNode> m_layout_tree {};
-    di::Ring<Pane*> m_panes_ordered_by_recency {};
+    di::Ring<PaneId> m_panes_ordered_by_recency {};
     bool m_is_active { false };
-    Pane* m_active { nullptr };
-    Pane* m_full_screen_pane { nullptr };
+    di::Optional<PaneId> m_active {};
+    di::Optional<PaneId> m_full_screen_pane {};
 };
 }

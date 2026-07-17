@@ -6,11 +6,13 @@
 #include "di/serialization/json_serializer.h"
 #include "di/serialization/percent_encoded.h"
 #include "ttx/direction.h"
+#include "ttx/ids.h"
+#include "ttx/ipc/pane_id.h"
 
 namespace ttx::json::v1 {
 struct Pane {
     i64 relative_size { 0 };
-    u64 id { 0 };
+    PaneId id { 0 };
     di::Optional<di::PercentEncoded<>> current_working_directory;
 
     auto operator==(Pane const&) const -> bool = default;
@@ -59,11 +61,11 @@ inline auto PaneLayoutVariant::operator==(PaneLayoutVariant const& other) const 
 
 struct Tab {
     PaneLayoutNode pane_layout;
-    di::Vector<u64> pane_ids_by_recency;
-    di::Optional<u64> active_pane_id;
-    di::Optional<u64> full_screen_pane_id;
+    di::Vector<PaneId> pane_ids_by_recency;
+    di::Optional<PaneId> active_pane_id;
+    di::Optional<PaneId> full_screen_pane_id;
     di::Optional<di::String> name;
-    u64 id { 0 };
+    TabId id { 0 };
 
     auto operator==(Tab const&) const -> bool = default;
 
@@ -76,31 +78,33 @@ struct Tab {
     }
 };
 
-struct Session {
+struct Workspace {
     di::Vector<Tab> tabs;
-    di::Optional<u64> active_tab_id;
+    di::Optional<TabId> active_tab_id;
     di::Optional<di::String> name;
-    u64 id { 0 };
+    WorkspaceId id { 0 };
 
-    auto operator==(Session const&) const -> bool = default;
+    auto operator==(Workspace const&) const -> bool = default;
 
-    constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<Session>) {
-        return di::make_fields<"json::v1::Session">(di::field<"tabs", &Session::tabs>,
-                                                    di::field<"active_tab_id", &Session::active_tab_id>,
-                                                    di::field<"name", &Session::name>, di::field<"id", &Session::id>);
+    constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<Workspace>) {
+        // Backwards compat: workspaces were originally sessions
+        return di::make_fields<"json::v1::Session">(
+            di::field<"tabs", &Workspace::tabs>, di::field<"active_tab_id", &Workspace::active_tab_id>,
+            di::field<"name", &Workspace::name>, di::field<"id", &Workspace::id>);
     }
 };
 
 struct LayoutState {
-    di::Vector<Session> sessions;
-    di::Optional<u64> active_session_id;
+    di::Vector<Workspace> workspaces;
+    di::Optional<WorkspaceId> active_workspace_id;
 
     auto operator==(LayoutState const&) const -> bool = default;
 
     constexpr friend auto tag_invoke(di::Tag<di::reflect>, di::InPlaceType<LayoutState>) {
         return di::make_fields<"json::v1::LayoutState">(
-            di::field<"sessions", &LayoutState::sessions>,
-            di::field<"active_session_id", &LayoutState::active_session_id>);
+            // Backwards compat: workspaces were originally sessions
+            di::field<"sessions", &LayoutState::workspaces>,
+            di::field<"active_session_id", &LayoutState::active_workspace_id>);
     }
 };
 }

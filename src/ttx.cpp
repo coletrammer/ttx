@@ -622,7 +622,7 @@ static auto do_new(Args&, NewBase& args) -> di::Result<> {
                 state.remove_popup();
             }
             while (!state.empty()) {
-                auto& session = *state.sessions().front();
+                auto& session = *state.workspaces().front();
                 while (!session->empty()) {
                     auto last_tab = session->tabs().size() == 1;
                     auto& tab = **session->tabs().front();
@@ -650,7 +650,7 @@ static auto do_new(Args&, NewBase& args) -> di::Result<> {
                     TRY(state.add_session(di::move(create_pane_args), *render_thread, *input_thread));
                 } else {
                     // Horizontal split (means vertical layout)
-                    TRY(state.add_pane(*state.active_session(), *state.active_tab(), di::move(create_pane_args),
+                    TRY(state.add_pane(*state.active_workspace(), *state.active_tab(), di::move(create_pane_args),
                                        Direction::Vertical, *render_thread, *input_thread));
                 }
             }

@@ -78,7 +78,7 @@ static auto alignments() {
     };
 
     for (auto const& [input, expected] : cases) {
-        auto popup = Popup { nullptr, input };
+        auto popup = Popup { PaneId(0), input };
         auto result = popup.layout(size);
         ASSERT_EQ(result, expected);
     }

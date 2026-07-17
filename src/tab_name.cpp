@@ -14,21 +14,23 @@ auto evaluate_tab_name(di::Span<TabNameSource const> sources, Tab& tab, usize in
                 }
                 break;
             case TabNameSource::WindowTitle:
-                for (auto& pane : tab.active()) {
-                    auto title = pane.window_title();
-                    if (title) {
-                        return di::move(title).value();
-                    }
-                }
+                // TODO: ???
+                // for (auto& pane : tab.active()) {
+                //     auto title = pane.window_title();
+                //     if (title) {
+                //         return di::move(title).value();
+                //     }
+                // }
                 break;
             case TabNameSource::CurrentWorkingDirectory:
-                for (auto& pane : tab.active()) {
-                    for (auto const& directory : pane.current_working_directory()) {
-                        for (auto part : directory.back()) {
-                            return di::to_utf8_string_lossy(part.view());
-                        }
-                    }
-                }
+                // TODO: ???
+                // for (auto& pane : tab.active()) {
+                //     for (auto const& directory : pane.current_working_directory()) {
+                //         for (auto part : directory.back()) {
+                //             return di::to_utf8_string_lossy(part.view());
+                //         }
+                //     }
+                // }
                 break;
         }
     }

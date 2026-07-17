@@ -77,7 +77,7 @@ auto create_tab() -> Action {
         .apply =
             [](ActionContext const& context) {
                 context.layout_state.with_lock([&](LayoutState& state) {
-                    for (auto& session : state.active_session()) {
+                    for (auto& session : state.active_workspace()) {
                         auto cwd = session.active_pane().and_then(&Pane::current_working_directory);
                         (void) state.add_tab(session, context.create_pane_args.with_cwd(di::move(cwd)),
                                              context.render_thread, context.input_thread);
@@ -94,7 +94,7 @@ auto rename_tab() -> Action {
         .apply =
             [](ActionContext const& context) {
                 context.layout_state.with_lock([&](LayoutState& state) {
-                    for (auto& session : state.active_session()) {
+                    for (auto& session : state.active_workspace()) {
                         if (!session.active_tab()) {
                             return;
                         }
@@ -162,7 +162,7 @@ auto switch_tab(usize index) -> Action {
         .apply =
             [index](ActionContext const& context) {
                 context.layout_state.with_lock([&](LayoutState& state) {
-                    for (auto& session : state.active_session()) {
+                    for (auto& session : state.active_workspace()) {
                         if (auto tab = session.tabs().at(index - 1)) {
                             state.set_active_tab(session, tab.value().get());
                         }
@@ -179,7 +179,7 @@ auto switch_next_tab() -> Action {
         .apply =
             [](ActionContext const& context) {
                 context.layout_state.with_lock([&](LayoutState& state) {
-                    for (auto& session : state.active_session()) {
+                    for (auto& session : state.active_workspace()) {
                         for (auto& tab : session.active_tab()) {
                             auto tabs = session.tabs() | di::transform(&di::Box<Tab>::get);
                             auto it = di::find(tabs, &tab);
@@ -204,7 +204,7 @@ auto switch_prev_tab() -> Action {
         .apply =
             [](ActionContext const& context) {
                 context.layout_state.with_lock([&](LayoutState& state) {
-                    for (auto& session : state.active_session()) {
+                    for (auto& session : state.active_workspace()) {
                         for (auto& tab : session.active_tab()) {
                             auto tabs = session.tabs() | di::transform(&di::Box<Tab>::get);
                             auto it = di::find(tabs, &tab);
@@ -231,7 +231,7 @@ auto find_tab() -> Action {
             [](ActionContext const& context) {
                 context.layout_state.with_lock([&](LayoutState& state) {
                     auto tab_names = di::Vector<di::String>();
-                    if (auto session = state.active_session()) {
+                    if (auto session = state.active_workspace()) {
                         auto original_tab_index = 0_usize;
                         for (auto [i, tab] : session.value().tabs() | di::enumerate) {
                             auto tab_name =
@@ -308,7 +308,7 @@ auto rename_session() -> Action {
         .apply =
             [](ActionContext const& context) {
                 context.layout_state.with_lock([&](LayoutState& state) {
-                    for (auto& session : state.active_session()) {
+                    for (auto& session : state.active_workspace()) {
                         auto original_name = session.name().value_or(""_sv).to_owned();
                         auto [create_pane_args, popup_layout] =
                             FzfCommand()
@@ -373,8 +373,8 @@ auto switch_next_session() -> Action {
         .apply =
             [](ActionContext const& context) {
                 context.layout_state.with_lock([&](LayoutState& state) {
-                    for (auto& session : state.active_session()) {
-                        auto sessions = state.sessions() | di::transform([](di::Box<Session>& session) {
+                    for (auto& session : state.active_workspace()) {
+                        auto sessions = state.workspaces() | di::transform([](di::Box<Session>& session) {
                                             return session.get();
                                         });
                         auto it = di::find(sessions, &session);
@@ -384,7 +384,7 @@ auto switch_next_session() -> Action {
                         auto index = usize(it - sessions.begin());
                         index++;
                         index %= sessions.size();
-                        state.set_active_session(sessions[isize(index)]);
+                        state.set_active_workspace(sessions[isize(index)]);
                     }
                 });
                 context.render_thread.request_render();
@@ -398,8 +398,8 @@ auto switch_prev_session() -> Action {
         .apply =
             [](ActionContext const& context) {
                 context.layout_state.with_lock([&](LayoutState& state) {
-                    for (auto& session : state.active_session()) {
-                        auto sessions = state.sessions() | di::transform([](di::Box<Session>& session) {
+                    for (auto& session : state.active_workspace()) {
+                        auto sessions = state.workspaces() | di::transform([](di::Box<Session>& session) {
                                             return session.get();
                                         });
                         auto it = di::find(sessions, &session);
@@ -410,7 +410,7 @@ auto switch_prev_session() -> Action {
                         index += sessions.size();
                         index--;
                         index %= sessions.size();
-                        state.set_active_session(sessions[isize(index)]);
+                        state.set_active_workspace(sessions[isize(index)]);
                     }
                 });
                 context.render_thread.request_render();
@@ -426,7 +426,7 @@ auto find_session() -> Action {
                 context.layout_state.with_lock([&](LayoutState& state) {
                     auto session_names = di::Vector<di::String>();
                     auto original_session_index = 0_usize;
-                    for (auto [i, session] : state.sessions() | di::enumerate) {
+                    for (auto [i, session] : state.workspaces() | di::enumerate) {
                         auto string_number = di::to_string(i + 1);
                         auto session_name = session->name().value_or(string_number.view());
                         session_names.push_back(di::format("{} {}"_sv, string_number, session_name));
@@ -451,8 +451,8 @@ auto find_session() -> Action {
                             auto maybe_session_index = di::parse_partial<usize>(contents);
                             auto session_index = maybe_session_index.value_or(original_session_index + 1) - 1;
                             layout_state.with_lock([&](LayoutState& state) {
-                                if (auto session = state.sessions().at(session_index)) {
-                                    state.set_active_session(session.value().get());
+                                if (auto session = state.workspaces().at(session_index)) {
+                                    state.set_active_workspace(session.value().get());
                                 }
                             });
                             render_thread.request_render();
@@ -466,8 +466,8 @@ auto find_session() -> Action {
                             }
                             auto session_index = maybe_session_index.value() - 1;
                             layout_state.with_lock([&](LayoutState& state) {
-                                if (auto session = state.sessions().at(session_index)) {
-                                    state.set_active_session(session.value().get(), false);
+                                if (auto session = state.workspaces().at(session_index)) {
+                                    state.set_active_workspace(session.value().get(), false);
                                 }
                             });
                             render_thread.request_render();
@@ -646,7 +646,7 @@ auto add_pane(Direction direction) -> Action {
         .apply =
             [direction](ActionContext const& context) {
                 context.layout_state.with_lock([&](LayoutState& state) {
-                    for (auto& session : state.active_session()) {
+                    for (auto& session : state.active_workspace()) {
                         for (auto& tab : session.active_tab()) {
                             auto cwd = tab.active().and_then(&Pane::current_working_directory);
                             (void) state.add_pane(session, tab, context.create_pane_args.with_cwd(di::move(cwd)),

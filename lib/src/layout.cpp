@@ -8,27 +8,27 @@
 #include "di/vocab/pointer/box.h"
 #include "di/vocab/variant/get_if.h"
 #include "di/vocab/variant/holds_alternative.h"
-#include "dius/print.h"
 #include "ttx/direction.h"
+#include "ttx/ipc/pane_id.h"
 #include "ttx/layout_json.h"
 #include "ttx/size.h"
 
 namespace ttx {
 struct FindPaneInLayoutGroup {
-    static auto operator()(LayoutGroup* parent, usize index, Pane* target, di::Box<LayoutPane> const& pane)
+    static auto operator()(LayoutGroup* parent, usize index, PaneId target, di::Box<LayoutPane> const& pane)
         -> di::Tuple<LayoutGroup*, usize> {
-        if (pane->pane.get() == target) {
+        if (pane->pane_id == target) {
             return { parent, index };
         }
         return {};
     }
 
-    static auto operator()(LayoutGroup* parent, usize index, Pane* target, di::Box<LayoutGroup> const& group)
+    static auto operator()(LayoutGroup* parent, usize index, PaneId target, di::Box<LayoutGroup> const& group)
         -> di::Tuple<LayoutGroup*, usize> {
         return FindPaneInLayoutGroup::operator()(parent, index, target, group.get());
     }
 
-    static auto operator()(LayoutGroup*, usize, Pane* target, LayoutGroup* group) -> di::Tuple<LayoutGroup*, usize> {
+    static auto operator()(LayoutGroup*, usize, PaneId target, LayoutGroup* group) -> di::Tuple<LayoutGroup*, usize> {
         for (auto [i, child] : di::enumerate(group->m_children)) {
             auto [parent, index] = di::visit(
                 [&](auto& c) {
@@ -53,17 +53,17 @@ struct GetRelativeSize {
     static auto operator()(LayoutGroup* group) -> i64& { return group->relative_size(); }
 };
 
-auto LayoutNode::find_pane(Pane* pane) -> di::Optional<LayoutEntry&> {
+auto LayoutNode::find_pane(PaneId pane_id) -> di::Optional<LayoutEntry&> {
     for (auto& child : children) {
         auto result = di::visit(di::overload(
                                     [&](LayoutEntry& entry) -> di::Optional<LayoutEntry&> {
-                                        if (entry.pane == pane) {
+                                        if (entry.pane_id == pane_id) {
                                             return entry;
                                         }
                                         return {};
                                     },
                                     [&](di::Box<LayoutNode>& node) -> di::Optional<LayoutEntry&> {
-                                        return node->find_pane(pane);
+                                        return node->find_pane(pane_id);
                                     }),
                                 child);
         if (result) {
@@ -73,31 +73,8 @@ auto LayoutNode::find_pane(Pane* pane) -> di::Optional<LayoutEntry&> {
     return {};
 }
 
-auto LayoutNode::find_pane_by_id(u64 id) -> di::Optional<LayoutEntry&> {
-    for (auto& child : children) {
-        auto result = di::visit(di::overload(
-                                    [&](LayoutEntry& entry) -> di::Optional<LayoutEntry&> {
-                                        if (entry.pane && entry.pane->id() == id) {
-                                            return entry;
-                                        }
-                                        if (entry.ref && entry.ref->pane_id == id) {
-                                            return entry;
-                                        }
-                                        return {};
-                                    },
-                                    [&](di::Box<LayoutNode>& node) -> di::Optional<LayoutEntry&> {
-                                        return node->find_pane_by_id(id);
-                                    }),
-                                child);
-        if (result) {
-            return result;
-        }
-    }
-    return {};
-}
-
-auto LayoutGroup::find_layout_pane(Pane* pane) -> LayoutPane const* {
-    auto [parent, index] = FindPaneInLayoutGroup {}(nullptr, 0, pane, this);
+auto LayoutGroup::find_layout_pane(PaneId pane_id) -> LayoutPane const* {
+    auto [parent, index] = FindPaneInLayoutGroup {}(nullptr, 0, pane_id, this);
     if (!parent) {
         return {};
     }
@@ -239,12 +216,10 @@ void LayoutGroup::validate_layout() {
     ASSERT_EQ(total_relative_size, max_layout_precision);
 }
 
-auto LayoutGroup::split(Size const& size, u32 row_offset, u32 col_offset, Pane* reference, Direction direction)
-    -> di::Tuple<di::Box<LayoutNode>, di::Optional<LayoutEntry&>, di::Optional<di::Box<Pane>&>> {
-    auto do_final_layout = [&](di::Box<LayoutPane>& child)
-        -> di::Tuple<di::Box<LayoutNode>, di::Optional<LayoutEntry&>, di::Optional<di::Box<Pane>&>> {
-        auto result = layout(size, row_offset, col_offset);
-        return { di::move(result), result->find_pane(child->pane.get()), child->pane };
+auto LayoutGroup::split(Size const& size, u32 row_offset, u32 col_offset, PaneId reference, Direction direction,
+                        PaneId new_pane) -> di::Box<LayoutNode> {
+    auto do_final_layout = [&] -> di::Box<LayoutNode> {
+        return layout(size, row_offset, col_offset);
     };
 
     auto redistribute = [&](LayoutGroup& parent, di::Variant<di::Box<LayoutGroup>, di::Box<LayoutPane>>& new_child) {
@@ -260,11 +235,11 @@ auto LayoutGroup::split(Size const& size, u32 row_offset, u32 col_offset, Pane* 
 
     // Init case: we're adding the first pane.
     if (empty()) {
-        ASSERT(reference == nullptr);
+        ASSERT(reference == PaneId(0));
 
         m_direction = Direction::None;
-        auto& child = m_children.emplace_back(di::make_box<LayoutPane>());
-        return do_final_layout(child.get<di::Box<LayoutPane>>());
+        m_children.emplace_back(di::make_box<LayoutPane>(new_pane));
+        return do_final_layout();
     }
 
     // Recursive case: find the reference node in the tree.
@@ -281,18 +256,18 @@ auto LayoutGroup::split(Size const& size, u32 row_offset, u32 col_offset, Pane* 
         ASSERT(di::holds_alternative<di::Box<LayoutPane>>(m_children[0]));
 
         parent->m_direction = direction;
-        auto& child = parent->m_children.emplace_back(di::make_box<LayoutPane>());
+        auto& child = parent->m_children.emplace_back(di::make_box<LayoutPane>(new_pane));
         redistribute(*parent, child);
-        return do_final_layout(child.get<di::Box<LayoutPane>>());
+        return do_final_layout();
     }
 
     // Case 2: the parent's direction is the same as the requested direction.
     if (parent->m_direction == direction) {
         // The new child will get 1/N of the available space, where N is the total number of children.
         auto* new_child =
-            parent->m_children.emplace(parent->m_children.begin() + index + 1, di::make_box<LayoutPane>());
+            parent->m_children.emplace(parent->m_children.begin() + index + 1, di::make_box<LayoutPane>(new_pane));
         redistribute(*parent, *new_child);
-        return do_final_layout(new_child->get<di::Box<LayoutPane>>());
+        return do_final_layout();
     }
 
     // Case 3: the parent' direction differs. We need to create a new LayoutGroup.
@@ -302,19 +277,18 @@ auto LayoutGroup::split(Size const& size, u32 row_offset, u32 col_offset, Pane* 
         new_group->m_children.emplace_back(di::move(parent->m_children[index].get<di::Box<LayoutPane>>()));
     auto& old_layout_pane_relative_size = di::visit(GetRelativeSize {}, old_layout_pane);
     di::swap(old_layout_pane_relative_size, new_group->relative_size());
-    auto& child = new_group->m_children.emplace_back(di::make_box<LayoutPane>());
+    auto& child = new_group->m_children.emplace_back(di::make_box<LayoutPane>(new_pane));
     redistribute(*new_group, child);
     parent->m_children[index] = di::move(new_group);
-    return do_final_layout(child.get<di::Box<LayoutPane>>());
+    return do_final_layout();
 }
 
-auto LayoutGroup::remove_pane(Pane* pane) -> di::Box<Pane> {
+void LayoutGroup::remove_pane(PaneId pane) {
     auto _ = di::ScopeExit([&] {
         validate_layout();
     });
 
     // First, try to delete the pane from this level.
-    auto result = di::Box<Pane> {};
     auto removed_size = di::Optional<i64> {};
     di::erase_if(m_children, [&](auto const& variant) {
         return di::visit(di::overload(
@@ -322,8 +296,7 @@ auto LayoutGroup::remove_pane(Pane* pane) -> di::Box<Pane> {
                                  return false;
                              },
                              [&](di::Box<LayoutPane> const& layout_pane) {
-                                 if (layout_pane->pane.get() == pane) {
-                                     result = di::move(layout_pane->pane);
+                                 if (layout_pane->pane_id == pane) {
                                      removed_size = layout_pane->relative_size;
                                      return true;
                                  }
@@ -338,10 +311,7 @@ auto LayoutGroup::remove_pane(Pane* pane) -> di::Box<Pane> {
     // Then, try to delete the pane recursively.
     for (auto const& child : m_children) {
         if (auto group = di::get_if<di::Box<LayoutGroup>>(child)) {
-            auto res = group.value()->remove_pane(pane);
-            if (res) {
-                result = di::move(res);
-            }
+            group.value()->remove_pane(pane);
         }
     }
 
@@ -404,17 +374,9 @@ auto LayoutGroup::remove_pane(Pane* pane) -> di::Box<Pane> {
     if (m_children.size() <= 1) {
         m_direction = Direction::None;
     }
-
-    return result;
 }
 
-static void resize_pane(Pane* pane, Size const& size) {
-    if (pane) {
-        pane->resize(size);
-    }
-};
-
-auto LayoutGroup::resize(LayoutNode& root, Pane* pane, ResizeDirection direction, i32 amount_in_cells) -> bool {
+auto LayoutGroup::resize(LayoutNode& root, PaneId pane, ResizeDirection direction, i32 amount_in_cells) -> bool {
     auto entry = root.find_pane(pane);
     if (!entry) {
         return false;
@@ -441,7 +403,7 @@ auto LayoutGroup::resize(LayoutNode& root, Pane* pane, ResizeDirection direction
         auto* it = di::find_if(relevant_node->group->m_children, [&](auto const& x) {
             return di::visit(di::overload(
                                  [&](di::Box<LayoutPane> const& layout_pane) -> bool {
-                                     return layout_pane->pane.get() == pane;
+                                     return layout_pane->pane_id == pane;
                                  },
                                  [&](di::Box<LayoutGroup> const& layout_node) -> bool {
                                      return layout_node.get() == prev_relevant_node->group;
@@ -482,7 +444,7 @@ auto LayoutGroup::resize(LayoutNode& root, Pane* pane, ResizeDirection direction
     auto* it = di::find_if(relevant_node->group->m_children, [&](auto const& x) {
         return di::visit(di::overload(
                              [&](di::Box<LayoutPane> const& layout_pane) -> bool {
-                                 return layout_pane->pane.get() == pane;
+                                 return layout_pane->pane_id == pane;
                              },
                              [&](di::Box<LayoutGroup> const& layout_node) -> bool {
                                  return layout_node.get() == prev_relevant_node->group;
@@ -540,9 +502,8 @@ auto LayoutGroup::layout(Size const& size, u32 row_offset, u32 col_offset) -> di
             auto pane = di::get_if<di::Box<LayoutPane>>(m_children[0]);
             ASSERT(pane.has_value());
 
-            resize_pane(pane.value()->pane.get(), size);
             node->children.push_back(
-                LayoutEntry { row_offset, col_offset, size, node.get(), pane.value().get(), pane.value()->pane.get() });
+                LayoutEntry { row_offset, col_offset, size, node.get(), pane.value().get(), pane.value()->pane_id });
         }
         return node;
     }
@@ -598,14 +559,13 @@ auto LayoutGroup::layout(Size const& size, u32 row_offset, u32 col_offset) -> di
         // Do recursive layout.
         di::visit(di::overload(
                       [&](di::Box<LayoutPane> const& layout_pane) {
-                          resize_pane(layout_pane->pane.get(), size);
                           node->children.emplace_back(LayoutEntry {
                               row,
                               col,
                               size,
                               node.get(),
                               layout_pane.get(),
-                              layout_pane->pane.get(),
+                              layout_pane->pane_id,
                           });
                       },
                       [&](di::Box<LayoutGroup> const& group) {
@@ -667,12 +627,10 @@ struct ToJsonV1 {
 
     static auto operator()(di::Box<LayoutPane> const& node) -> json::v1::Pane {
         auto json = json::v1::Pane {};
-        if (node->pane) {
-            json.id = node->pane->id();
-            json.current_working_directory = node->pane->current_working_directory().transform([](di::PathView path) {
-                return di::PercentEncoded<>::from_raw_data(path.data().to_owned());
-            });
-        }
+        json.id = node->pane_id;
+        json.current_working_directory = node->cwd.transform([](di::PathView path) {
+            return di::PercentEncoded<>::from_raw_data(path.data().to_owned());
+        });
         json.relative_size = node->relative_size;
         return json;
     }
@@ -702,10 +660,10 @@ struct FromJsonV1 {
     }
 
     static auto operator()(json::v1::Pane const& json) -> di::Result<di::Box<LayoutPane>> {
-        if (json.id == 0) {
+        if (json.id == PaneId(0)) {
             return di::Unexpected(di::BasicError::InvalidArgument);
         }
-        return di::make_box<LayoutPane>(nullptr, json.id,
+        return di::make_box<LayoutPane>(PaneId(json.id),
                                         json.current_working_directory.transform([](di::PercentEncoded<> const& data) {
                                             return di::Path(data.underlying_string().clone());
                                         }),
@@ -713,39 +671,9 @@ struct FromJsonV1 {
     }
 };
 
-struct MakePane {
-    LayoutNode& layout;
-    di::FunctionRef<di::Result<di::Box<Pane>>(u64 id, di::Optional<di::Path>, Size const&)> make_pane;
-
-    auto operator()(LayoutGroup& node) const -> di::Result<> {
-        for (auto& child : node.m_children) {
-            TRY(di::visit(*this, child));
-        }
-        return {};
-    }
-
-    auto operator()(di::Box<LayoutGroup>& node) const -> di::Result<> { return (*this)(*node); }
-
-    auto operator()(di::Box<LayoutPane>& node) const -> di::Result<> {
-        auto entry = layout.find_pane_by_id(node->pane_id);
-        if (!entry) {
-            // Use a default size. If there's no layout, the pane was too small. So
-            // make a 1x10 pane.
-            node->pane = TRY(make_pane(node->pane_id, di::move(node->cwd), Size { 1, 10, 12, 160 }));
-        } else {
-            node->pane = TRY(make_pane(node->pane_id, di::move(node->cwd), entry->size));
-        }
-        return {};
-    }
-};
-
-auto LayoutGroup::from_json_v1(
-    json::v1::PaneLayoutNode const& json, Size const& size,
-    di::FunctionRef<di::Result<di::Box<Pane>>(u64 id, di::Optional<di::Path>, Size const&)> make_pane)
-    -> di::Result<LayoutGroup> {
+auto LayoutGroup::from_json_v1(json::v1::PaneLayoutNode const& json, Size const& size) -> di::Result<LayoutGroup> {
     auto group = TRY(FromJsonV1::operator()(json));
-    auto layout = group.layout(size, 0, 0);
-    TRY(MakePane(*layout, make_pane)(group));
+    auto layout = group.layout(size, 0, 0); // TODO: return this?
     return group;
 }
 }

@@ -39,9 +39,6 @@ auto Popup::layout(Size const& size) -> LayoutEntry {
         }
         return { 0, 0 };
     }();
-    if (pane) {
-        pane->resize(layout_size);
-    }
-    return LayoutEntry { r, c, layout_size, nullptr, nullptr, pane.get() };
+    return LayoutEntry { r, c, layout_size, nullptr, nullptr, pane_id };
 }
 }

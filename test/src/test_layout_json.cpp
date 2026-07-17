@@ -178,8 +178,7 @@ static void roundtrip() {
     auto render_thread = ttx::RenderThread::create_mock(state);
     auto layout_save_thread = ttx::SaveLayoutThread::create_mock(state);
     auto input_thread = ttx::InputThread::create_mock(state, render_thread, *layout_save_thread);
-    ASSERT(state.get_assuming_no_concurrent_accesses().restore_json(json_object.value(), { .mock = true },
-                                                                    render_thread, *input_thread));
+    ASSERT(state.get_assuming_no_concurrent_accesses().restore_json(json_object.value()));
 
     auto json_save = state.get_assuming_no_concurrent_accesses().as_json();
 

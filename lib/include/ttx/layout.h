@@ -4,6 +4,7 @@
 #include "di/reflect/prelude.h"
 #include "di/vocab/pointer/box.h"
 #include "direction.h"
+#include "ttx/ipc/pane_id.h"
 #include "ttx/layout_json.h"
 #include "ttx/pane.h"
 #include "ttx/size.h"
@@ -21,7 +22,7 @@ struct LayoutEntry {
     Size size;
     LayoutNode* parent { nullptr };
     LayoutPane const* ref { nullptr };
-    Pane* pane { nullptr };
+    PaneId pane_id { 0 };
 
     auto operator==(LayoutEntry const&) const -> bool = default;
 
@@ -29,7 +30,7 @@ struct LayoutEntry {
         return di::make_fields<"LayoutEntry">(
             di::field<"row", &LayoutEntry::row>, di::field<"col", &LayoutEntry::col>,
             di::field<"size", &LayoutEntry::size>, di::field<"parent", &LayoutEntry::parent>,
-            di::field<"ref", &LayoutEntry::ref>, di::field<"pane", &LayoutEntry::pane>);
+            di::field<"ref", &LayoutEntry::ref>, di::field<"pane_id", &LayoutEntry::pane_id>);
     }
 };
 
@@ -48,8 +49,7 @@ struct LayoutNode {
     // Intersection points with the trailing edge of this node splitting up descendants placed in the same direction.
     di::Vector<u32> end_intersections;
 
-    auto find_pane(Pane* pane) -> di::Optional<LayoutEntry&>;
-    auto find_pane_by_id(u64 id) -> di::Optional<LayoutEntry&>;
+    auto find_pane(PaneId pane_id) -> di::Optional<LayoutEntry&>;
     auto hit_test(u32 row, u32 col) -> di::Optional<LayoutEntry&>;
 
     auto hit_test_horizontal_line(u32 row, u32 col_start, u32 col_end) -> di::TreeSet<LayoutEntry*>;
@@ -76,8 +76,7 @@ constexpr inline auto max_layout_precision = i64(100'000);
 // Represents a pane in a layout group. This includes extra metadata
 // necessary for layout.
 struct LayoutPane {
-    di::Box<Pane> pane {};
-    u64 pane_id { 0 };
+    PaneId pane_id { 0 };
     di::Optional<di::Path> cwd {}; // Used when restoring a pane.
     i64 relative_size { max_layout_precision };
 };
@@ -106,29 +105,29 @@ public:
     constexpr auto relative_size() -> i64& { return m_relative_size; }
     constexpr auto relative_size() const -> i64 { return m_relative_size; }
 
-    static auto
-    from_json_v1(json::v1::PaneLayoutNode const& json, Size const& size,
-                 di::FunctionRef<di::Result<di::Box<Pane>>(u64, di::Optional<di::Path>, Size const&)> make_pane)
-        -> di::Result<LayoutGroup>;
+    static auto from_json_v1(json::v1::PaneLayoutNode const& json, Size const& size) -> di::Result<LayoutGroup>;
 
-    // NOTE: this method returns the correct size for the new pane, and a lvalue reference where
-    // the caller should store its newly created Pane. We need this akward API so that we can
-    // create a Pane with a sane initial size.
-    auto split(Size const& size, u32 row_offset, u32 col_offset, Pane* reference, Direction direction)
-        -> di::Tuple<di::Box<LayoutNode>, di::Optional<LayoutEntry&>, di::Optional<di::Box<Pane>&>>;
+    // This API returns the proper size for a pane assuming a given split. This can be used before caling split()
+    // to know what size to give to the newly created pane.
+    auto split_size(Size const& size, u32 row_offset, u32 col_offset, PaneId reference, Direction direction)
+        -> di::Optional<Size>;
+
+    // NOTE: this API returns the new layout object to save re-computing the layout.
+    auto split(Size const& size, u32 row_offset, u32 col_offset, PaneId reference, Direction direction, PaneId new_pane)
+        -> di::Box<LayoutNode>;
 
     // NOTE: after removing a pane, calling layout() is necessary as any previous LayoutNode's may become invalid.
-    auto remove_pane(Pane* pane) -> di::Box<Pane>;
+    void remove_pane(PaneId pane);
 
     // NOTE: after resizing a pane, caling layout() is necessary for the change to take effect. This functions
     // returns true if any change occurred.
-    auto resize(LayoutNode& root, Pane* pane, ResizeDirection direction, i32 amount_in_cells) -> bool;
+    auto resize(LayoutNode& root, PaneId, ResizeDirection direction, i32 amount_in_cells) -> bool;
 
-    // NOTE: in addition to computing the layout tree, Pane::resize() is called to inform each Pane of its (potentially)
-    // new size.
+    // Perform a layout given the new size, returning the new layout tree. The actual pane sizes need to be applied
+    // by the caller, since the layout tree only contains references to server-side panes.
     auto layout(Size const& size, u32 row_offset, u32 col_offset) -> di::Box<LayoutNode>;
 
-    auto find_layout_pane(Pane* pane) -> LayoutPane const*;
+    auto find_layout_pane(PaneId pane_id) -> LayoutPane const*;
 
     auto as_json_v1() const -> json::v1::PaneLayoutNode;
 
@@ -136,7 +135,6 @@ private:
     friend struct FindPaneInLayoutGroup;
     friend struct ToJsonV1;
     friend struct FromJsonV1;
-    friend struct MakePane;
 
     void redistribute_space(di::Variant<di::Box<LayoutGroup>, di::Box<LayoutPane>>* new_child,
                             i64 original_size_available, i64 new_size_available);

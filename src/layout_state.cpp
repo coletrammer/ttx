@@ -2,9 +2,9 @@
 
 #include "input.h"
 #include "render.h"
-#include "session.h"
 #include "ttx/layout_json.h"
 #include "ttx/pane.h"
+#include "workspace.h"
 
 namespace ttx {
 LayoutState::LayoutState(Size const& size, Config config) : m_size(size), m_config(di::move(config)) {}
@@ -24,203 +24,144 @@ void LayoutState::layout(di::Optional<Size> size) {
         m_size = size.value();
     }
 
-    if (!m_active_session) {
+    if (!m_active_workspace) {
         return;
     }
     if (m_popup) {
         m_popup_layout = m_popup.value().layout(available_size());
     }
-    m_active_session->layout(available_size());
+    m_active_workspace->layout(available_size());
 }
 
-auto LayoutState::set_active_session(Session* session, bool focus) -> bool {
-    if (m_active_session == session) {
+auto LayoutState::set_active_workspace(Workspace* workspace, bool focus) -> bool {
+    if (m_active_workspace == workspace) {
         return false;
     }
 
-    auto _ = di::ScopeExit(di::bind_front(&LayoutState::layout_did_update, this));
-    if (m_active_session) {
-        m_active_session->set_is_active(false);
+    if (m_active_workspace) {
+        m_active_workspace->set_is_active(false);
     }
-    m_active_session = session;
-    if (focus && m_active_session) {
-        m_active_session->set_is_active(true);
+    m_active_workspace = workspace;
+    if (focus && m_active_workspace) {
+        m_active_workspace->set_is_active(true);
     }
     layout();
     return true;
 }
 
-auto LayoutState::set_active_tab(Session& session, Tab* tab, bool focus) -> bool {
-    auto _ = di::ScopeExit(di::bind_front(&LayoutState::layout_did_update, this));
-
+auto LayoutState::set_active_tab(Workspace& workspace, Tab* tab, bool focus) -> bool {
     if (focus) {
-        set_active_session(&session);
+        set_active_workspace(&workspace);
     }
-    return session.set_active_tab(tab);
+    return workspace.set_active_tab(tab);
 }
 
-void LayoutState::remove_tab(Session& session, Tab& tab) {
-    auto _ = di::ScopeExit(di::bind_front(&LayoutState::layout_did_update, this));
-
-    session.remove_tab(tab);
-    if (session.empty()) {
-        remove_session(session);
+void LayoutState::remove_tab(Workspace& workspace, Tab& tab) {
+    workspace.remove_tab(tab);
+    if (workspace.empty()) {
+        remove_workspace(workspace);
     }
 }
 
-auto LayoutState::remove_pane(Session& session, Tab& tab, Pane* pane) -> di::Box<Pane> {
-    auto _ = di::ScopeExit(di::bind_front(&LayoutState::layout_did_update, this));
-
-    auto result = session.remove_pane(tab, pane);
-    if (session.empty()) {
-        remove_session(session);
+void LayoutState::remove_pane(Workspace& workspace, Tab& tab, PaneId pane) {
+    workspace.remove_pane(tab, pane);
+    if (workspace.empty()) {
+        remove_workspace(workspace);
     }
-    return result;
 }
 
-auto LayoutState::remove_popup() -> di::Box<Pane> {
+void LayoutState::remove_popup() {
     if (!m_popup) {
-        return {};
+        return;
     }
 
-    auto _ = di::ScopeExit(di::bind_front(&LayoutState::layout_did_update, this));
-    auto result = di::move(m_popup.value().pane);
     m_popup = {};
     m_popup_layout = {};
-    for (auto& session : active_session()) {
-        session.set_is_active(true);
+    for (auto& workspace : active_workspace()) {
+        workspace.set_is_active(true);
     }
     for (auto& tab : active_tab()) {
         tab.invalidate_all();
     }
-    return result;
 }
 
-void LayoutState::remove_session(Session& session) {
-    auto _ = di::ScopeExit(di::bind_front(&LayoutState::layout_did_update, this));
-
-    // For now, ASSERT() there are no panes in the session. If there were, we'd
+void LayoutState::remove_workspace(Workspace& workspace) {
+    // For now, ASSERT() there are no panes in the workspace. If there were, we'd
     // need to make sure not to destroy the panes while we hold the lock.
-    ASSERT(session.empty());
+    ASSERT(workspace.empty());
 
-    // Clear active session.
-    if (m_active_session == &session) {
-        auto* it = di::find(m_sessions, &session, [](di::Box<Session> const& session) {
-            return session.get();
+    // Clear active workspace.
+    if (m_active_workspace == &workspace) {
+        auto* it = di::find(m_workspaces, &workspace, [](di::Box<Workspace> const& workspace) {
+            return workspace.get();
         });
-        if (it == m_sessions.end()) {
-            set_active_session(m_sessions.at(0).transform(&di::Box<Session>::get).value_or(nullptr));
-        } else if (m_sessions.size() == 1) {
-            set_active_session(nullptr);
+        if (it == m_workspaces.end()) {
+            set_active_workspace(m_workspaces.at(0).transform(&di::Box<Workspace>::get).value_or(nullptr));
+        } else if (m_workspaces.size() == 1) {
+            set_active_workspace(nullptr);
         } else {
-            auto index = usize(it - m_sessions.begin());
-            if (index == m_sessions.size() - 1) {
-                set_active_session(m_sessions[index - 1].get());
+            auto index = usize(it - m_workspaces.begin());
+            if (index == m_workspaces.size() - 1) {
+                set_active_workspace(m_workspaces[index - 1].get());
             } else {
-                set_active_session(m_sessions[index + 1].get());
+                set_active_workspace(m_workspaces[index + 1].get());
             }
         }
     }
 
-    // Delete session.
-    di::erase_if(m_sessions, [&](di::Box<Session> const& item) {
-        return item.get() == &session;
+    // Delete workspace.
+    di::erase_if(m_workspaces, [&](di::Box<Workspace> const& item) {
+        return item.get() == &workspace;
     });
 }
 
-auto LayoutState::add_pane(Session& session, Tab& tab, CreatePaneArgs args, Direction direction,
-                           RenderThread& render_thread, InputThread& input_thread) -> di::Result<> {
-    auto _ = di::ScopeExit(di::bind_front(&LayoutState::layout_did_update, this));
-
-    set_active_session(&session);
-    return session.add_pane(tab, m_next_pane_id++, di::move(args), direction, render_thread, input_thread);
+void LayoutState::add_pane(Workspace& workspace, Tab& tab, PaneId pane, Direction direction) {
+    set_active_workspace(&workspace);
+    workspace.add_pane(tab, pane, direction);
 }
 
-auto LayoutState::add_tab(Session& session, CreatePaneArgs args, RenderThread& render_thread, InputThread& input_thread)
-    -> di::Result<> {
-    auto _ = di::ScopeExit(di::bind_front(&LayoutState::layout_did_update, this));
-
-    set_active_session(&session);
-    return session.add_tab(di::move(args), m_next_tab_id++, m_next_pane_id++, render_thread, input_thread);
+void LayoutState::add_tab(Workspace& workspace, PaneId initial_pane) {
+    set_active_workspace(&workspace);
+    workspace.add_tab(m_next_tab_id++, initial_pane);
 }
 
-auto LayoutState::add_session(CreatePaneArgs args, RenderThread& render_thread, InputThread& input_thread)
-    -> di::Result<> {
-    auto _ = di::ScopeExit(di::bind_front(&LayoutState::layout_did_update, this));
-
-    auto id = m_next_session_id++;
-    auto& session = m_sessions.push_back(di::make_box<Session>(this, id));
-    auto result = add_tab(*session, di::move(args), render_thread, input_thread);
-    if (!result) {
-        remove_session(*session);
-    }
-    return result;
+void LayoutState::add_workspace(PaneId initial_pane) {
+    auto id = m_next_workspace_id++;
+    auto& workspace = m_workspaces.push_back(di::make_box<Workspace>(this, id));
+    add_tab(*workspace, initial_pane);
 }
 
-auto LayoutState::popup_pane(PopupLayout const& popup_layout, CreatePaneArgs args, RenderThread& render_thread,
-                             InputThread& input_thread) -> di::Result<> {
+void LayoutState::popup_pane(PopupLayout const& popup_layout, PaneId pane) {
     // Prevent creating more than 1 popup.
     if (m_popup) {
-        return di::Unexpected(di::BasicError::InvalidArgument);
+        return;
     }
     m_popup = Popup {
-        .pane = nullptr,
+        .pane_id = pane,
         .layout_config = popup_layout,
     };
     m_popup_layout = m_popup.value().layout(available_size());
 
-    if (!args.hooks.did_exit) {
-        args.hooks.did_exit = [&render_thread](Pane&, auto) {
-            render_thread.push_event(RemovePopup {});
-        };
-    }
-    auto maybe_pane = make_pane_with_default_hooks(di::move(args), m_popup_layout.value().size,
-                                                   Clipboard::Identifier { .pane_id = m_next_pane_id++ }, render_thread,
-                                                   input_thread);
-    if (!maybe_pane) {
-        m_popup = {};
-        m_popup_layout = {};
-        return di::Unexpected(di::move(maybe_pane).error());
-    }
-
-    auto _ = di::ScopeExit(di::bind_front(&LayoutState::layout_did_update, this));
-    m_popup.value().pane = di::move(maybe_pane).value();
-    m_popup_layout.value().pane = m_popup.value().pane.get();
-
-    for (auto& session : active_session()) {
-        session.set_is_active(false);
+    for (auto& workspace : active_workspace()) {
+        workspace.set_is_active(false);
     }
     for (auto& tab : active_tab()) {
         tab.invalidate_all();
     }
-    return {};
 }
 
-auto LayoutState::pane_by_id(u64 session_id, u64 tab_id, u64 pane_id) -> di::Optional<Pane&> {
-    // Check for the popup pane
-    if (session_id == 0 && tab_id == 0 && m_popup && m_popup->pane->id() == pane_id) {
-        return *m_popup->pane;
-    }
-
-    auto* session = di::find(m_sessions, session_id, &Session::id);
-    if (session == m_sessions.end()) {
+auto LayoutState::active_workspace() const -> di::Optional<Workspace&> {
+    if (!m_active_workspace) {
         return {};
     }
-    return (*session)->pane_by_id(tab_id, pane_id);
-}
-
-auto LayoutState::active_session() const -> di::Optional<Session&> {
-    if (!m_active_session) {
-        return {};
-    }
-    return *m_active_session;
+    return *m_active_workspace;
 }
 
 auto LayoutState::active_tab() const -> di::Optional<Tab&> {
-    return active_session().and_then(&Session::active_tab);
+    return active_workspace().and_then(&Workspace::active_tab);
 }
 
-auto LayoutState::active_pane() const -> di::Optional<Pane&> {
+auto LayoutState::active_pane() const -> di::Optional<PaneId> {
     if (auto popup = active_popup()) {
         return popup.value();
     }
@@ -230,86 +171,29 @@ auto LayoutState::active_pane() const -> di::Optional<Pane&> {
     return active_tab()->active();
 }
 
-auto LayoutState::full_screen_pane() const -> di::Optional<Pane&> {
+auto LayoutState::full_screen_pane() const -> di::Optional<PaneId> {
     if (!active_tab()) {
         return {};
     }
     return active_tab()->full_screen_pane();
 }
 
-auto LayoutState::active_popup() const -> di::Optional<Pane&> {
+auto LayoutState::active_popup() const -> di::Optional<PaneId> {
     if (!active_tab()) {
         return {};
     }
     return popup_layout().transform([&](LayoutEntry const& entry) {
-        return di::ref(*entry.pane);
+        return entry.pane_id;
     });
-}
-
-void LayoutState::set_layout_did_update(di::Function<void()> layout_did_update) {
-    m_layout_did_update = di::move(layout_did_update);
-}
-
-void LayoutState::layout_did_update() {
-    if (m_layout_did_update) {
-        m_layout_did_update();
-    }
-}
-
-void LayoutState::for_each_pane(di::FunctionRef<void(Pane&)> action) {
-    for (auto const& session : m_sessions) {
-        for (auto const& tab : session->tabs()) {
-            tab->for_each_pane(action);
-        }
-    }
-}
-
-auto LayoutState::make_pane_with_default_hooks(CreatePaneArgs args, Size const& size, Clipboard::Identifier identifier,
-                                               RenderThread& render_thread, InputThread& input_thread)
-    -> di::Result<di::Box<Pane>> {
-    if (!args.hooks.did_update) {
-        args.hooks.did_update = [&render_thread](Pane&) {
-            render_thread.request_render();
-        };
-    }
-    if (!args.hooks.did_selection) {
-        args.hooks.did_selection = di::make_function<void(terminal::OSC52, bool)>(
-            [identifier, &render_thread](terminal::OSC52 osc52, bool manual) {
-                render_thread.push_event(ClipboardRequest {
-                    .osc52 = di::move(osc52),
-                    .identifier = identifier,
-                    .manual = manual,
-                    .reply = false,
-                });
-            });
-    }
-    if (!args.hooks.did_receive_seamless_navigation) {
-        args.hooks.did_receive_seamless_navigation = [&input_thread](terminal::OSC8671 osc6871) {
-            input_thread.notify_osc_8671(di::move(osc6871));
-        };
-    }
-    if (!args.hooks.apc_passthrough) {
-        args.hooks.apc_passthrough = [&render_thread](di::StringView apc_data) {
-            // Pass-through APC commands to host terminal. This makes kitty graphics "work".
-            auto string = di::format("\033_{}\033\\"_sv, apc_data);
-            render_thread.push_event(WriteString(di::move(string)));
-        };
-    }
-    if (!args.hooks.did_update_cwd) {
-        args.hooks.did_update_cwd = [this] {
-            layout_did_update();
-        };
-    }
-    return Pane::create(identifier.pane_id, di::move(args), size);
 }
 
 auto LayoutState::as_json_v1() const -> json::v1::LayoutState {
     auto json = json::v1::LayoutState {};
-    if (m_active_session) {
-        json.active_session_id = m_active_session->id();
+    if (m_active_workspace) {
+        json.active_workspace_id = m_active_workspace->id();
     }
-    for (auto const& session : m_sessions) {
-        json.sessions.push_back(session->as_json_v1());
+    for (auto const& workspace : m_workspaces) {
+        json.workspaces.push_back(workspace->as_json_v1());
     }
     return json;
 }
@@ -318,45 +202,43 @@ auto LayoutState::as_json() const -> json::Layout {
     return as_json_v1();
 }
 
-auto LayoutState::restore_json_v1(json::v1::LayoutState const& json, CreatePaneArgs args, RenderThread& render_thread,
-                                  InputThread& input_thread) -> di::Result<> {
+auto LayoutState::restore_json_v1(json::v1::LayoutState const& json) -> di::Result<> {
     auto size = hide_status_bar() ? m_size : m_size.rows_shrinked(1);
-    for (auto const& session_json : json.sessions) {
-        m_sessions.push_back(
-            TRY(Session::from_json_v1(session_json, this, size, args.clone(), render_thread, input_thread)));
+    for (auto const& workspace_json : json.workspaces) {
+        m_workspaces.push_back(TRY(Workspace::from_json_v1(workspace_json, this, size)));
     }
 
-    // Find the active session by id
-    for (auto id : json.active_session_id) {
-        auto* it = di::find(m_sessions, id, &Session::id);
-        if (it != m_sessions.end()) {
-            set_active_session(it->get());
+    // Find the active workspace by id
+    for (auto id : json.active_workspace_id) {
+        auto* it = di::find(m_workspaces, id, &Workspace::id);
+        if (it != m_workspaces.end()) {
+            set_active_workspace(it->get());
         }
     }
 
-    if (m_sessions.empty()) {
+    if (m_workspaces.empty()) {
         return {};
     }
 
-    // Fallback case: set the first session as active
-    if (!m_active_session) {
-        set_active_session(m_sessions[0].get());
+    // Fallback case: set the first workspace as active
+    if (!m_active_workspace) {
+        set_active_workspace(m_workspaces[0].get());
     }
 
     // Update next ids
-    m_next_session_id = di::max(m_sessions | di::transform(&Session::id)) + 1;
-    m_next_tab_id = di::max(m_sessions | di::transform(&Session::max_tab_id)) + 1;
-    m_next_pane_id = di::max(m_sessions | di::transform(&Session::max_pane_id)) + 1;
+    m_next_workspace_id = di::max(m_workspaces | di::transform(&Workspace::id));
+    m_next_workspace_id++;
+    m_next_tab_id = di::max(m_workspaces | di::transform(&Workspace::max_tab_id));
+    m_next_tab_id++;
 
     // TODO: validate all ids are unique
 
     return {};
 }
 
-auto LayoutState::restore_json(json::Layout const& json, CreatePaneArgs args, RenderThread& render_thread,
-                               InputThread& input_thread) -> di::Result<> {
+auto LayoutState::restore_json(json::Layout const& json) -> di::Result<> {
     return di::visit(di::overload([&](json::v1::LayoutState const& state) {
-                         return restore_json_v1(state, di::move(args), render_thread, input_thread);
+                         return restore_json_v1(state);
                      }),
                      json);
 }
