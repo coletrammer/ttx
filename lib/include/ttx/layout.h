@@ -128,6 +128,8 @@ public:
     // new size.
     auto layout(Size const& size, u32 row_offset, u32 col_offset) -> di::Box<LayoutNode>;
 
+    auto find_layout_pane(Pane* pane) -> LayoutPane const*;
+
     auto as_json_v1() const -> json::v1::PaneLayoutNode;
 
 private:

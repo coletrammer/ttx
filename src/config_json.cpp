@@ -1083,7 +1083,7 @@ You can also start your configuration from the defaults by running:
 
 ```sh
 mkdir -p ~/.config/ttx
-ttx config show > ~/.config/ttx/main.json
+ttx config show | tee ~/.config/ttx/main.json
 ```
 
 ## Nix Home Manager

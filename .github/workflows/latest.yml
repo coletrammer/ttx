@@ -51,18 +51,18 @@ jobs:
           fetch-depth: 0
       - name: Download all artifacts
         uses: actions/download-artifact@v8
-      - name: Update latest tag to the current commit
+      - name: Clean up old release and tag
         run: |
+          # Delete old release to prevent conflicts
+          gh release delete latest --cleanup-tag -y || true
+
+          # Update latest tag
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          git tag -d latest || true
-          git push origin :latest || true
           git tag latest $(git rev-parse HEAD) -m "Latest commit"
-          git push origin latest --force
+          git push origin latest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Sleep
-        run: sleep 60
       - name: Update latest release
         uses: softprops/action-gh-release@v3
         with:

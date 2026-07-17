@@ -23,8 +23,14 @@ void Tab::layout(Size const& size) {
         m_layout_tree =
             di::make_box<LayoutNode>(0, 0, size, di::Vector<di::Variant<di::Box<LayoutNode>, LayoutEntry>> {}, nullptr,
                                      &m_layout_root, Direction::None);
-        m_layout_tree->children.emplace_back(
-            LayoutEntry { 0, 0, size, m_layout_tree.get(), nullptr, m_full_screen_pane });
+        m_layout_tree->children.emplace_back(LayoutEntry {
+            0,
+            0,
+            size,
+            m_layout_tree.get(),
+            m_layout_root.find_layout_pane(m_full_screen_pane),
+            m_full_screen_pane,
+        });
     } else {
         m_layout_tree = m_layout_root.layout(size, 0, 0);
     }

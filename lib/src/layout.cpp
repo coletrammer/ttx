@@ -96,6 +96,17 @@ auto LayoutNode::find_pane_by_id(u64 id) -> di::Optional<LayoutEntry&> {
     return {};
 }
 
+auto LayoutGroup::find_layout_pane(Pane* pane) -> LayoutPane const* {
+    auto [parent, index] = FindPaneInLayoutGroup {}(nullptr, 0, pane, this);
+    if (!parent) {
+        return {};
+    }
+
+    ASSERT(index < parent->m_children.size());
+    ASSERT(di::holds_alternative<di::Box<LayoutPane>>(parent->m_children[index]));
+    return di::get<di::Box<LayoutPane>>(parent->m_children[index]).get();
+}
+
 auto LayoutNode::hit_test(u32 row, u32 col) -> di::Optional<LayoutEntry&> {
     if (row >= this->row + size.rows || col >= this->col + size.cols) {
         return {};
