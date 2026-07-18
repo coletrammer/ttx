@@ -1146,4 +1146,11 @@ void strip_empty_objects(di::json::Object& object) {
         object.erase(key);
     }
 }
+
+auto to_json_string_without_empty_objects(config_json::v1::Config const& config) -> di::String {
+    auto initial_string = *di::to_json_string(config);
+    auto json = *di::from_json_string<di::json::Object>(initial_string.view());
+    config_json::v1::strip_empty_objects(json);
+    return *di::to_json_string(json, di::JsonSerializerConfig().pretty().indent_width(4));
+}
 }

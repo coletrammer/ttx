@@ -353,6 +353,7 @@ auto resolve_theme(di::TransparentStringView name, terminal::Palette const& oute
     -> di::Result<config_json::v1::Config>;
 auto config_from_palette(terminal::Palette const& palette) -> config_json::v1::Config;
 void strip_empty_objects(di::json::Object& object);
+auto to_json_string_without_empty_objects(config_json::v1::Config const& config) -> di::String;
 auto list_themes(ThemeSource source, terminal::Palette const& outer_terminal_palette)
     -> di::Result<di::Vector<ListedTheme>>;
 auto iterm2_themes() -> di::TreeMap<di::TransparentString, config_json::v1::Config> const&;
