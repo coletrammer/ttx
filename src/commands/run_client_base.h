@@ -6,7 +6,7 @@
 #include "ttx/key.h"
 
 namespace ttx {
-struct NewBase {
+struct RunClientBase {
     di::Optional<Key> prefix;
     bool hide_status_bar { false };
     bool headless { false };
@@ -28,5 +28,5 @@ struct NewBase {
     di::Vector<di::PathView> replay_paths;
 };
 
-auto main(NewBase& args) -> di::Result<>;
+auto main(RunClientBase& args) -> di::Result<>;
 }

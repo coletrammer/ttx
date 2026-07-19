@@ -6,7 +6,6 @@
 #include "direction.h"
 #include "ttx/ipc/pane_id.h"
 #include "ttx/layout_json.h"
-#include "ttx/pane.h"
 #include "ttx/size.h"
 
 namespace ttx {

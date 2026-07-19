@@ -1,9 +1,6 @@
 #include "layout_state.h"
 
-#include "input.h"
-#include "render.h"
 #include "ttx/layout_json.h"
-#include "ttx/pane.h"
 #include "workspace.h"
 
 namespace ttx {

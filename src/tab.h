@@ -1,12 +1,12 @@
 #pragma once
 
+#include "di/container/ring/prelude.h"
 #include "di/container/string/prelude.h"
 #include "di/reflect/prelude.h"
 #include "ttx/ids.h"
 #include "ttx/ipc/pane_id.h"
 #include "ttx/layout.h"
 #include "ttx/layout_json.h"
-#include "ttx/pane.h"
 #include "ttx/popup.h"
 #include "ttx/terminal/navigation_direction.h"
 

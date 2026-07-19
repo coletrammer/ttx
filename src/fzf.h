@@ -2,8 +2,8 @@
 
 #include "colors.h"
 #include "config.h"
+#include "create_pane_args.h"
 #include "theme.h"
-#include "ttx/pane.h"
 #include "ttx/popup.h"
 #include "ttx/terminal/palette.h"
 

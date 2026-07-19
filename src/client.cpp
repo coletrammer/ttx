@@ -41,7 +41,7 @@ static auto input_task(auto stdin_token, Feature features) -> di::Task<> {
     }
 }
 
-auto run_client(Config config, Feature features) -> di::Result<> {
+auto run_client(Config, Feature features) -> di::Result<> {
     auto context = TRY(di::create<dius::IoContext>().transform_error([](di::Error error) {
         return di::format_error("Failed to create io context: {}"_sv, error);
     }));

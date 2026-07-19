@@ -1,5 +1,7 @@
 #include "ttx/popup.h"
 
+#include "di/math/rational/prelude.h"
+#include "di/util/clamp.h"
 #include "ttx/layout.h"
 #include "ttx/size.h"
 

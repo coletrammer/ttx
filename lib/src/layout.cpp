@@ -1,9 +1,11 @@
 #include "ttx/layout.h"
 
+#include "di/assert/prelude.h"
 #include "di/container/algorithm/count_if.h"
 #include "di/container/interface/erase.h"
 #include "di/container/view/as_rvalue.h"
 #include "di/function/overload.h"
+#include "di/math/rational/prelude.h"
 #include "di/util/scope_exit.h"
 #include "di/vocab/pointer/box.h"
 #include "di/vocab/variant/get_if.h"

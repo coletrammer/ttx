@@ -2,8 +2,6 @@
 
 #include "di/container/string/conversion.h"
 #include "di/util/construct.h"
-#include "theme.h"
-#include "ttx/pane.h"
 #include "ttx/popup.h"
 #include "ttx/terminal/color.h"
 

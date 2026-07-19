@@ -5,7 +5,6 @@
 #include "commands/config_command.h"
 #include "commands/features.h"
 #include "commands/keybinds.h"
-#include "commands/new.h"
 #include "commands/replay.h"
 #include "commands/server_command.h"
 #include "commands/terminfo.h"
@@ -14,8 +13,7 @@
 
 namespace ttx {
 struct Args {
-    di::Variant<New, Attach, ConfigCommand, ThemeCommand, Completions, Replay, Keybinds, Features, Terminfo,
-                ServerCommand>
+    di::Variant<Attach, ConfigCommand, ThemeCommand, Completions, Keybinds, Replay, Features, Terminfo, ServerCommand>
         subcommand;
     bool help { false };
 

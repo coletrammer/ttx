@@ -15,6 +15,14 @@
 #include "dius/print.h"
 
 namespace ttx {
+struct Client {
+    dius::IoContext::SocketToken socket;
+};
+
+static auto handle_client(dius::IoContext::SocketToken socket) -> di::Task<> {
+    co_return;
+}
+
 auto run_server(di::Path path) -> di::Result<> {
     auto runtime_dir = path.parent_path().value();
     auto created_dir =
@@ -41,11 +49,7 @@ auto run_server(di::Path path) -> di::Result<> {
                                co_await dius::listen(listener_socket, 5);
 
                                for (;;) {
-                                   co_await ex::use_resources(
-                                       [&](auto socket) -> di::Task<> {
-                                           co_return;
-                                       },
-                                       dius::accept(listener_socket));
+                                   co_await ex::use_resources(handle_client, dius::accept(listener_socket));
                                }
                            },
                            dius::make_unix_socket(scheduler), di::make_deferred<di::CountingScope<>>()) |

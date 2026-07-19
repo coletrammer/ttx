@@ -3,8 +3,6 @@
 #include "di/container/algorithm/count_if.h"
 #include "di/container/algorithm/replace.h"
 #include "di/serialization/base64.h"
-#include "input.h"
-#include "render.h"
 #include "ttx/clipboard.h"
 #include "ttx/direction.h"
 #include "ttx/focus_event.h"
@@ -13,6 +11,7 @@
 #include "ttx/layout_json.h"
 #include "ttx/terminal/escapes/osc_8671.h"
 #include "ttx/terminal/navigation_direction.h"
+#include "workspace.h"
 
 namespace ttx {
 void Tab::layout(Size const& size) {

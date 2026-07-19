@@ -24,6 +24,4 @@ struct KeyBind {
                                           di::field<"action", &KeyBind::action>);
     }
 };
-
-auto make_key_binds(InputConfig const& config, bool replay_mode) -> di::Vector<KeyBind>;
 }
